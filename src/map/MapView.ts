@@ -1,5 +1,8 @@
 import { BODIES, type BodyId, type Track, type Vec3 } from '../data/types';
+import { HYPOTHETICAL_LABEL } from '../config/hypothetical';
+import { DEFAULT_LAYERS, type LayerState } from '../ui/layers';
 import { AU_KM, sample } from './ephemeris';
+import { DEFAULT_PLACE, LabelCollector, LabelPriority, placeLabels, type LabelSink, type PlacedLabel } from './labels';
 
 export type ViewMode = '2d' | '3d';
 
@@ -47,8 +50,15 @@ export class MapView {
   onSelect: (id: BodyId) => void = () => {};
   dirty = true;
   /** Cisimler çizildikten sonra çağrılır; ekran konumları (x, y, tıklama yarıçapı) verilir. */
-  overlay: ((ctx: CanvasRenderingContext2D, screen: Map<BodyId, [number, number, number]>, radii: Map<BodyId, number>, zoom: number) => void) | null = null;
+  overlay: ((ctx: CanvasRenderingContext2D, screen: Map<BodyId, [number, number, number]>, radii: Map<BodyId, number>, zoom: number, labels: LabelSink) => void) | null = null;
   private radii = new Map<BodyId, number>();
+  /** Katman aç/kapa durumu (ağ katmanını NetworkLayer'ın çağıranı yönetir). */
+  layers: LayerState = { ...DEFAULT_LAYERS };
+  /** Etiketler çizim sırasında istek olarak toplanır; render sonunda yerleştirilip çizilir. */
+  private collector = new LabelCollector((text, font) => this.measure(text, font));
+  private measureCache = new Map<string, { w: number; h: number }>();
+  /** Son karede yerleştirilen etiketler (test/ölçüm için). */
+  lastLabels: PlacedLabel[] = [];
 
   constructor(private canvas: HTMLCanvasElement, private tracks: Record<string, Track>) {
     this.ctx = canvas.getContext('2d')!;
@@ -59,6 +69,24 @@ export class MapView {
     this.bindInput();
     new ResizeObserver(() => this.resize()).observe(canvas);
     this.resize();
+  }
+
+  private measure(text: string, font = '11px system-ui, sans-serif') {
+    const key = `${font}|${text}`;
+    let m = this.measureCache.get(key);
+    if (!m) {
+      this.ctx.font = font;
+      m = { w: Math.ceil(this.ctx.measureText(text).width) + 2, h: Math.round(parseFloat(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? '11') * 1.25) };
+      this.measureCache.set(key, m);
+    }
+    return m;
+  }
+
+  /** Programlı seçim (sol panel); haritadaki tıklamayla aynı seçim durumunu kullanır. */
+  setSelected(id: BodyId) {
+    if (this.selected === id) return;
+    this.selected = id;
+    this.dirty = true;
   }
 
   getMode(): ViewMode {
@@ -217,11 +245,12 @@ export class MapView {
     ctx.clearRect(0, 0, this.w, this.h);
     this.positions.clear();
     this.radii.clear();
+    this.collector.clear();
     this.drawStars();
 
     // 3B'de ekliptik düzlemde başvuru halkaları (2B'ye geçerken solar)
     const ringAlpha = Math.min(1, this.tilt * 3);
-    if (ringAlpha > 0.02) {
+    if (this.layers.orbits && ringAlpha > 0.02) {
       ctx.setLineDash([2, 5]);
       ctx.strokeStyle = `rgba(120,150,220,${0.16 * ringAlpha})`;
       ctx.lineWidth = 1;
@@ -242,7 +271,7 @@ export class MapView {
     ctx.lineWidth = 1;
     ctx.strokeStyle = 'rgba(255,255,255,0.14)';
     for (const b of BODIES) {
-      if (!b.periodDays || !this.tracks[b.id]) continue;
+      if (!this.layers.orbits || !b.periodDays || !this.tracks[b.id]) continue;
       const t = this.tracks[b.id];
       const span = Math.min(b.periodDays, (t.count - 1) * t.stepDays);
       ctx.beginPath();
@@ -274,11 +303,39 @@ export class MapView {
       k: earth.k,
     };
     items.push(moonItem);
-    this.drawMoonOrbit(earth);
+    if (this.layers.orbits) this.drawMoonOrbit(earth);
 
     items.sort((a, b) => a.depth - b.depth);
-    for (const it of items) this.drawBody(it, sunItem);
-    this.overlay?.(ctx, this.positions, this.radii, this.zoom);
+    for (const it of items) this.drawBody(it, sunItem, earth);
+    this.overlay?.(ctx, this.positions, this.radii, this.zoom, this.collector);
+    this.drawLabels();
+
+    ctx.fillStyle = 'rgba(255,200,90,0.9)';
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText(HYPOTHETICAL_LABEL, 16, 24);
+  }
+
+  /** Toplanan etiket isteklerini yerleştirir ve çizer (etiketleri doğrudan çizen yoktur). */
+  private drawLabels() {
+    const { ctx } = this;
+    const placed = placeLabels(this.collector.requests, this.collector.obstacles, { x0: 2, y0: 2, x1: this.w - 2, y1: this.h - 2 }, DEFAULT_PLACE);
+    this.lastLabels = placed;
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    for (const l of placed) {
+      if (l.leader) {
+        ctx.strokeStyle = 'rgba(200,215,240,0.45)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(l.leader.x1, l.leader.y1); ctx.lineTo(l.leader.x2, l.leader.y2); ctx.stroke();
+      }
+      ctx.font = l.font ?? '11px system-ui, sans-serif';
+      ctx.strokeStyle = 'rgba(5,7,15,0.85)';
+      ctx.lineWidth = 3;
+      ctx.strokeText(l.text, l.x + 1, l.y + l.h / 2);
+      ctx.fillStyle = l.color ?? 'rgba(255,255,255,0.78)';
+      ctx.fillText(l.text, l.x + 1, l.y + l.h / 2);
+    }
+    ctx.textBaseline = 'alphabetic';
   }
 
   private drawStars() {
@@ -306,7 +363,7 @@ export class MapView {
     ctx.stroke();
   }
 
-  private drawBody(it: Item, sun: Item) {
+  private drawBody(it: Item, sun: Item, earth: Item) {
     const { ctx } = this;
     const b = BODIES.find((q) => q.id === it.id)!;
     const r = b.radiusPx * localBodyScale(it.id, this.zoom) * (this.tilt > 0.05 ? it.k : 1);
@@ -333,19 +390,32 @@ export class MapView {
     };
     drawRing(false);
 
-    // Işığı Güneş'ten alan küre gölgesi
+    // Işığı Güneş'ten alan küre: Güneş'e bakan yüz aydınlık, karşı yüz belirgin gölgede (terminatör).
     if (it.id === 'sun') {
       ctx.fillStyle = b.color;
+      ctx.beginPath(); ctx.arc(it.x, it.y, r, 0, Math.PI * 2); ctx.fill();
     } else {
       const dx = sun.x - it.x, dy = sun.y - it.y;
       const len = Math.hypot(dx, dy) || 1;
-      const g = ctx.createRadialGradient(it.x + (dx / len) * r * 0.45, it.y + (dy / len) * r * 0.45, r * 0.1, it.x, it.y, r * 1.05);
+      const ux = dx / len, uy = dy / len;
+      const g = ctx.createRadialGradient(it.x + ux * r * 0.45, it.y + uy * r * 0.45, r * 0.1, it.x, it.y, r * 1.05);
       g.addColorStop(0, mix(b.color, 0.35));
       g.addColorStop(0.6, b.color);
       g.addColorStop(1, mix(b.color, -0.6));
       ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(it.x, it.y, r, 0, Math.PI * 2); ctx.fill();
+      // gece yüzü: Güneş yönüne dik doğrultuda keskin geçiş
+      ctx.save();
+      ctx.beginPath(); ctx.arc(it.x, it.y, r, 0, Math.PI * 2); ctx.clip();
+      const sh = ctx.createLinearGradient(it.x + ux * r, it.y + uy * r, it.x - ux * r, it.y - uy * r);
+      sh.addColorStop(0, 'rgba(2,4,12,0)');
+      sh.addColorStop(0.42, 'rgba(2,4,12,0.08)');
+      sh.addColorStop(0.62, 'rgba(2,4,12,0.62)');
+      sh.addColorStop(1, 'rgba(2,4,12,0.9)');
+      ctx.fillStyle = sh;
+      ctx.fillRect(it.x - r - 1, it.y - r - 1, r * 2 + 2, r * 2 + 2);
+      ctx.restore();
     }
-    ctx.beginPath(); ctx.arc(it.x, it.y, r, 0, Math.PI * 2); ctx.fill();
     drawRing(true);
 
     if (it.id === this.selected) {
@@ -353,8 +423,19 @@ export class MapView {
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(it.x, it.y, r + 4, 0, Math.PI * 2); ctx.stroke();
     }
-    ctx.fillStyle = 'rgba(255,255,255,0.78)';
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.fillText(b.name, it.x + r + 6, it.y + 4);
+
+    // Cisim diski etiketlere engeldir; adı etiket isteği olarak verilir (katman açıksa).
+    const sel = it.id === this.selected;
+    this.collector.obstacle(it.x, it.y, r + (sel ? 5 : 1), `body:${it.id}`);
+    if (this.layers.names || sel) {
+      const ref = it.id === 'sun' ? undefined : it.id === 'moon' ? earth : sun;
+      this.collector.label({
+        id: `body:${it.id}`, text: b.name, ax: it.x, ay: it.y, radius: r + (sel ? 5 : 2),
+        priority: sel ? LabelPriority.selected : it.id === 'moon' ? LabelPriority.moon : LabelPriority.planet,
+        cx: ref?.x, cy: ref?.y, mandatory: sel,
+        color: sel ? '#ffffff' : 'rgba(255,255,255,0.78)',
+        font: sel ? '600 12px system-ui, sans-serif' : undefined,
+      });
+    }
   }
 }

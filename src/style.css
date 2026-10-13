@@ -83,3 +83,36 @@ footer .row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
 .sliders { grid-template-columns:repeat(4, minmax(0,1fr)); }
 @media (max-width:1200px) { .charts.four { grid-template-columns:repeat(2, minmax(0,1fr)); } .sliders { grid-template-columns:repeat(2, minmax(0,1fr)); } }
 @media (max-width:900px) { .charts.four { grid-template-columns:minmax(0,1fr); } .sliders { grid-template-columns:minmax(0,1fr); } }
+
+/* --- Aşama 6: sol panel (Cisimler, katmanlar), gezegen kartı --- */
+#left { width:264px; flex:none; background:var(--panel); border-right:1px solid var(--line); overflow:auto; font-size:13px; }
+.lp-head { display:flex; align-items:center; gap:8px; padding:10px 12px; position:sticky; top:0; background:var(--panel); z-index:2; border-bottom:1px solid var(--line); }
+.lp-head h2 { font-size:15px; margin:0; }
+.lp-toggle { margin-left:auto; padding:2px 9px; }
+#lp-body { padding:6px 8px 14px; }
+#lp-body .hint { margin:8px 4px; line-height:1.4; }
+.layers { border:1px solid var(--line); border-radius:6px; margin:4px 0 0; padding:4px 8px 6px; }
+.layers legend { color:var(--muted); font-size:12px; padding:0 4px; }
+.layers label { display:flex; align-items:flex-start; gap:6px; margin:3px 0; color:var(--fg); font-size:12.5px; line-height:1.3; }
+.layers label.dim { color:var(--muted); opacity:.6; }
+.layers input { margin:2px 0 0; accent-color:var(--accent); }
+.bitem.sub { margin-left:18px; border-left:1px solid var(--line); }
+.brow { display:grid; grid-template-columns:12px 1fr; grid-template-areas:"dot name" ". cnts"; gap:1px 8px; align-items:center; width:100%; text-align:left; background:transparent; border:1px solid transparent; border-radius:6px; padding:5px 8px; }
+.brow .dot { grid-area:dot; width:10px; height:10px; } .brow .bname { grid-area:name; font-size:13.5px; } .brow .cnts { grid-area:cnts; display:flex; flex-wrap:wrap; gap:2px 8px; }
+.brow:hover { background:#16203a; } .brow.sel { background:#16203a; border-color:var(--accent); }
+.cnt { color:var(--muted); font-size:11.5px; font-variant-numeric:tabular-nums; } .cnt.zero { opacity:.5; }
+.bdet { margin:2px 0 6px 6px; padding-left:10px; border-left:1px solid var(--line); }
+.ditem { margin:6px 0; } .ditem b { font-weight:500; font-size:12.5px; display:block; } .ditem small { display:block; color:var(--muted); font-size:11.5px; line-height:1.4; }
+.ditem .sq { display:inline-block; width:7px; height:7px; margin-right:6px; }
+.ditem .ok { color:#6fe0a0; } .ditem .bad { color:#ff6b6b; }
+.pcard { display:flex; gap:12px; align-items:flex-start; }
+.pcard-vis { margin:0; flex:none; width:124px; }
+.pcard-vis figcaption { font-size:10.5px; color:var(--muted); margin-top:4px; line-height:1.3; text-align:center; }
+.pcard-canvas { display:block; border-radius:8px; background:#04060d; }
+.pfacts dt { margin-top:7px; font-size:11px; } .pfacts dt:first-child { margin-top:0; } .pfacts dd { font-size:13.5px; }
+.facts-note { margin-top:10px; font-size:11px; }
+.live { margin-top:4px; } .live dd { min-height:1.2em; }
+.tag-real { font-size:10px; color:#6fe0a0; border:1px solid #2e6b4a; border-radius:8px; padding:0 5px; margin-left:4px; }
+@media (max-width:700px) { #left { width:auto; border-right:0; border-bottom:1px solid var(--line); max-height:42%; flex:none; } }
+#date-label { left:280px; }
+@media (max-width:700px) { #date-label { left:16px; } }

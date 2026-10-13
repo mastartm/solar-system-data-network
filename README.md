@@ -2,7 +2,7 @@
 
 Gerçek gezegen konumlarını gösteren etkileşimli bir güneş sistemi haritası. İlerleyen aşamalarda Ay ve Mars yüzeyindeki araçların aktarma uyduları üzerinden Dünya'ya veri gönderdiği bir haberleşme ağı simülasyonu eklenecek.
 
-> **Durum: Aşama 5 (yer istasyonu görüşü, hat hatası ve yeniden iletim, Ay Aracı A düzeltmesi; kendinden önce Aşama 4: Mars kavuşumu stratejisi, duyarlılık analizi, gerçek veriyle doğrulama).** Ağdaki araç/uydu/veri hızı/paket/tampon/strateji değerleri **varsayımsaldır**; çizelgeleyici sonuçları **gerçek bir görev sonucu değildir**. Gerçek olan yalnızca Horizons konumları, bunlardan çıkan ışık gecikmeleri ve bağlantı geometrisidir. Aşama 3 ve 4 artık depodaki **gerçek Horizons verisiyle** (2020–2040) tarayıcıda denendi; sonuçlar ve sentetik veriyle farklar [Aşama 4](#aşama-4-kavuşum-stratejisi-duyarlılık-analizi-gerçek-veri-doğrulaması) bölümünde.
+> **Durum: Aşama 6 (3B görünüm ve harita arayüzü: sol "Cisimler" paneli, dönen küre kartı, etiket yerleştirici, katman aç/kapa); önceki: Aşama 5 (yer istasyonu görüşü, hat hatası ve yeniden iletim, Ay Aracı A düzeltmesi; kendinden önce Aşama 4: Mars kavuşumu stratejisi, duyarlılık analizi, gerçek veriyle doğrulama).** Ağdaki araç/uydu/veri hızı/paket/tampon/strateji değerleri **varsayımsaldır**; çizelgeleyici sonuçları **gerçek bir görev sonucu değildir**. Gerçek olan yalnızca Horizons konumları, bunlardan çıkan ışık gecikmeleri ve bağlantı geometrisidir. Aşama 3 ve 4 artık depodaki **gerçek Horizons verisiyle** (2020–2040) tarayıcıda denendi; sonuçlar ve sentetik veriyle farklar [Aşama 4](#aşama-4-kavuşum-stratejisi-duyarlılık-analizi-gerçek-veri-doğrulaması) bölümünde.
 
 **Canlı site:** GitHub Pages açıldıktan sonra `https://mastartm.github.io/solar-system-data-network/` (Settings → Pages → Source: *GitHub Actions*).
 
@@ -32,6 +32,7 @@ Diğer komutlar: `npm run build` (yayın derlemesi), `npm test` (birim testler),
 - **Gezegene (veya Güneş/Ay'a) tıklayın**: Dünya'ya uzaklığı (km) ve ışık gecikmesi (dakika) sağ panelde görünür.
 - Tekerlek ve +/− düğmeleri yakınlaştırır; zoom imlecin altındaki noktaya sabit kalır. **2B** modda sürükleme kaydırır; kaydırma ve uzaklaşma sınırlıdır (harita sahneden çıkmaz) ve yakınlaşınca ağ ayrıntısı (araç/uydu etiketleri, bağlantılar) görünür (PR [#5](https://github.com/mastartm/solar-system-data-network/pull/5)).
 - **3B** düğmesi eğik görünüme geçer: sürükleyerek döndürün (Shift+sürükleme kaydırır). 3B'de gezegenlerin ekliptik düzlemden sapması 3 kat abartılır (görünsün diye).
+- **Sol panel (Aşama 6):** "Cisimler" listesi ve "Katmanlar"; ayrıntı için [Aşama 6](#aşama-6-3b-görünüm-ve-harita-arayüzü).
 - **Tutulmalar:** kaydırıcının üstündeki noktalar tutulmaları gösterir (sarı: güneş, mavi: Ay; dolu: tam/halkalı, boş: kısmi/yarıgölge). Noktaya veya "Tutulmalar" listesine tıklayınca o tarihe gider; ◀ ▶ düğmeleri önceki/sonraki tutulmaya atlar.
 
 ## Aşama 2: veri ağı (varsayımsal)
@@ -222,8 +223,63 @@ Hatta kayıp (yeniden iletimsiz mod, öncelikli): Mars'ta talebin %4,0'ı, Ay'da
 6. **Sweep süresi arttı** (4 parametre; tarama 5 nokta + varsayılan): ilk açılışta ~10 sn (parçalı, sayfa donmaz).
 7. Aşama 4'ün sayıları (kayıpsız hat, ideal Dünya) **hâlâ geçerlidir**: arayüzde "Yok (ideal)" + "Kayıpsız hat" seçilerek ya da 3 istasyonla (neredeyse tam kapsama) yeniden üretilir.
 
-### 3B görünüm — **ayrı çalışma gerekiyor (not)**
-3B (eğik) görünüm üzerinde ek çalışma yapılması gerektiği belirtildi; kullanıcı isteklerini Aşama 5 bitince iletecek. Bu PR'da 3B koduna dokunulmadı. Ayrıntılar bekleniyor.
+## Aşama 6: 3B görünüm ve harita arayüzü
+
+> Ağ değerleri **varsayımsaldır** (`src/config/hypothetical.ts`; ekranda "Varsayımsal değerler"), sonuçlar gerçek bir görev sonucu değildir. Gezegen kartındaki fiziksel bilgiler **genel bilgidir, Horizons verisi değildir, kaynağı doğrulanmamıştır** (hafızadan yazıldı). Dünya'ya uzaklık ve ışık gecikmesi satırları gerçek Horizons verisidir (ekranda "Horizons" etiketi). Ekran görüntüleri depodaki **gerçek veriyle** (`vite preview`, `?sentetik=1` yok) alındı. Çizelgeleyici sekmesine ve simülasyon mantığına dokunulmadı; PR [#5](https://github.com/mastartm/solar-system-data-network/pull/5)'teki kaydırma/zoom davranışı ve 3B'de Güneş'e göre referans değişmedi.
+
+![Sol panel, Satürn kartı](docs/asama6-sol-panel-kart.png)
+
+### 1. Sol panel "Cisimler"
+- Güneş, gezegenler ve Ay (Dünya'nın altında girintili). Satırda renk noktası, ad ve **Uydu / Araç / İst.** sayıları (aktarma uydusu, yüzey aracı, Dünya için yer istasyonu); sayılar `hypothetical.ts`'ten türetilir (`countsFor`), panelde "Varsayımsal değerler" yazar.
+- Satıra tıklayınca cisim seçilir (haritadaki tıklamayla aynı seçim: harita ve bilgi paneli birlikte güncellenir) ve satır açılır: uydular (ad, yükseklik, Dünya hattı durumu, görünen yer istasyonu ve yüksekliği), araçlar (ad, enlem/boylam, veri hızı, canlı bağlantı durumu), Dünya'da istasyonlar. Seçili satıra tekrar tıklamak açar/kapatır.
+- Durum metinleri DOM yeniden kurulmadan güncellenir (yalnızca `textContent`, 250 ms'de bir), bu yüzden tıklamalar bozulmaz. Panel katlanabilir (başlıktaki ▾/▸); dar ekranda (≤ 700 px) başlangıçta katlıdır.
+
+### 2. 3 boyutlu gezegen kartı
+- Bilgi panelinde seçili cisim için dönen, ışıklandırılmış küre (küçük canvas, kendi kodumuz, Three.js yok). Altında "Şematik görünüm; gerçek yüzey dokusu değildir".
+- **Dokular prosedürel ve belirleyici** (`src/map/planetTextures.ts`): sabit karma işlevli değer gürültüsü + fraktal/Worley gürültü, `Math.random` yok. Dünya (okyanus, kıta, kutup buzu, bulut), Mars, Ay, Merkür (kraterli), Venüs, Jüpiter (bantlar + Büyük Kırmızı Leke), Satürn (halka, Cassini aralığı, küre gölgesi), Uranüs (yan yatık eksen), Neptün, Güneş. Birim testlerle belirlilik doğrulanır.
+- **Verimlilik:** kamera, ışık ve eksen sabit olduğundan piksel başına geometri cisim seçilince bir kez hazırlanır (`src/map/sphereRender.ts`); her karede yalnızca boylam kayması ve doku okuması yapılır. Kart en çok ~30 kare/sn, kendi `requestAnimationFrame`'inde; harita sekmesi dışında ve sayfa gizliyken durur; `prefers-reduced-motion` ise durağan kare çizer.
+- **Bilgi paneli iskeleti** seçim değişince bir kez kurulur, 250 ms'lik güncelleme yalnızca sayıları değiştirir (kart canvas'ı DOM'da aynı kalır, titremez; tarayıcıda doğrulandı).
+- **Kartın yanındaki bilgiler:** yarıçap, yörünge dönemi, Güneş'e ortalama uzaklık, dönme periyodu, bilinen uydu sayısı (dev gezegenlerde "≥"). Ekranda "Genel bilgidir; Horizons verisi değildir, kaynağı doğrulanmamıştır" yazar. Değerler `src/data/bodyFacts.ts` içindedir.
+- **Haritadaki küreler:** Güneş'e bakan yüz aydınlık, karşı yüz belirgin gölgede (kesin terminatör; önceki yumuşak degrade yerine).
+
+![Kartlar: Güneş, Merkür, Venüs, Dünya, Ay / Mars, Jüpiter, Satürn, Uranüs, Neptün](docs/asama6-kartlar.png)
+
+### 3. Etiket yerleştirici
+`src/map/labels.ts` (saf, DOM/Canvas yok). `MapView` ve `NetworkLayer` etiketleri doğrudan çizmez, `LabelSink`'e **istek** olarak verir; `MapView.render` sonunda `placeLabels` çalışır ve çizer (tek istisna: sol üstteki sabit "Varsayımsal değerler" yazısı, nesneye bağlı değil).
+- **Öncelik:** seçili (0) > Güneş/gezegenler (1) > Ay (2) > aktarma uydusu (3) > araç (4) > gecikme (5); eşitlikte istek sırası (belirleyici).
+- **Aday arama:** önce en yakın mesafede 8 yön, sonra sonraki mesafe (4 mesafe: 3, 12, 28, 52 px, nesne kenarından). **Tercih edilen yön** cisim merkezinden nesneye doğru (dışa); gezegenlerde merkez Güneş, Ay'da Dünya, uydu/araçlarda ilgili cisim.
+- Çakışmayan, sınır içinde, nesne işaretlerine (cisim diskleri, araç/uydu işaretleri) binmeyen ilk aday seçilir. 3. ve 4. mesafede (uzağa giden) **çıkıntı çizgisi** çizilir. Yer yoksa etiket **atlanır**; yalnızca zorunlu (seçili cisim) çakışarak da olsa yerleştirilir.
+- Testler (`labels.test.ts`, sentetik): çakışmama, öncelik, sınır, belirlilik, tercih edilen yön, engel, çıkıntı çizgisi, zorunlu etiket.
+- Gerçek veride: yakınlaşıp Dünya–Ay ve Mars çevresinde etiketler (Ay, Ay Aktarma Uydusu, Ay Aracı A/B, gecikme, Venüs vb.) **çakışmıyor** (tarayıcıda her karede çakışma sayısı 0 ölçüldü).
+
+![Dünya–Ay, yakınlaşınca etiketler](docs/asama6-etiketler-ay.png)
+![Mars çevresi (2028 kavuşum öncesi)](docs/asama6-etiketler-mars.png)
+
+### 4. Katmanlar
+Sol panelde 5 anahtar: **Ağ katmanı** (uydular, araçlar, bağlantılar, kavuşum uyarısı), **Veri akışı** (paketler), **Gezegen adları** (Güneş ve Ay dahil; seçili cismin adı her zaman görünür), **Ağ etiketleri** (ad, gecikme), **Yörünge çizgileri** (gezegen izleri, Ay yörüngesi, 3B başvuru halkaları). Kapalıyken ilgili şey çizilmez. Tercihler `localStorage`'da (`ssdn.layers.v1`) saklanır; yoksa/engelliyse/bozuksa varsayılan (hepsi açık) ile çalışır (try/catch, testli). Veri akışı ve ağ etiketleri ağ katmanına bağlı olduğundan, ağ kapalıyken soluk ve devre dışı görünür (tercihleri korunur).
+
+![Ağ katmanı ve yörünge çizgileri kapalı](docs/asama6-katmanlar-kapali.png)
+![3B görünüm, Jüpiter seçili](docs/asama6-3b.png)
+
+### Gerçek veriyle doğrulama (Playwright/Chromium, `vite preview`, `?sentetik=1` yok)
+Sol panel, kart (10 cisim), etiketler (Dünya–Ay ve Mars bölgesinde yakınlaşarak), her katmanın aç/kapa'sı (ve `localStorage` içeriği), 2B/3B (sürükleme dahil), tarih değişimi (Mars kavuşumu düğmesi), Çizelgeleyici sekmesine gidip dönme, dar ekran denendi. **Konsolda hata/uyarı yok.**
+- Ana döngü: 60 kare/sn (kart canlı, 2B/3B, 100 gün/sn oynatmada da); `MapView.render` ortalama ~1,1 ms, p95 ~1,6 ms. Kart karesi (`putImageData`) ~0,05 ms; ilk seçimde doku üretimi 30–100 ms.
+- 3B: kamera/projeksiyon koduna dokunulmadı (Güneş'e göre referans aynı).
+
+### Beklenmedik ve dikkat edilecekler
+1. **Etiket yüksekliği hatası (bulundu, düzeltildi):** `600 12px` gibi yazı tipi dizisinden boyut ayrıştırırken ağırlık (600) boyut sanılıyordu; seçili cismin etiketi 750 px yüksek ölçülüp "zorunlu" yerleştirilip ekranın dışına itiliyordu. Düzenli ifadeyle düzeltildi.
+2. **Doku, gerçek yüzey değildir:** Dünya'daki kıtalar gerçek haritayı değil gürültüyü izler; Jüpiter'in Büyük Kırmızı Leke'si ve Neptün'ün koyu lekesinin konumu sabit, gerçek boylamla ilgisiz. Dönme hızı üsluptur (gerçek dönme periyodunun karekökü ile ölçeklenir; 20–80 sn/tur). Ters dönenler (Venüs 177°, Uranüs 98°) eşdeğer eğikliğe indirgenip dönüş yönü çevrilerek çizilir; kuzey/güney çizimde ters görünebilir.
+3. **Uydu sayıları (≥ 95 / 274 / 28 / 16) hafızadan** yazıldı ve zamanla artar; kaynağı doğrulanmadı. Diğer değerler de öyle (ekranda belirtilir). Ay için "Güneş'e uzaklık" Dünya'nınkiyle aynıdır (ekranda belirtilir).
+4. **Haritadaki gölge** ekran düzleminde Güneş yönünü kullanır (3B'de derinlik bileşeni yok sayılır); şematiktir.
+5. **Dar ekran** düzeni önceki aşamalardaki gibi sıkışık: sol panel katlanır ama alt kontroller yüksek olduğundan harita küçük kalır. İyileştirilmedi.
+6. **Yörünge çizgileri anahtarı** 3B başvuru halkalarını da kapatır (ayrı anahtar yapılmadı; karar).
+7. **Etiket yerleştirici çıkıntı çizgileri** pratikte nadiren görünür (yakın adaylar çoğu zaman yeter); testte zorlanarak doğrulandı.
+8. Sol panelde seçim değişince satır görünür alana kaydırılır; bu yüzden "Katmanlar" kutusu yukarı kayabilir.
+
+### Kararlar
+- Yeni bağımlılık, Web Worker veya GitHub Actions iş akışı eklenmedi; Three.js yok.
+- Yeni varsayımsal değer eklenmedi (sayılar mevcut `hypothetical.ts`'ten türetilir); fiziksel bilgiler `bodyFacts.ts`'te, varsayımsal değildir ama doğrulanmamıştır.
+- Unit testler sentetiktir (testte yazılı). `npm test`: 75 test.
 
 ## Veri kaynağı ve kararlar
 
@@ -240,9 +296,9 @@ Hatta kayıp (yeniden iletimsiz mod, öncelikli): Mars'ta talebin %4,0'ı, Ay'da
 ## Klasörler
 
 ```
-src/data/    veri okuma ve tipler
-src/map/     interpolasyon (ephemeris) ve Canvas çizimi
-src/ui/      kontroller, bilgi paneli, ağ paneli
+src/data/    veri okuma, tipler, genel fiziksel bilgiler (bodyFacts)
+src/map/     interpolasyon (ephemeris), Canvas çizimi, etiket yerleştirici (labels), gezegen dokuları ve küre kartı hesabı
+src/ui/      kontroller, bilgi paneli + küre kartı, sol panel (Cisimler, katmanlar), ağ paneli
 src/network/ ağ modeli (gecikme, bağlantı durumu, kavuşum), çizelgeleyici + strateji, tarama, zaman çizelgesi
 src/config/  varsayımsal değerler (tek dosya)
 scripts/     Horizons veri çekme betiği
@@ -266,7 +322,7 @@ docs/        gerçek veriyle alınmış ekran görüntüleri
 10. **Üretilmeyen veri "kayıp" sayılmaz** (ayrı sütun); bunu tanım olarak seçtim ve karşılaştırmada hem "düşen" hem "düşen + üretilmeyen" gösteriyorum. Sizin için "üretilmeyen" farklı bir maliyete denk geliyorsa (ör. bilimsel değeri olan kısma) bu tanımı birlikte gözden geçirelim.
 11. **Ay Aracı A görüş sorunu:** Aşama 5'te enlem −40°'ye alınarak giderildi (kutup bölgesi modellenmedi, yukarıya bakın). Arayüzdeki senaryo hâlâ yalnızca Mars hattını kapsar; Ay hattı sonuçları README'de betikle alınmış tablodadır.
 12. **Mars aktarma uydusunun Mars gölgesi (tutulma) ve güç modeli** yok; yalnızca "Dünya cismin arkasında" kesintisi var.
-13. **3B görünüm:** ek çalışma gerekecek; istekler Aşama 5 bitince iletilecek (yukarıdaki "3B görünüm" notu).
+13. **3B görünüm:** Aşama 6'da arayüz işleri yapıldı (sol panel, kart, etiketler, katmanlar); projeksiyon değişmedi.
 14. **Yer istasyonu ve ARQ varsayımları:** konumlar derin uzay istasyonlarına benzer seçilmiş varsayımsal değerlerdir; kayıp modeli belirleyici/periyodik; strateji kapsamayı bilmez (Aşama 5, "Beklenmedik" madde 1).
 
 ## Kullanılan dış kaynaklar
@@ -278,4 +334,4 @@ docs/        gerçek veriyle alınmış ekran görüntüleri
 
 ## Sonraki aşamalar
 
-Aşama 6 adayları: kapsama bilen strateji, kümelenmiş (Gilbert–Elliott benzeri, yine belirleyici) hata modeli, 3B görünüm çalışması (kullanıcı istekleriyle), Ay hattı için arayüz senaryosu. Değerler **varsayımsaldır** ve `src/config/hypothetical.ts` içinde kalır; sonuçlar gerçek bir görev sonucu değildir.
+Aşama 7 adayları: kapsama bilen strateji, kümelenmiş (Gilbert–Elliott benzeri, yine belirleyici) hata modeli, Ay hattı için arayüz senaryosu, dar ekran düzeni. Değerler **varsayımsaldır** ve `src/config/hypothetical.ts` içinde kalır; sonuçlar gerçek bir görev sonucu değildir.
