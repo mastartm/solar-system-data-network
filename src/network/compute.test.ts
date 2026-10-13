@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Track } from '../data/types';
-import { createHandler, type SimOut, type TlInfo } from './compute';
+import type { CoverageRow } from './coverage';
+import { createHandler, relayIdsOf, type SimOut, type TlInfo } from './compute';
 import { ComputePool, inlineTransport } from './computeClient';
 import { simulate } from './scheduler';
 import { hasBlackout, metricsOf, runPolicy } from './sweep';
-import { buildLinkTimeline, defaultParams, MARS_RELAY, restrictToRelay, schedConfig, schedTopology, withParams } from './timeline';
+import { buildLinkTimeline, defaultParams, MARS_RELAY, MOON_RELAY, restrictToRelay, restrictToRelays, schedConfig, schedTopology, withParams } from './timeline';
 
 // BU TESTLER SENTETİKTİR: uydurma dairesel yörüngeli konum izleri (gerçek Horizons verisi değil). Hesap işleyicisinin doğrudan çağrıyla aynı
 // sonucu verdiğini, havuzun işleri sıralayıp dağıttığını ve iptal belirtecinin bekleyen işleri hiç başlatmadığını doğrular.
@@ -60,6 +61,42 @@ describe('hesap işleyicisi (sentetik izler)', () => {
     expect(cov.steps).toBe(96);
     expect(Object.keys(cov.up).length).toBeGreaterThan(0);
     expect(() => h({ op: 'tlInfo', tl: { ...tl, startJD: 2460012, endJD: 2460010 } })).toThrow();
+  });
+});
+
+describe('hesap işleyicisi: Aşama 9 ağ seçenekleri (sentetik izler)', () => {
+  const net = { moonSecond: 'best' as const, moonOrbit: 'elliptical' as const };
+  const tl9 = { startJD: 2460010, endJD: 2460014, stepSec: 1800, stations: 2, relayId: MOON_RELAY, net };
+
+  it('ikinci Ay uydulu çizelge: sim doğrudan çağrıyla aynı; tlInfo uydu başına ve en az bir uydunun açık oranını verir; kapsama ağ seçeneklerini kullanır', () => {
+    const h = createHandler();
+    h({ op: 'init', tracks });
+    const cfg = withParams(schedConfig('arq'), defaultParams(MOON_RELAY), MOON_RELAY, ['ay-aktarma-2']);
+    const out = h({ op: 'sim', tl: tl9, policy: 'adaptive', cfg, full: true }) as SimOut;
+    const topo0 = schedTopology(net);
+    const { topo, samples } = restrictToRelays(topo0, buildLinkTimeline(tracks, tl9.startJD, tl9.endJD, tl9.stepSec, topo0, tl9.stations, net), relayIdsOf(MOON_RELAY, net));
+    expect(out.result).toEqual(simulate(topo, samples, 'adaptive', cfg));
+    expect(topo.relays).toEqual(['ay-aktarma', 'ay-aktarma-2']);
+    const info = h({ op: 'tlInfo', tl: tl9 }) as TlInfo;
+    expect(info.openFracByRelay.length).toBe(2);
+    expect(info.openFracAny).toBeGreaterThanOrEqual(Math.max(...info.openFracByRelay));
+    expect(info.openFracAny).toBeLessThanOrEqual(1);
+    const cov = h({ op: 'coverage', startJD: tl9.startJD, endJD: tl9.endJD, n: 2, net }) as CoverageRow;
+    expect(Object.keys(cov.up)).toContain('ay-aktarma-2');
+    expect(cov.anyUp).toBeGreaterThanOrEqual(Math.max(cov.up['ay-aktarma'], cov.up['ay-aktarma-2']));
+    // seçeneksiz çizelge ayrı önbellek anahtarıdır ve tek uyduludur
+    expect((h({ op: 'tlInfo', tl: { ...tl9, net: undefined } }) as TlInfo).topo.relays).toEqual(['ay-aktarma']);
+  });
+
+  it('policy işlemi ikinci uydunun kaydırıcı değerlerini de uygular (tampon/hat hızı iki uyduya)', () => {
+    const h = createHandler();
+    h({ op: 'init', tracks });
+    const cfg = { ...schedConfig('arq'), stepSec: 1800 };
+    const params = defaultParams(MOON_RELAY);
+    const got = h({ op: 'policy', tl: tl9, cfg, params, policy: 'priority', override: { relayDownlinkKbps: 15 } });
+    const topo0 = schedTopology(net);
+    const { topo, samples } = restrictToRelays(topo0, buildLinkTimeline(tracks, tl9.startJD, tl9.endJD, tl9.stepSec, topo0, tl9.stations, net), relayIdsOf(MOON_RELAY, net));
+    expect(got).toEqual(runPolicy(topo, samples, cfg, params, 'priority', { relayDownlinkKbps: 15 }, MOON_RELAY, ['ay-aktarma-2']));
   });
 });
 

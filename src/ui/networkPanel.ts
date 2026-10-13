@@ -13,6 +13,7 @@ const why: Record<LinkState, string> = {
   occulted: 'Dünya cismin arkasında kaldı',
   blackout: 'Mars kavuşumu: kesinti',
   nostation: 'hiçbir yer istasyonu uyduyu görmüyor',
+  eclipse: 'uydu Mars gölgesinde (varsayımsal kesinti)',
 };
 
 export function renderNetwork(el: HTMLElement, jd: number, net: NetworkState, layer: NetworkLayer, windows: BlackoutWindow[]) {

@@ -2,18 +2,30 @@
 // (computeClient.ts), aynı işleyici testte ve Worker olmayan ortamda doğrudan çağrılır. Girdi/çıktı düz veridir (postMessage ile taşınır).
 // Tüm sayılar varsayımsaldır (src/config/hypothetical.ts); sonuçlar gerçek bir görev sonucu değildir. Horizons'a erişmez; konumlar çağıranın verdiği izlerdir.
 import type { Track } from '../data/types';
-import { computeNetwork } from './network';
+import { coverageRow, type CoverageRow } from './coverage';
+import type { NetOptions } from './network';
 import { simulate, type Policy, type SchedConfig, type SchedTopology, type SimResult } from './scheduler';
 import { hasBlackout, metricsOf, runPolicy, type Metrics } from './sweep';
-import { buildLinkTimeline, restrictToRelay, schedTopology, type SweepParams } from './timeline';
+import { buildLinkTimeline, restrictToRelays, schedTopology, type SweepParams } from './timeline';
+import { HYPOTHETICAL } from '../config/hypothetical';
 
-/** Bir bağlantı çizelgesinin tanımı: tarih aralığı, adım, yer istasyonu sayısı, hangi aktarma uydusu. */
-export interface TlSpec { startJD: number; endJD: number; stepSec: number; stations: number; relayId: string }
+/**
+ * Bir bağlantı çizelgesinin tanımı: tarih aralığı, adım, yer istasyonu sayısı, hangi aktarma uydusu. net (Aşama 9): ağ seçenekleri (Ay yörüngesi, ikinci Ay uydusu,
+ * Mars gölgesi, kutup aracı); yoksa Aşama 2-8 ağı. İkinci Ay uydusu seçiliyse Ay çizelgesi iki uyduyu birlikte içerir.
+ */
+export interface TlSpec { startJD: number; endJD: number; stepSec: number; stations: number; relayId: string; net?: NetOptions }
+
+/** Çizelgeye giren aktarma uyduları: tek uydu (relayId) ya da ikinci Ay uydusu seçiliyse ikisi. */
+export const relayIdsOf = (relayId: string, net?: NetOptions): string[] =>
+  net?.moonSecond && net.moonSecond !== 'none' && HYPOTHETICAL.relays.find((r) => r.id === relayId)?.body === 'moon' ? [relayId, HYPOTHETICAL.moonRelay2.id] : [relayId];
 
 export interface TlInfo {
   n: number;
-  /** Dünya hattının açık olduğu adımların oranı (0–1). */
+  /** Birinci uydunun Dünya hattının açık olduğu adımların oranı (0–1). */
   openFrac: number;
+  /** Aşama 9: uydu başına açık oranı (topo.relays sırasında) ve en az bir uydunun açık olduğu oranı (tek uyduda ikisi de openFrac ile aynı). */
+  openFracByRelay: number[];
+  openFracAny: number;
   /** Kavuşum kesintisi (earthBlackout) var mı. */
   blackout: boolean;
   /** Dünya hattının kapalı olduğu aralıklar (gün, başlangıçtan). */
@@ -21,14 +33,14 @@ export interface TlInfo {
   topo: SchedTopology;
 }
 
-export interface CoverageRow { n: number; steps: number; see: Record<string, number>; up: Record<string, number>; surf: Record<string, number> }
+export type { CoverageRow };
 
 export type Req =
   | { op: 'init'; tracks: Record<string, Track> }
   | { op: 'tlInfo'; tl: TlSpec }
   | { op: 'sim'; tl: TlSpec; policy: Policy; cfg: SchedConfig; full?: boolean }
   | { op: 'policy'; tl: TlSpec; cfg: SchedConfig; params: SweepParams; policy: Policy; override: Partial<SweepParams> }
-  | { op: 'coverage'; startJD: number; endJD: number; n: number };
+  | { op: 'coverage'; startJD: number; endJD: number; n: number; net?: NetOptions };
 export interface SimOut { metrics: Metrics; result?: SimResult }
 export type Res = { op: 'init' } | TlInfo | SimOut | Metrics | CoverageRow;
 
@@ -39,15 +51,16 @@ export function createHandler(): (req: Req) => unknown {
   const need = () => { if (!tracks) throw new Error('Hesap işleyicisi başlatılmadı: konum izleri yok.'); return tracks; };
 
   function timeline(s: TlSpec) {
-    const key = `${s.startJD}|${s.endJD}|${s.stepSec}|${s.stations}|${s.relayId}`;
+    const key = `${s.startJD}|${s.endJD}|${s.stepSec}|${s.stations}|${s.relayId}|${JSON.stringify(s.net ?? {})}`;
     let t = cache.get(key);
     if (!t) {
-      const full = buildLinkTimeline(need(), s.startJD, s.endJD, s.stepSec, schedTopology(), s.stations);
+      const topo0 = schedTopology(s.net);
+      const full = buildLinkTimeline(need(), s.startJD, s.endJD, s.stepSec, topo0, s.stations, s.net);
       if (!full.length) throw new Error('Bağlantı çizelgesi boş: tarih aralığı veri dışında.');
       if (full.some((x) => [...x.surfaceDelaySec, ...x.earthDelaySec].some((v) => !Number.isFinite(v)))) throw new Error('Işık gecikmesi sayısal değil: konum verisi bozuk görünüyor.');
-      t = restrictToRelay(schedTopology(), full, s.relayId);
+      t = restrictToRelays(topo0, full, relayIdsOf(s.relayId, s.net));
       cache.set(key, t);
-      if (cache.size > 16) cache.delete(cache.keys().next().value as string);
+      if (cache.size > 48) cache.delete(cache.keys().next().value as string);
     }
     return t;
   }
@@ -60,9 +73,15 @@ export function createHandler(): (req: Req) => unknown {
         const dt = req.tl.stepSec / 86400;
         const closed: [number, number][] = [];
         let from = -1;
-        samples.forEach((x, i) => { if (!x.earthUp[0]) { if (from < 0) from = i; } else if (from >= 0) { closed.push([from * dt, i * dt]); from = -1; } });
+        // kapalı aralık: hiçbir uydunun Dünya hattı açık değil (tek uyduda birinci uydunun kapalı olduğu aralık)
+        samples.forEach((x, i) => { if (!x.earthUp.some(Boolean)) { if (from < 0) from = i; } else if (from >= 0) { closed.push([from * dt, i * dt]); from = -1; } });
         if (from >= 0) closed.push([from * dt, samples.length * dt]);
-        const out: TlInfo = { n: samples.length, openFrac: samples.filter((x) => x.earthUp[0]).length / samples.length, blackout: hasBlackout(samples), closed, topo };
+        const out: TlInfo = {
+          n: samples.length, openFrac: samples.filter((x) => x.earthUp[0]).length / samples.length,
+          openFracByRelay: topo.relays.map((_, ri) => samples.filter((x) => x.earthUp[ri]).length / samples.length),
+          openFracAny: samples.filter((x) => x.earthUp.some(Boolean)).length / samples.length,
+          blackout: hasBlackout(samples), closed, topo,
+        };
         return out;
       }
       case 'sim': {
@@ -73,22 +92,9 @@ export function createHandler(): (req: Req) => unknown {
       }
       case 'policy': {
         const { topo, samples } = timeline(req.tl);
-        return runPolicy(topo, samples, req.cfg, req.params, req.policy, req.override, req.tl.relayId);
+        return runPolicy(topo, samples, req.cfg, req.params, req.policy, req.override, req.tl.relayId, relayIdsOf(req.tl.relayId, req.tl.net).slice(1));
       }
-      case 'coverage': {
-        const see: Record<string, number> = {}, up: Record<string, number> = {}, surf: Record<string, number> = {};
-        let steps = 0;
-        for (let jd = req.startJD; jd < req.endJD; jd += 1 / 48) {
-          steps++;
-          for (const st of computeNetwork(need(), jd, req.n).statuses) {
-            see[st.relay.id] = (see[st.relay.id] ?? 0) + (req.n === 0 || st.station ? 1 : 0);
-            up[st.relay.id] = (up[st.relay.id] ?? 0) + (st.earthLink === 'up' ? 1 : 0);
-            surf[st.asset.id] = (surf[st.asset.id] ?? 0) + (st.surfaceLink === 'up' ? 1 : 0);
-          }
-        }
-        const out: CoverageRow = { n: req.n, steps, see, up, surf };
-        return out;
-      }
+      case 'coverage': return coverageRow(need(), req.startJD, req.endJD, req.n, req.net);
     }
   };
 }

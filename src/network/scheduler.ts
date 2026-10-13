@@ -12,8 +12,9 @@
  * 'rolling' (Aşama 8): kayan ufuklu akış kontrolü. 'coverage' ile aynı havuz projeksiyonu, ama kesinti işaretine bağlı değil: her refreshSec'te
  * önümüzdeki rollingSec boyunca (bağlantı takviminden öngörülebilen HER kapalı hat dönemi: kavuşum, yer istasyonu boşluğu, cisim arkası) tampon
  * projekte edilir; böylece Ay senaryosunda da çalışır. 'strategy' ve 'coverage' olduğu gibi korunur.
+ * 'adaptive' (Aşama 9): 'rolling' ile aynı projeksiyon, ama ufuk sabit değil: takvimdeki yakın kapalı hat döneminin UZUNLUĞUNA göre seçilir (AdaptiveConfig).
  */
-export type Policy = 'fifo' | 'priority' | 'strategy' | 'coverage' | 'rolling';
+export type Policy = 'fifo' | 'priority' | 'strategy' | 'coverage' | 'rolling' | 'adaptive';
 
 /**
  * Kavuşum stratejisi ("bütçeli kısma"; varsayılanı src/config/hypothetical.ts). Kesinti takvimi öngörülebilir varsayılır
@@ -121,7 +122,34 @@ export interface ForecastError {
   lossBiasPct?: number;
 }
 
-export interface SchedClass { id: string; priority: number; share: number; packetMb: number }
+/**
+ * Aşama 9: havuz projeksiyonunun iyimser varsayımlarını kaldıran seçenekler (yalnızca 'coverage', 'rolling', 'adaptive' kullanır; varsayılan ikisi de kapalı).
+ * surfaceClosure: araç tamponundaki veri yüzey hattı kapalıyken boşalmaz — havuz iki aşamalı izlenir (araç tamponu → uydu payı → Dünya); yüzey hattı takvimi de
+ * (tahmin hatası dahil) stratejinin bildiği takvimdir. arqHold: ARQ kopyaları RTT boyunca uydu tamponunda kalır; havuzun boşalması RTT (= 2 × ışık gecikmesi) gecikir.
+ */
+export interface ProjectionOptions { surfaceClosure?: boolean; arqHold?: boolean }
+
+/**
+ * Uyarlamalı kayan ufuk (Aşama 9). Her refreshSec'te, her araç için takvimden (stratejinin bildiği Dünya hattı takvimi) şimdi sürmekte olan ya da leadSec içinde
+ * başlayan ilk KAPALI hat döneminin uzunluğu L bulunur; ufuk = (dönemin bitişine kalan süre) + tailFactor × L, [minSec, maxSec] aralığına kırpılır. Yakın bir kapalı dönem
+ * yoksa ufuk minSec'tir. Sonrası 'rolling' ile aynıdır (aynı havuz projeksiyonu).
+ */
+export interface AdaptiveConfig {
+  minSec: number;
+  maxSec: number;
+  leadSec: number;
+  tailFactor: number;
+  margin: number;
+  minFactor: number;
+  assetBufferShare?: number;
+  refreshSec?: number;
+}
+
+export interface SchedClass {
+  id: string; priority: number; share: number; packetMb: number;
+  /** Aşama 9: varsayımsal bilimsel değer (birim değer / Mb); yoksa 1. Zamanla azalma yalnızca ölçüt hesabındadır (SchedConfig.valueHalfLivesSec), çizelgeleme kararını etkilemez. */
+  valuePerMb?: number;
+}
 
 export interface SchedConfig {
   classes: SchedClass[];
@@ -139,13 +167,23 @@ export interface SchedConfig {
   coverage?: CoverageConfig;
   /** 'rolling' politikası için gerekli; yoksa kısma yapmaz (öncelikliyle aynı). */
   rolling?: RollingConfig;
-  /** Stratejilerin (strategy, coverage, rolling) bildiği takvim/kayıp tahminindeki sapma. Yoksa kusursuz. */
+  /** 'adaptive' politikası için gerekli; yoksa kısma yapmaz (öncelikliyle aynı). */
+  adaptive?: AdaptiveConfig;
+  /** Havuz projeksiyonu seçenekleri (Aşama 9); yoksa Aşama 3-8 davranışı. */
+  projection?: ProjectionOptions;
+  /** Stratejilerin (strategy, coverage, rolling, adaptive) bildiği takvim/kayıp tahminindeki sapma. Yoksa kusursuz. */
   forecast?: ForecastError;
+  /**
+   * Aşama 9: değer ölçütü için zamanla azalan değer yarı ömürleri (sn). Verilirse her sınıfın sonucunda decayMb[j] = Σ paket boyutu × 2^(−teslim yaşı / yarı ömür[j]) olur
+   * (ölçüt hesabı; çizelgeleme kararını ETKİLEMEZ). Yoksa decayMb boştur.
+   */
+  valueHalfLivesSec?: number[];
   /** Yoksa hatlar kayıpsızdır ve gönderici paketi gönderir göndermez bırakır (Aşama 3-4 davranışı). */
   arq?: ArqConfig;
 }
 
-export interface SchedAsset { id: string; body: string; relay: string; dataRateKbps: number }
+/** relay: ana (home) aktarma uydusu. alt (Aşama 9): aracın kullanabileceği DİĞER uydular; varsa bağlantı çizelgesi her adımda hangisinin kullanıldığını söyler (LinkSample.assetRelay). */
+export interface SchedAsset { id: string; body: string; relay: string; dataRateKbps: number; alt?: string[] }
 export interface SchedTopology { assets: SchedAsset[]; relays: string[] }
 
 /** Bir zaman adımındaki bağlantı durumu; diziler topology.assets / topology.relays sırasındadır. */
@@ -156,6 +194,8 @@ export interface LinkSample {
   earthDelaySec: number[];
   /** İsteğe bağlı: uydu→Dünya hattı Mars kavuşumu nedeniyle kapalı mı (cisim arkası kapanması değil). Strateji bunu öngörmek için kullanır. */
   earthBlackout?: boolean[];
+  /** Aşama 9: araç başına bu adımda kullanılan aktarma uydusunun topology.relays içindeki sırası (yoksa aracın ana uydusu). surfaceUp / surfaceDelaySec bu uyduya aittir. */
+  assetRelay?: number[];
 }
 
 export interface ClassStats {
@@ -180,6 +220,8 @@ export interface ClassStats {
   /** Strateji yüzünden hiç üretilmeyen (kısılan) veri; kayıp (dropped) DEĞİLDİR. Talep = generated + suppressed. */
   suppressed: number;
   suppressedMb: number;
+  /** Aşama 9: SchedConfig.valueHalfLivesSec ile aynı sırada, zamanla azalan değerli teslim edilen hacim (Mb eşdeğeri). Yarı ömür verilmediyse boş. */
+  decayMb: number[];
   generatedMb: number;
   deliveredMb: number;
   droppedMb: number;
@@ -318,12 +360,30 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const st = policy === 'strategy' ? cfg.strategy : undefined;
   const cv = policy === 'coverage' ? cfg.coverage : undefined;
   const rl = policy === 'rolling' ? cfg.rolling : undefined;
+  const ad = policy === 'adaptive' ? cfg.adaptive : undefined;
+  /** Havuz projeksiyonu kullanan politikalar. */
+  const proj = !!(cv || rl || ad);
+  // Aşama 9 seçenekleri (varsayılan kapalı: Aşama 3-8 aritmetiği birebir). arqHold yalnızca ARQ varken anlamlıdır.
+  const surfClose = proj && !!cfg.projection?.surfaceClosure;
+  const arqHold = proj && !!cfg.projection?.arqHold && !!cfg.arq;
   // Stratejilerin bildiği takvim (tahmin): kusursuzsa gerçekle aynı; fc ile sapabilir. Gerçek bağlantılar (samples) hiç değişmez.
   const fc = cfg.forecast;
   const edgeSteps = Math.round((fc?.edgeShiftSec ?? 0) / dt), offSteps = Math.round((fc?.offsetSec ?? 0) / dt);
   const lossBias = fc?.lossBiasPct ?? 0;
-  const fUp = topo.relays.map((_, ri) => (st || cv || rl) ? forecastFlags(samples.map((x) => x.earthUp[ri]), edgeSteps, offSteps, false) : new Uint8Array(0));
+  const fUp = topo.relays.map((_, ri) => (st || proj) ? forecastFlags(samples.map((x) => x.earthUp[ri]), edgeSteps, offSteps, false) : new Uint8Array(0));
   const fBlack = topo.relays.map((_, ri) => st || cv ? forecastFlags(samples.map((x) => !!x.earthBlackout?.[ri]), edgeSteps, offSteps, true) : new Uint8Array(0));
+  // arqHold: ARQ kopyası RTT boyunca tamponda yer tutar, yani havuz Dünya hattı AÇIKKEN değil, RTT sonra (ACK) boşalır. Simülasyonda kopya, gönderim adımından
+  // 1 + ceil(RTT/adım) adım sonra bırakılır (adım başında işlenir): sürekli zamanlı projeksiyonda bu, açık/kapalı bayrağının ceil(RTT/adım) adım ötelenmesidir.
+  // (Ay'da RTT ~3 sn < adım: öteleme 1 adımdır; adımın ayrıklaştırma sonucudur.) Başlangıçtan önce gönderim olmadığı için ilk adımlarda boşalma yoktur.
+  const projUp = arqHold
+    ? fUp.map((u, ri) => {
+        const out = new Uint8Array(u.length);
+        for (let t = 0; t < u.length; t++) { const lag = Math.max(1, Math.ceil((2 * samples[t].earthDelaySec[ri]) / dt)); out[t] = t - lag >= 0 ? u[t - lag] : 0; }
+        return out;
+      })
+    : fUp;
+  // surfaceClosure: yüzey hattı (araç → uydu) takvimi (tahmin hatası aynı kuralla uygulanır).
+  const fSurf = topo.assets.map((_, ai) => (surfClose ? forecastFlags(samples.map((x) => x.surfaceUp[ai]), edgeSteps, offSteps, false) : new Uint8Array(0)));
   // Kesinti öngörüsü (yalnızca strateji): relay başına, adım i için kesintiye kalan süre içinde mi, ve o kesintinin bitişine kalan adım.
   const ahead = topo.relays.map(() => new Array<boolean>(samples.length).fill(false));
   const endsIn = topo.relays.map(() => new Array<number>(samples.length).fill(0));
@@ -339,15 +399,26 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
       }
     });
   }
-  // Kapsama bilen strateji: relay başına (a) her adımın kısma ufku (kesinti öncesi/içi/sonrası; -1 = kapalı) ve (b) Dünya hattının
-  // açık/kapalı geçiş adımları (ufuk içinde tepe doluluğu ileri izlerken kesitler bunlardır).
+  // Kapsama bilen strateji: relay başına her adımın kısma ufku (kesinti öncesi/içi/sonrası; -1 = kapalı).
   // Projeksiyon pahalıdır: çarpan refreshSec'te bir yeniden hesaplanır, aradaki adımlarda önceki değer kullanılır.
   const refreshSteps = Math.max(1, Math.round((cfg.coverage?.refreshSec ?? 1800) / dt));
   const covThrottle = topo.assets.map(() => 1);
   const horizon = topo.relays.map(() => new Int32Array(samples.length).fill(-1));
-  const flips = topo.relays.map(() => [] as number[]);
-  const flipPtr = topo.relays.map(() => 0);
-  if (cv || rl) topo.relays.forEach((_, ri) => { for (let i = 1; i < samples.length; i++) if (fUp[ri][i] !== fUp[ri][i - 1]) flips[ri].push(i); });
+  // Aşama 9: aracın kullanabileceği uydular (ana + alt; tek uydulu topolojide tek rota = Aşama 3-8 aritmetiği) ve projeksiyonun kullandığı takvim değişim adımları.
+  const routes = topo.assets.map((a) => [relayIndex.get(a.relay)!, ...(a.alt ?? []).map((r) => relayIndex.get(r)).filter((x): x is number => x !== undefined)]);
+  const routeTotal = topo.relays.map(() => 0);
+  const flipsOf = (flags: Uint8Array) => { const o: number[] = []; for (let i = 1; i < flags.length; i++) if (flags[i] !== flags[i - 1]) o.push(i); return o; };
+  const aFlips: number[][] = topo.assets.map(() => []);
+  const aPtr = topo.assets.map(() => 0);
+  if (proj) {
+    const relFlips = projUp.map(flipsOf);
+    topo.assets.forEach((_, ai) => {
+      const set = new Set<number>();
+      for (const r of routes[ai]) for (const f of relFlips[r]) set.add(f);
+      if (surfClose) for (const f of flipsOf(fSurf[ai])) set.add(f);
+      aFlips[ai] = [...set].sort((x, y) => x - y);
+    });
+  }
   if (cv) {
     const L = Math.ceil(cv.lookaheadSec / dt), R = Math.ceil(cv.recoverySec / dt);
     topo.relays.forEach((_, ri) => {
@@ -370,39 +441,125 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     return { top, rest, total: top + rest };
   });
   const relayTotal = topo.relays.map((r) => topo.assets.reduce((s, a, ai) => s + (a.relay === r ? assetRate[ai].total : 0), 0));
+  // Projeksiyonda uydu tamponunun payı: uyduyu rota olarak kullanabilen araçların toplam hızına göre (tek uyduda relayTotal ile aynı).
+  topo.relays.forEach((_, ri) => { routeTotal[ri] = topo.assets.reduce((s, _a, ai) => s + (routes[ai].includes(ri) ? assetRate[ai].total : 0), 0); });
 
   const rlSteps = Math.max(1, Math.ceil((cfg.rolling?.rollingSec ?? 0) / dt));
   const rlRefresh = Math.max(1, Math.round((cfg.rolling?.refreshSec ?? 1800) / dt));
+  const adMin = ad ? Math.max(1, Math.ceil(ad.minSec / dt)) : 0;
+  const adMax = ad ? Math.max(adMin, Math.ceil(ad.maxSec / dt)) : 0;
+  const adLead = ad ? Math.ceil(ad.leadSec / dt) : 0;
+  const adRefresh = Math.max(1, Math.round((cfg.adaptive?.refreshSec ?? 1800) / dt));
+  // 'adaptive': araç için takvimde (tahmin) rotalardan HİÇBİRİ Dünya hattını açık tutmuyorsa kapalı dönem. Tek rotada fUp'un kendisi.
+  const spellUp = ad ? topo.assets.map((_, ai) => {
+    if (routes[ai].length === 1) return fUp[routes[ai][0]];
+    const o = new Uint8Array(samples.length);
+    for (let t = 0; t < o.length; t++) for (const r of routes[ai]) if (fUp[r][t]) { o[t] = 1; break; }
+    return o;
+  }) : [];
+  /** i adımından itibaren şimdi sürmekte olan ya da leadSec içinde başlayan ilk kapalı hat döneminin [başı, sonu) adımları (başı geriye doğru bulunur: toplam uzunluk için); yoksa null. */
+  const closedSpell = (ai: number, i: number): [number, number] | null => {
+    const u = spellUp[ai], n = samples.length;
+    let a = i;
+    if (u[i]) {
+      const lim = Math.min(n, i + adLead + 1);
+      while (a < lim && u[a]) a++;
+      if (a >= lim) return null;
+    } else while (a > 0 && !u[a - 1]) a--;
+    let b = a;
+    while (b < n && !u[b]) b++;
+    return [a, b];
+  };
+  /** Uyarlamalı ufuk (adım): kapalı dönemin bitişine kalan süre + tailFactor × dönem uzunluğu, [min, max]; yakın kapalı dönem yoksa min. */
+  const adaptiveSteps = (ai: number, i: number): number => {
+    const sp = closedSpell(ai, i);
+    if (!sp) return adMin;
+    const [a, b] = sp;
+    return Math.min(adMax, Math.max(adMin, b - i + Math.ceil(ad!.tailFactor * (b - a))));
+  };
   /**
    * Havuz (araç tamponu payı + uydu tamponunun hız oranındaki payı) i adımından T adımına (T hariç) ileri izlenir; tepe doluluğu margin × kapasiteyi
-   * aşmayan en büyük bilim verisi çarpanı döner (ikili arama). Dünya hattı AÇIK/KAPALI bilgisi tahmin takviminden (fUp), ortalama kayıp tahminden gelir.
-   * 'coverage' ve 'rolling' aynı fonksiyonu kullanır (aritmetik Aşama 7 ile aynı).
+   * aşmayan en büyük bilim verisi çarpanı döner (ikili arama). Dünya hattı AÇIK/KAPALI bilgisi tahmin takviminden (projUp), ortalama kayıp tahminden gelir.
+   * 'coverage', 'rolling' ve 'adaptive' aynı fonksiyonu kullanır (varsayılan seçeneklerle aritmetik Aşama 7/8 ile aynı).
+   * surfaceClosure: havuz iki aşamalı izlenir (araç tamponu a → uydu payı r → Dünya); a yalnızca yüzey hattı açıkken r'ye akar. Sınır yine toplam (a + r) üzerindedir.
    */
-  const projectThrottle = (ai: number, ri: number, i: number, T: number, margin: number, minFactor: number, assetShare: number): number => {
+  const projectThrottle = (ai: number, i: number, T: number, margin: number, minFactor: number, assetShare: number): number => {
     const a = topo.assets[ai];
-    const frac = relayTotal[ri] > 0 ? assetRate[ai].total / relayTotal[ri] : 0;
-    const used = Math.max(0, assetBuf[ai].usedMb + relayBuf[ri].usedMb * frac);
-    // Beklenen boşaltma hızı: hat hızı × payı × ortalama başarı oranı (ARQ'da kayıp tekrar gönderilir ama kopya RTT boyunca yer tutar; yok sayıldı)
+    const rts = routes[ai];
+    const fr = rts.map((ri) => (routeTotal[ri] > 0 ? assetRate[ai].total / routeTotal[ri] : 0));
+    let used = assetBuf[ai].usedMb;
+    rts.forEach((ri, j) => { used += relayBuf[ri].usedMb * fr[j]; });
+    used = Math.max(0, used);
+    // Beklenen boşaltma hızı (rota başına): hat hızı × payı × ortalama başarı oranı (ARQ'da kayıp tekrar gönderilir)
     const lossFc = cfg.arq ? Math.min(100, Math.max(0, cfg.arq.earthLossPct * (1 + lossBias / 100))) : 0;
-    const drain = ((cfg.relayDownlinkKbps[a.relay] ?? 0) / 1000) * frac * (cfg.arq ? 1 - lossFc / 100 : 1);
+    const dr = rts.map((ri, j) => ((cfg.relayDownlinkKbps[topo.relays[ri]] ?? 0) / 1000) * fr[j] * (cfg.arq ? 1 - lossFc / 100 : 1));
     // Üst sınır uydu tamponunun payıdır (araç tamponu değil): uydu tamponu dolunca telemetri paketi daha düşük sınıfı atarak girer
     // (öncelikli kural), yani doygun uydu tamponu kayıp demektir. Araç tamponu yalnızca geçici (yüzey hattı kapalıyken) biriktirir.
-    const limit = margin * (relayBuf[ri].capMb * frac + assetShare * assetBuf[ai].capMb);
-    const fl = flips[ri];
-    while (flipPtr[ri] < fl.length && fl[flipPtr[ri]] <= i) flipPtr[ri]++;
-    const peak = (f: number) => {
+    let relayCap = 0;
+    rts.forEach((ri, j) => { relayCap += relayBuf[ri].capMb * fr[j]; });
+    const limit = margin * (relayCap + assetShare * assetBuf[ai].capMb);
+    const fl = aFlips[ai];
+    while (aPtr[ai] < fl.length && fl[aPtr[ai]] <= i) aPtr[ai]++;
+    const single = rts.length === 1, up0 = projUp[rts[0]], d0 = dr[0];
+    const drainAt = (t: number) => { let d = 0; for (let j = 0; j < rts.length; j++) if (projUp[rts[j]][t]) d += dr[j]; return d; };
+    const sigma = surfClose ? ((cfg.surfaceLinkKbps[a.body] ?? 0) / 1000) * (cfg.arq ? 1 - cfg.arq.surfaceLossPct / 100 : 1) : 0;
+    const asset0 = assetBuf[ai].usedMb, relay0 = Math.max(0, used - asset0);
+    // Tek havuz (varsayılan; Aşama 7-8 aritmetiği): havuz hattı açıkken boşalır, kapalıyken boşalmaz.
+    const peakSingle = (f: number) => {
       const g = assetRate[ai].top + assetRate[ai].rest * f;
-      let t = i, k = flipPtr[ri], b = used, pk = used;
+      let t = i, k = aPtr[ai], b = used, pk = used;
       while (t < T) {
         const nx = k < fl.length && fl[k] < T ? fl[k] : T;
         const len = (nx - t) * dt;
-        b = fUp[ri][t] ? Math.max(0, b + (g - drain) * len) : b + g * len;
+        b = up0[t] ? Math.max(0, b + (g - d0) * len) : b + g * len;
         if (b > pk) pk = b;
         if (nx === fl[k]) k++;
         t = nx;
       }
       return pk;
     };
+    const peakMulti = (f: number) => {
+      const g = assetRate[ai].top + assetRate[ai].rest * f;
+      let t = i, k = aPtr[ai], b = used, pk = used;
+      while (t < T) {
+        const nx = k < fl.length && fl[k] < T ? fl[k] : T;
+        const len = (nx - t) * dt;
+        const dn = drainAt(t);
+        b = dn > 0 ? Math.max(0, b + (g - dn) * len) : b + g * len;
+        if (b > pk) pk = b;
+        if (nx === fl[k]) k++;
+        t = nx;
+      }
+      return pk;
+    };
+    const peakPool = single ? peakSingle : peakMulti;
+    // İki aşamalı (surfaceClosure): aa = araç tamponu, rr = uydu payı. Aralık içinde akışlar sabit; aa ya da rr boşalınca rejim değişir.
+    const peakTwo = (f: number) => {
+      const g = assetRate[ai].top + assetRate[ai].rest * f;
+      let t = i, k = aPtr[ai], pk = used, aa = asset0, rr = relay0;
+      while (t < T) {
+        const nx = k < fl.length && fl[k] < T ? fl[k] : T;
+        let left = (nx - t) * dt;
+        const sg = fSurf[ai][t] ? sigma : 0, dn = drainAt(t);
+        while (left > 1e-9) {
+          const flowIn = sg > 0 ? (aa > 1e-12 ? sg : Math.min(g, sg)) : 0;
+          const da = g - flowIn;
+          const dd = rr > 1e-12 ? dn : Math.min(dn, flowIn);
+          const dR = flowIn - dd;
+          let step = left;
+          if (aa > 1e-12 && da < 0) step = Math.min(step, aa / -da);
+          if (rr > 1e-12 && dR < 0) step = Math.min(step, rr / -dR);
+          step = Math.max(step, 1e-9);
+          aa = Math.max(0, aa + da * step); rr = Math.max(0, rr + dR * step);
+          left -= step;
+          if (aa + rr > pk) pk = aa + rr;
+        }
+        if (nx === fl[k]) k++;
+        t = nx;
+      }
+      return pk;
+    };
+    const peak = surfClose ? peakTwo : peakPool;
     if (peak(1) <= limit) return 1;
     if (peak(minFactor) > limit) return minFactor;
     let lo = minFactor, hi = 1;
@@ -549,14 +706,19 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
         const ri = relayIndex.get(a.relay)!;
         const T = horizon[ri][i];
         if (T >= 0 && assetRate[ai].rest > 0 && (i % refreshSteps === 0 || !(i - 1 >= 0 && horizon[ri][i - 1] >= 0))) {
-          throttle = covThrottle[ai] = projectThrottle(ai, ri, i, T, cv.margin, cv.minFactor, cv.assetBufferShare ?? 0);
+          throttle = covThrottle[ai] = projectThrottle(ai, i, T, cv.margin, cv.minFactor, cv.assetBufferShare ?? 0);
         } else if (T < 0) { throttle = 1; covThrottle[ai] = 1; }
       }
       if (rl) {
         throttle = covThrottle[ai];
         if (assetRate[ai].rest > 0 && i % rlRefresh === 0) {
-          const ri = relayIndex.get(a.relay)!;
-          throttle = covThrottle[ai] = projectThrottle(ai, ri, i, Math.min(samples.length, i + rlSteps), rl.margin, rl.minFactor, rl.assetBufferShare ?? 0);
+          throttle = covThrottle[ai] = projectThrottle(ai, i, Math.min(samples.length, i + rlSteps), rl.margin, rl.minFactor, rl.assetBufferShare ?? 0);
+        }
+      }
+      if (ad) {
+        throttle = covThrottle[ai];
+        if (assetRate[ai].rest > 0 && i % adRefresh === 0) {
+          throttle = covThrottle[ai] = projectThrottle(ai, i, Math.min(samples.length, i + adaptiveSteps(ai, i)), ad.margin, ad.minFactor, ad.assetBufferShare ?? 0);
         }
       }
       if (st) {
@@ -592,7 +754,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     topo.assets.forEach((a, ai) => {
       if (!s.surfaceUp[ai]) return;
       const src = assetBuf[ai];
-      const dst = relayBuf[relayIndex.get(a.relay)!];
+      const dst = relayBuf[s.assetRelay ? s.assetRelay[ai] : relayIndex.get(a.relay)!];
       let budget = ((cfg.surfaceLinkKbps[a.body] ?? 0) / 1000) * dt;
       while (budget > 1e-12) {
         const k = pick(src);
@@ -666,12 +828,21 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   for (const list of inflight) for (const h of list) if (!h.ok) remaining[h.k]++; // reddedilmiş, henüz yeniden kuyruğa alınmamış
   for (const list of surfPend) for (const h of list) remaining[h.k]++; // yüzey hattı: yeniden deneme beklemede
 
+  // Zamanla azalan değer: Σ paket boyutu × 2^(−yaş / yarı ömür) = Σ boyut × exp(−yaş × ln2 / yarı ömür) (döngü + exp, reduce + pow'dan ~7 kat hızlı)
+  const decayCoef = (cfg.valueHalfLivesSec ?? []).map((h) => Math.LN2 / h);
+  const decaySum = (ages: number[], packetMb: number): number[] => {
+    const acc = new Array<number>(decayCoef.length).fill(0);
+    if (!decayCoef.length) return acc;
+    for (let i = 0; i < ages.length; i++) for (let j = 0; j < decayCoef.length; j++) acc[j] += Math.exp(-ages[i] * decayCoef[j]);
+    return acc.map((x) => x * packetMb);
+  };
   const mk = (k: number): ClassStats => {
-    const l = [...lat[k]].sort((x, y) => x - y);
+    const l = Float64Array.from(lat[k]).sort(); // sayısal artan (Float64Array.sort karşılaştırıcısız ve çok daha hızlı; sonuç aynı)
     return {
       abandoned: aband[k], abandonedMb: abandMb[k], txLost: txLost[k], retransmissions: retx[k], attempts: att[k],
       generated: gen[k], delivered: deliv[k], dropped: drop[k], stored: stored[k], delayed: delayed[k], remaining: remaining[k],
       suppressed: sup[k], suppressedMb: supMb[k],
+      decayMb: decaySum(lat[k], classes[k].packetMb),
       generatedMb: genMb[k], deliveredMb: delivMb[k], droppedMb: dropMb[k],
       latencyMeanSec: l.length ? l.reduce((x, y) => x + y, 0) / l.length : 0,
       latencyP95Sec: l.length ? l[Math.min(l.length - 1, Math.floor(0.95 * l.length))] : 0,
@@ -683,12 +854,13 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
 
   const all = Object.values(perClass);
   const sum = (f: (c: ClassStats) => number) => all.reduce((x, c) => x + f(c), 0);
-  const allLat = lat.flat().sort((x, y) => x - y);
+  const allLat = (() => { const a = new Float64Array(lat.reduce((n, x) => n + x.length, 0)); let o = 0; for (const x of lat) for (let i = 0; i < x.length; i++) a[o++] = x[i]; return a.sort(); })();
   const total: ClassStats = {
     abandoned: sum((c) => c.abandoned), abandonedMb: sum((c) => c.abandonedMb), txLost: sum((c) => c.txLost), retransmissions: sum((c) => c.retransmissions), attempts: sum((c) => c.attempts),
     generated: sum((c) => c.generated), delivered: sum((c) => c.delivered), dropped: sum((c) => c.dropped),
     stored: sum((c) => c.stored), delayed: sum((c) => c.delayed), remaining: sum((c) => c.remaining),
     suppressed: sum((c) => c.suppressed), suppressedMb: sum((c) => c.suppressedMb),
+    decayMb: (cfg.valueHalfLivesSec ?? []).map((_, j) => sum((c) => c.decayMb[j])),
     generatedMb: sum((c) => c.generatedMb), deliveredMb: sum((c) => c.deliveredMb), droppedMb: sum((c) => c.droppedMb),
     latencyMeanSec: allLat.length ? allLat.reduce((x, y) => x + y, 0) / allLat.length : 0,
     latencyP95Sec: allLat.length ? allLat[Math.min(allLat.length - 1, Math.floor(0.95 * allLat.length))] : 0,

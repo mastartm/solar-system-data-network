@@ -2,7 +2,7 @@
 
 Gerçek gezegen konumlarını gösteren etkileşimli bir güneş sistemi haritası. İlerleyen aşamalarda Ay ve Mars yüzeyindeki araçların aktarma uyduları üzerinden Dünya'ya veri gönderdiği bir haberleşme ağı simülasyonu eklenecek.
 
-> **Durum: Aşama 8 (kayan ufuklu akış kontrolü, tahmin hatası, hata modeli duyarlılığı; [ayrıntı](#aşama-8-kayan-ufuklu-akış-kontrolü-tahmin-hatası-hata-modeli-duyarlılığı)); önceki: Aşama 7 (kapsama bilen strateji, kümelenmiş hata modeli, Ay hattı senaryosu arayüzde, dar ekran düzeni); önceki: Aşama 6 (3B görünüm ve harita arayüzü: sol "Cisimler" paneli, dönen küre kartı, etiket yerleştirici, katman aç/kapa); ondan önce Aşama 5 (yer istasyonu görüşü, hat hatası ve yeniden iletim, Ay Aracı A düzeltmesi; kendinden önce Aşama 4: Mars kavuşumu stratejisi, duyarlılık analizi, gerçek veriyle doğrulama).** Ağdaki araç/uydu/veri hızı/paket/tampon/strateji değerleri **varsayımsaldır**; çizelgeleyici sonuçları **gerçek bir görev sonucu değildir**. Gerçek olan yalnızca Horizons konumları, bunlardan çıkan ışık gecikmeleri ve bağlantı geometrisidir. Aşama 3 ve 4 artık depodaki **gerçek Horizons verisiyle** (2020–2040) tarayıcıda denendi; sonuçlar ve sentetik veriyle farklar [Aşama 4](#aşama-4-kavuşum-stratejisi-duyarlılık-analizi-gerçek-veri-doğrulaması) bölümünde.
+> **Durum: Aşama 9 (model iyimserliklerini giderme, değer ağırlıklı fayda ve uyarlamalı strateji, kapsamayı artıran fiziksel model [Ay yörüngesi, ikinci uydu, Mars gölgesi], genelleme; [ayrıntı](#aşama-9-model-iyimserlikleri-değer-ağırlıklı-fayda-kapsamayı-artıran-fiziksel-model-genelleme)); önceki: Aşama 8 (kayan ufuklu akış kontrolü, tahmin hatası, hata modeli duyarlılığı, Web Worker havuzu; [ayrıntı](#aşama-8-kayan-ufuklu-akış-kontrolü-tahmin-hatası-hata-modeli-duyarlılığı)); önceki: Aşama 7 (kapsama bilen strateji, kümelenmiş hata modeli, Ay hattı senaryosu arayüzde, dar ekran düzeni); önceki: Aşama 6 (3B görünüm ve harita arayüzü: sol "Cisimler" paneli, dönen küre kartı, etiket yerleştirici, katman aç/kapa); ondan önce Aşama 5 (yer istasyonu görüşü, hat hatası ve yeniden iletim, Ay Aracı A düzeltmesi; kendinden önce Aşama 4: Mars kavuşumu stratejisi, duyarlılık analizi, gerçek veriyle doğrulama).** Ağdaki araç/uydu/veri hızı/paket/tampon/strateji değerleri **varsayımsaldır**; çizelgeleyici sonuçları **gerçek bir görev sonucu değildir**. Gerçek olan yalnızca Horizons konumları, bunlardan çıkan ışık gecikmeleri ve bağlantı geometrisidir (Aşama 9'da eklenen yörünge elemanları, ikinci uydu, gölge modeli ve değer ağırlıkları da **varsayımdır**). Aşama 3 ve 4 artık depodaki **gerçek Horizons verisiyle** (2020–2040) tarayıcıda denendi; sonuçlar ve sentetik veriyle farklar [Aşama 4](#aşama-4-kavuşum-stratejisi-duyarlılık-analizi-gerçek-veri-doğrulaması) bölümünde.
 
 **Canlı site:** GitHub Pages açıldıktan sonra `https://mastartm.github.io/solar-system-data-network/` (Settings → Pages → Source: *GitHub Actions*).
 
@@ -34,6 +34,7 @@ Diğer komutlar: `npm run build` (yayın derlemesi), `npm test` (birim testler),
 - **3B** düğmesi eğik görünüme geçer: sürükleyerek döndürün (Shift+sürükleme kaydırır). 3B'de gezegenlerin ekliptik düzlemden sapması 3 kat abartılır (görünsün diye).
 - **Sol panel (Aşama 6):** "Cisimler" listesi ve "Katmanlar"; ayrıntı için [Aşama 6](#aşama-6-3b-görünüm-ve-harita-arayüzü).
 - **Dar ekran (≤ 700 px, Aşama 7):** alt kontroller tek satırdır (oynat, tarih çubuğu, tarih); **⋯** düğmesi hız, Bugün, 2B/3B, zoom, tutulma ve Mars kavuşumu düğmelerini açar. Sağdaki bilgi/ağ paneli **"Bilgi ve ağ durumu ▸"** çubuğuyla katlanır (başlangıçta kapalı); sol "Cisimler" paneli eskisi gibi katlanır. Ayrıntı: [Aşama 7](#4-dar-ekran-düzeni).
+- **Çizelgeleyici sekmesi (Aşama 9):** Ayarlarda *Havuz projeksiyonu* (yüzey hattı kapalılığı, ARQ kopyası RTT payı), Ay'da *Ay yörüngesi / İkinci Ay uydusu / kutup aracı*, Mars'ta *Mars uydusu gölgesi* seçicileri ve "Mars aktarma hattı (tarih aralığı, kavuşumsuz)" hattı; yeni bölümler (i) değer ağırlıklı fayda, (j) iyimser varsayımların etkisi, (k) yörünge / ikinci uydu / gölge, (l) genelleme ((j)–(l) düğmeyle çalışır). Ayrıntı: [Aşama 9](#aşama-9-model-iyimserlikleri-değer-ağırlıklı-fayda-kapsamayı-artıran-fiziksel-model-genelleme).
 - **Tutulmalar:** kaydırıcının üstündeki noktalar tutulmaları gösterir (sarı: güneş, mavi: Ay; dolu: tam/halkalı, boş: kısmi/yarıgölge). Noktaya veya "Tutulmalar" listesine tıklayınca o tarihe gider; ◀ ▶ düğmeleri önceki/sonraki tutulmaya atlar.
 
 ## Aşama 2: veri ağı (varsayımsal)
@@ -549,12 +550,12 @@ Denendi: Ay 1/2/3 ve Mars 1/2/3 istasyon (kayan ufuklu strateji, kayan ufuk 30 g
 1. **Toplam kayıp/teslim iyileşmedi** (yukarıda): Aşama 7'nin bulgusu üçüncü kez doğrulandı; "düşen" tek başına yanıltıcıdır.
 2. **Uzun ufuk kötüleştirir**: ufuk 30–45 gün toplam kaybı 3–6 puan artırır (tutucu projeksiyon). Mars kavuşumunu görmek için uzun ufuk gerekir ama bedeli var; varsayılan 3 gün Mars 3 istasyonda Aşama 4'ten daha çok düşürür.
 3. **Kapsama bilen strateji kötümser takvim hatasına en duyarlı politikadır** (Mars 3 ist. toplam kayıp 34,3 → 45,7 @ −120 dk); iyimser hata ucuz çıktı, nedeni tam anlaşılmadı.
-4. **Havuz yaklaşımı yüzey hattını modellemez:** boşalma yalnızca Dünya hattı açıklığına bağlı; araç yüzey hattı kapalıyken araç tamponundaki veri boşalmaz. Ay'da yüzey görüşü %34–38 olduğundan projeksiyon iyimser olabilir (varsayım).
-5. **ARQ kopyalarının RTT boyunca tampon tutması ve yüzeydeki bekleyen kopyalar** projeksiyonda yok sayılır (iyimser).
+4. **Havuz yaklaşımı yüzey hattını modellemez:** boşalma yalnızca Dünya hattı açıklığına bağlı; araç yüzey hattı kapalıyken araç tamponundaki veri boşalmaz. Ay'da yüzey görüşü %34–38 olduğundan projeksiyon iyimser olabilir (varsayım). **→ Aşama 9'da seçenek olarak eklendi; etki yok** (bölüm 1).
+5. **ARQ kopyalarının RTT boyunca tampon tutması ve yüzeydeki bekleyen kopyalar** projeksiyonda yok sayılır (iyimser). **→ Aşama 9'da seçenek olarak eklendi; etki yok** (bölüm 1).
 6. **Tarama 600 sn adımlı**; ±N dk kayması adıma yuvarlanır, 10 dk altı sapma ayırt edilemez. Kümelenmiş zincir 600 sn adımlıdır (meanBadSec ≥ adım seçildi); 10 dk'lık kötü süre adım sınırındadır.
 7. **Kötü durum kaybı ortalama kayıptan küçükse** (örn. Dünya kaybı kaydırıcıyla %40 iken kötü durum %20) ortalama kırpılır; taramada ortalama sabit kalmaz.
-8. **Sonuçlar tek senaryo aralığıdır** (Ay 2028-03-03/60 g, Mars 2028 penceresi); Ay 1 istasyonda başka aralık denenmedi (Aşama 7'de aralığa duyarlılık görülmüştü).
-9. **(g)/(h) isteğe bağlı** (düğmeyle): ilk açılış süresi artmasın diye. Web Worker ile (bölüm 4) artık ucuz (Mars ≈ 3 sn / 1 sn); otomatik çalıştırmak bir tasarım kararıdır, yapılmadı.
+8. **Sonuçlar tek senaryo aralığıdır** (Ay 2028-03-03/60 g, Mars 2028 penceresi); Ay 1 istasyonda başka aralık denenmedi (Aşama 7'de aralığa duyarlılık görülmüştü). **→ Aşama 9'da kapatıldı** (Ay 5 aralık, Mars 9 pencere; bölüm 4).
+9. **(g)/(h) isteğe bağlı** (düğmeyle): ilk açılış süresi artmasın diye. Web Worker ile (bölüm 4) artık ucuz (Mars ≈ 3 sn / 1 sn); otomatik çalıştırmak bir tasarım kararıdır, yapılmadı. **→ Aşama 9'da ölçülüp değerlendirildi:** varsayılan kapalı, isteğe bağlı kutu (bölüm 4b).
 10. **Hesap süresi hedefi ilk PR'da tutmadı** (ilk açılış ≈ 15 sn, en uzun görev ≈ 0,3 sn); Web Worker onayıyla bölüm 4'te giderildi (≈ 6 sn, en uzun görev ≈ 0,13 sn).
 
 ### Kararlar
@@ -562,6 +563,271 @@ Denendi: Ay 1/2/3 ve Mars 1/2/3 istasyon (kayan ufuklu strateji, kayan ufuk 30 g
 - Yeni varsayımsal değerler yalnızca `hypothetical.ts`: `rollingStrategy`, `forecastScan`, `errorScan`, `arq.surfaceRetrySec` (varsayılan 0).
 - `scripts/asama8-sonuclar.ts` yalnızca `public/data/` okur (Horizons'a erişmez), `vite-node` ile çalışır.
 - Tahmin hatası yalnızca stratejilerin bildiği takvime uygulanır; gerçek bağlantılar ve kayıplar değişmez.
+
+## Aşama 9: model iyimserlikleri, değer ağırlıklı fayda, kapsamayı artıran fiziksel model, genelleme
+
+> Her şey **varsayımsaldır** (`src/config/hypothetical.ts`; ekranda "Varsayımsal değerler" yazar); sonuçlar **gerçek bir görev sonucu değildir.** Gerçek olan: Horizons konumları, ışık gecikmeleri, geometri. **Varsayım olanlar:** yörünge elemanları (eliptik Ay yörüngesi, ikinci uydu), ikinci uydunun kapasitesi, kutup aracı, Mars gölge modeli, değer ağırlıkları ve yarı ömürler. Birim testler **sentetiktir** (testte yazılı). Sayılar depodaki **gerçek Horizons dosyalarıyla** (`public/data/`, dokunulmadı; Horizons'a erişilmedi; `?sentetik=1` kullanılmadı) `npx vite-node scripts/asama9-sonuclar.ts [projeksiyon|projeksiyon-zor|deger|deger-esik|adaptif|yorunge|golge|genelleme|tahmin-genelleme]` betiğiyle (ortak yardımcılar `scripts/asama9-lib.ts`) ve tarayıcıda (Playwright/Chromium, `vite preview`) alındı; ikisi aynı sayıları verir.
+>
+> **Aşama 3–8 sayıları değişmedi:** `scripts/asama8-sonuclar.ts` (`ay`, `mars`, `ufuk`, `tum-pencereler`, `tahmin`, `hata`) ve `scripts/asama7-sonuclar.ts` (`kapsama`, `tum-pencereler`, `ufuk`, `havuz`, `hata`, `hat-ayrimi`, `ay`) çıktıları, bu dalda ve `main`'de (aynı makinede) **bayt bayt aynı** (karşılaştırıldı). Yeni her şey **seçenektir** (varsayılan kapalı / varsayılan yörünge); mevcut çizelgeleyiciler (FIFO, öncelikli, strateji, kapsama bilen, kayan ufuklu) ve PR #5 kaydırma/zoom, 3B'de Güneş'e göre referans, Aşama 6 sol paneli, küre kartı, etiket yerleştirici, katmanlar, Aşama 7 dar ekran düzeni, Aşama 8 Worker havuzu ve iptal belirteci (iptal edilen işlerin sözleri sonuçlanmaz, önbelleğe bekleyen söz konmaz) korundu.
+
+### Ne eklendi (özet)
+1. **İyimser projeksiyon varsayımlarını kaldıran iki seçenek** (`SchedConfig.projection`, `HYPOTHETICAL.projection`, varsayılan ikisi kapalı): yüzey hattı kapalılığı, ARQ kopyalarının RTT boyunca tampon payı. **Etkisi ayrı raporlandı: etki yok** (bölüm 1).
+2. **Değer ağırlıklı fayda ölçütü** (teslim edilen değer / talep edilen değer; telemetri ve bilim verisi için varsayımsal birim değer, bilim verisi için isteğe bağlı zamanla azalan değer) ve yeni **`'adaptive'` (uyarlamalı ufuk) politikası** (bölüm 2).
+3. **Ay aktarma uydusu için yörünge seçimi** (ekvatoral dairesel [mevcut] / eğimli-eliptik kutupsal), **ikinci Ay aktarma uydusu** (araçlar en iyi görüneni kullanır ya da hat sırasıyla), isteğe bağlı **kutup aracı**; **Mars aktarma uydusu gölgesi** (basit kesinti, güç modeli yok) (bölüm 3).
+4. **Genelleme** (Ay 5 tarih aralığı, Mars 9 pencere, tahmin hatası dahil), (g)/(h) taramalarını **isteğe bağlı otomatik** çalıştırma, ana iş parçacığı görevlerini bölme (bölüm 4).
+
+**Arayüz (Çizelgeleyici sekmesi):** *Hat* seçicisine "Mars aktarma hattı (tarih aralığı; kavuşumsuz önerilir)" eklendi (varsayılan 2029-06-01, 60 gün: hiçbir kavuşumla kesişmez; kavuşumla kesişen bir aralıkta Aşama 4/7 stratejileri de gösterilir). Ayarlarda *Havuz projeksiyonu* (iki işaret kutusu), Ay'da *Ay yörüngesi / İkinci Ay uydusu / kutup aracı ekle*, Mars'ta *Mars uydusu gölgesi* seçicileri; seçilince ana senaryo, istasyon karşılaştırması, taramalar buna göre yeniden hesaplanır. Yeni bölümler: **(i) Değer ağırlıklı fayda**, **(j) İyimser varsayımların etkisi**, **(k) Ay yörüngesi ve ikinci uydu / Mars uydusu gölgesi**, **(l) Genelleme** ((j), (k), (l) düğmeyle çalışır; hepsi Worker havuzunda). Karşılaştırma tablosuna "Değer %" sütunu, duyarlılık taramalarına "Değer" ölçütü, (g) bölümüne uyarlamalı strateji eklendi.
+
+![Ayarlar (Mars)](docs/asama9-ayarlar.png)
+![Ay ayarları](docs/asama9-ay-ayarlar.png)
+
+### 1. İyimser varsayımların kaldırılması (etkisi ayrı rapor)
+
+Aşama 8'in "Beklenmedik" 4–5. maddeleri: kapsama bilen / kayan ufuklu stratejinin havuz projeksiyonu (a) araç tamponundaki verinin yüzey hattı (araç → uydu) kapalıyken de boşaldığını, (b) ARQ kopyalarının uydu tamponunda yer tutmadığını varsayıyordu. İkisi de artık **seçenek** (`'coverage'`, `'rolling'` ve yeni `'adaptive'` kullanır; Aşama 4'ün `'strategy'`si boş tampon bütçesiyle çalışır, etkilenmez):
+
+- **Yüzey hattı kapalılığı** (`surfaceClosure`): havuz iki aşamalı izlenir: araç tamponu *a* → uydu payı *r* → Dünya. *a*, yüzey hattı (stratejinin bildiği takvim; tahmin hatası aynı kuralla uygulanır) açıkken `yüzey hızı × (1 − yüzey kaybı)` ile *r*'ye akar (hat boşsa üretim kadar), *r* yalnızca Dünya hattı açıkken boşalır; *a* ya da *r* boşalınca akış rejimi değişir (alt aralıklara bölünür, analitik). Üst sınır *a + r* toplamı üzerindedir (araç ve uydu tamponları ayrı ayrı sınırlanmaz: **varsayım**).
+- **ARQ kopyası RTT tampon payı** (`arqHold`): simülasyonda kopya, gönderimden `1 + ⌈RTT/adım⌉` adım sonra (adım başında) bırakılır; sürekli zamanlı projeksiyonda bu, "hat açık" bayrağının `⌈RTT/adım⌉` adım ötelenmesine denk (başlangıçtan önce gönderim olmadığı için ilk adımlarda boşalma yok). Mars'ta ≈ 9 adım (45 dk), Ay'da RTT 3 sn < adım olduğu için 1 adım (adım ayrıklaştırmasının sonucu).
+- Arayüzde iki işaret kutusu ve (j) bölümü; betik: `projeksiyon`, `projeksiyon-zor`.
+
+**Sonuç (300 sn, hatalı + yeniden iletim [periyodik]; hücre: düşen + hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen %]; "yüzey" = yüzey hattı kapalılığı, "ARQ" = RTT tampon payı; öncelikli yalnızca referans):**
+
+| Hat / politika | İst. | Varsayılan (Aşama 8) | Yüzey | ARQ | İkisi birden | Öncelikli |
+|---|---|---|---|---|---|---|
+| Ay 2028-03-03, 60 g / kayan ufuklu | 1 | 7,4 / 24,1 / 73,2 [16,7] | 7,4 / 24,1 / 73,2 [16,7] | 7,4 / 24,1 / 73,2 [16,7] | 7,4 / 24,1 / 73,2 [16,7] | 23,9 / 23,9 / 73,2 |
+| | 2 | 0,0 / 0,0 / 99,9 | aynı | aynı | aynı | 0,0 / 0,0 / 99,9 |
+| | 3 | 0,0 / 0,0 / 99,9 | aynı | aynı | aynı | 0,0 / 0,0 / 99,9 |
+| Ay / uyarlamalı | 1 | 7,5 / 24,1 / 73,2 [16,7] | 7,5 / 24,1 / 73,2 [16,7] | 7,5 / 24,1 / 73,2 [16,7] | 7,5 / 24,1 / 73,2 [16,7] | 23,9 / 23,9 / 73,2 |
+| Mars 2028-03-08 / kapsama bilen | 1 | 2,8 / 48,9 / 41,1 [46,1] | aynı | aynı | aynı | 47,1 / 47,1 / 41,1 |
+| | 2 | 0,8 / 34,6 / 65,0 [33,7] | aynı | aynı | aynı | 32,6 / 32,6 / 67,0 |
+| | 3 | 0,7 / 34,3 / 65,5 [33,6] | aynı | aynı | aynı | 32,2 / 32,2 / 67,6 |
+| Mars / kayan ufuklu | 1 | 7,1 / 48,9 / 41,1 [41,8] | 7,1 / 48,9 / 41,1 [41,8] | 7,2 / 48,9 / 41,1 [41,8] | 7,2 / 48,9 / 41,1 [41,8] | 47,1 / 47,1 / 41,1 |
+| | 2 | 4,7 / 33,6 / 66,1 [28,8] | aynı | 4,7 / 33,5 / 66,1 [28,8] | 4,7 / 33,5 / 66,1 [28,8] | 32,6 / 32,6 / 67,0 |
+| | 3 | 4,6 / 33,2 / 66,5 [28,6] | aynı | 4,6 / 33,3 / 66,5 [28,6] | 4,6 / 33,3 / 66,5 [28,6] | 32,2 / 32,2 / 67,6 |
+| Mars / uyarlamalı | 1 | 3,5 / 48,9 / 41,1 [45,5] | aynı | 3,4 / 48,9 / 41,1 [45,5] | 3,4 / 48,9 / 41,1 [45,5] | 47,1 / 47,1 / 41,1 |
+| | 2 | 0,9 / 33,6 / 66,0 [32,7] | aynı | aynı | aynı | 32,6 / 32,6 / 67,0 |
+| | 3 | 0,8 / 33,3 / 66,5 [32,5] | aynı | 0,7 / 33,3 / 66,5 [32,5] | 0,7 / 33,3 / 66,5 [32,5] | 32,2 / 32,2 / 67,6 |
+
+Varsayılana göre en büyük mutlak fark (tüm hücreler; düşen / toplam kayıp / teslim / üretilmeyen, puan): yüzey **0,004 / 0,007 / 0,021 / 0,010**; ARQ **0,043 / 0,007 / 0,011 / 0,048**. **Etki yok** (0,1 puanın altında; Aşama 7–8 sonuçları bu iki iyimser varsayımdan etkilenmiyor).
+
+**Zorlanmış ayarlarda da** (`projeksiyon-zor`) etki ≤ 0,1 puan: Ay yüzey hattı 100/50/30 kbit/sn (üretimin ~2–8 katı; Ay 1 istasyon, kayan ufuklu: üretilmeyen yalnız 30 kbit/sn'de 19,1 → 19,2); Mars uydu tamponu 8/16 Gbit ve hat hızı 250–600 kbit/sn (3 istasyon, kapsama bilen ve kayan ufuklu: toplam kayıp en çok 41,0 → 41,1).
+
+**Neden etkisiz:** (1) projeksiyonun belirleyici ölçütü *tepe doluluk*tur ve bu, kapalı dönemin **sonunda** (veri birikmişken) oluşur; yüzey hattı kapalılığının ve ARQ kopyalarının yarattığı fark o ana kadar kapanır. (2) Yüzey hattı (Ay 1000, Mars 600 kbit/sn) araç üretiminden (Ay'da 6–13, Mars'ta 25–100 kbit/sn) çok hızlıdır ve yörünge döneminde (≈ 6–8 sa) sık açılır: araç tamponu her açılışta birkaç saniyede boşalır (Ay 1 istasyon kayan ufuklu çalıştırmasında 5760 projeksiyonun yalnızca 20'sinde tepe doluluk iki modelde farklı çıktı; sonuçlar aynı kaldı). (3) Mars'ta ARQ kopyası ≈ hat hızı × RTT ≈ 0,15–0,6 Gbit, 64 Gbit'lik tamponun < %1'i ve kapalı dönem (günler) RTT'den (40 dk) çok uzun. Seçeneklerin **çalıştığı** sentetik testle doğrulanır (yüzey her 100 adımda 10 adım açıkken kapalılığı hesaba katan projeksiyon üretilmeyeni 707 → 1307 paketa çıkarır, düşeni 1490 → 929'a indirir; `projection.test.ts`): gerçek (varsayımsal) ağda bu koşullar oluşmuyor.
+
+![(j) İyimser varsayımların etkisi (Mars, 3 istasyon)](docs/asama9-projeksiyon-etkisi-mars.png)
+
+### 2. Değer ağırlıklı fayda ve uyarlamalı strateji
+
+**Ölçüt.** `hypothetical.ts`: telemetri `valuePerMb: 4`, bilim verisi `1` (uydurma). **Değer % = teslim edilen değer / talep edilen değer**; talep edilen değer = (üretilen + üretilmeyen Mb) × birim değer (yaşı 0). İsteğe bağlı **zamanla azalan değer** (yalnızca bilim verisi): teslim edilen paketin değeri `2^(−yaş / yarı ömür)` ile çarpılır (yaş = teslim anı − üretim anı; yarı ömürler 3 / 7 / 14 / 30 / 90 gün, arayüzde seçilir). Mevcut ölçütler (düşen %, düşen + üretilmeyen %, teslim %) **aynen** kalır. Her çalıştırma ham toplamları (`Metrics.valueParts`: sınıf başına talep Mb, teslim Mb, her yarı ömür için azalan hacim) taşır; böylece ağırlık ve yarı ömür duyarlılığı **ek çizelgeleyici hesabı olmadan** taranır (bölüm (i) ızgarası; `valuePct`). Taramalar (f) azalan toplamı hesaplamaz (yalnızca sabit değer; hız).
+
+**(a) Kısma değerce kazandırıyor mu, hangi koşulda?** Kazanç = politikanın değer % − öncelikli çizelgenin değer %, puan (telemetri 4×; betik `deger-esik`, yarı ömür 1–365 gün tarandı):
+
+| Senaryo | Sabit değer | Zamanla azalan değer: yarı ömür 3 / 7 / 14 / 30 / 90 gün | Kırılma yarı ömrü (kazanç ≥ 0 olduğu en uzun yarı ömür) |
+|---|---|---|---|
+| Ay 2028, 1 ist. — kayan ufuklu | 0,00 | +1,00 / +0,66 / +0,39 / +0,20 / +0,07 | yok (hep ≥ 0, uzun yarı ömürde → 0) |
+| Ay 1 ist. — uyarlamalı | +0,01 | +0,80 / +0,53 / +0,31 / +0,16 / +0,06 | yok |
+| Mars 2028, 1 ist. — kapsama bilen | −0,00 | +0,49 / +1,13 / +1,20 / +0,88 / +0,39 | yok (en büyük +1,22 @ 10 g) |
+| Mars 1 ist. — kayan ufuklu | −0,00 | +0,45 / +0,97 / +0,98 / +0,69 / +0,30 | yok (+1,02 @ 10 g) |
+| Mars 1 ist. — uyarlamalı | −0,00 | +0,46 / +1,05 / +1,09 / +0,78 / +0,34 | yok (+1,13 @ 10 g) |
+| Mars 2 ist. — kapsama bilen | −1,36 | +0,99 / +0,74 / +0,33 / −0,27 / −0,91 | **21 gün** (en büyük +1,10 @ 1 g) |
+| Mars 2 ist. — kayan ufuklu | −0,65 | +1,53 / +1,05 / +0,56 / +0,07 / −0,37 | **34 gün** (+1,67 @ 1 g) |
+| Mars 2 ist. — uyarlamalı | −0,66 | +1,67 / +1,41 / +1,00 / +0,41 / −0,22 | **57 gün** (+1,75 @ 2 g) |
+| Mars 3 ist. — kapsama bilen | −1,43 | +0,17 / +0,20 / −0,03 / −0,50 / −1,04 | 13 gün (+0,21 @ 1 g) |
+| Mars 3 ist. — kayan ufuklu | −0,71 | +0,69 / +0,48 / +0,19 / −0,16 / −0,49 | 21 gün (+0,80 @ 1 g) |
+| Mars 3 ist. — uyarlamalı | −0,72 | +0,85 / +0,88 / +0,65 / +0,19 / −0,34 | **42 gün** (+0,89 @ 5 g) |
+
+**Cevap:** *Evet, ama dar bir koşulda ve küçük:*
+- **Sabit değerde (zamanla azalma yok) kısma hiçbir telemetri ağırlığında (1–32×) kazandırmaz:** 1 istasyonda hat doygun (hat kapasitesi sınırlayıcı), kısma hacmi artırmaz → kazanç 0,00; 2–3 istasyonda taşmayı daha sıkı önlemek için fazla kıstığından −0,1 … −2,1 puan *kaybettirir* (telemetri ağırlığı 32× … 1×) (Aşama 4/7/8 bulgusunun değer ölçütüyle de tekrarı).
+- **Bilim verisinin değeri zamanla azalıyorsa** kazandırır: kısma, kapalı dönemde biriken eski veriyi (hat boşalırken öncelikli çizelge önce eski paketleri gönderir) hiç üretmeyip yeni veriyi öne aldığı için teslim edilen verinin ortalama yaşı düşer. **Hat doygunsa** (Ay ve Mars 1 istasyon) kazanç her yarı ömürde pozitiftir (uzun yarı ömürde → 0), **hat doygun değilse** (Mars 2–3 istasyon) yalnızca yarı ömür **kırılma değerinden kısaysa** (politikaya göre 13–57 gün) kazandırır; uzun yarı ömürde (değer neredeyse hiç azalmıyorken) hacim kaybı baskın çıkar.
+- **Kazanç küçüktür:** telemetri 4×'te en çok +1,1 (Ay), +1,2 (Mars 1 ist.), +1,8 (Mars 2 ist., yarı ömür 1–2 gün) puan (telemetri 1×'te +1,5 / +1,8 / +2,5); telemetri değeri arttıkça (bilim verisinin payı küçülür) azalır: Mars 1 ist. uyarlamalı, 14 gün yarı ömür: +1,58 (telemetri 1×) → +1,09 (4×) → +0,49 (16×) → +0,28 (32×).
+- **Sonuç: sabit değer yapısında strateji toplam değer açısından fayda sağlamaz.** Fayda yalnızca "değer zamanla azalır ve hat doygundur / yarı ömür kısadır" varsayımında vardır; bu bir **varsayımdır** (ağırlıklar ve yarı ömürler uydurma), gerçek bir görev bunu bilmez.
+
+![(i) Değer ağırlıklı fayda (Mars, 1 istasyon)](docs/asama9-deger-mars-1-istasyon.png)
+![(i) Değer ağırlıklı fayda (Ay, 1 istasyon)](docs/asama9-deger-ay-1-istasyon.png)
+
+**(b) `'adaptive'` (uyarlamalı ufuk).** `'rolling'` ile aynı havuz projeksiyonu (aynı fonksiyon), ama ufuk **sabit değil**: her `refreshSec`'te (1800 sn), takvimden (stratejinin bildiği Dünya hattı takvimi; tahmin hatası aynı kuralla) şimdi sürmekte olan ya da `leadDays` (1) içinde başlayan **ilk kapalı hat döneminin** uzunluğu *L* bulunur (dönemin başı geriye doğru, sonu ileri doğru; çok uydulu araçta herhangi bir rotanın açık olması "açık" sayılır); ufuk = *dönemin bitişine kalan süre + `tailFactor` × L*, `[minDays, maxDays]` = [1, 45] gün aralığına kırpılır; yakın kapalı dönem yoksa `minDays`. Telemetri kısılmaz; kısılan veri "üretilmeyen"dir. Böylece **kısa istasyon boşluklarında kısa** (≈ 1–1,5 gün), **kavuşumda uzun** (kavuşum + toparlanma) ufuk kullanılır. Parametreler `HYPOTHETICAL.adaptiveStrategy` (`minDays` 1, `maxDays` 45, `leadDays` 1, `tailFactor` 1, `margin` 0,9, `assetBufferShare` 1, `refreshSec` 1800). Ufuk sabitlenirse (`minSec = maxSec`) kayan ufuklu stratejiyle birebir aynı sonucu verir (testli). `strategy`, `coverage`, `rolling` aynen kaldı.
+
+**Sonuçlar** (2028, 300 sn, hatalı + yeniden iletim [periyodik]; düşen + hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen %]; betik `adaptif`):
+
+| Hat | İst. | Öncelikli | Strateji (A4) | Kapsama bilen | Kayan ufuklu (3 gün) | **Uyarlamalı** |
+|---|---|---|---|---|---|---|
+| Ay | 1 | 23,9 / 23,9 / 73,2 | = öncelikli | = öncelikli | 7,4 / 24,1 / 73,2 [16,7] | **7,5 / 24,1 / 73,2 [16,7]** |
+| Ay | 2, 3 | 0,0 / 0,0 / 99,9 | = | = | 0,0 / 0,0 / 99,9 | 0,0 / 0,0 / 99,9 |
+| Mars | 1 | 47,1 / 47,1 / 41,1 | 13,4 / 47,1 / 41,1 [33,7] | 2,8 / 48,9 / 41,1 [46,1] | 7,1 / 48,9 / 41,1 [41,8] | **3,5 / 48,9 / 41,1 [45,5]** |
+| Mars | 2 | 32,6 / 32,6 / 67,0 | 1,6 / 33,7 / 65,9 [32,0] | 0,8 / 34,6 / 65,0 [33,7] | 4,7 / 33,6 / 66,1 [28,8] | **0,9 / 33,6 / 66,0 [32,7]** |
+| Mars | 3 | 32,2 / 32,2 / 67,6 | 1,3 / 33,3 / 66,5 [32,0] | 0,7 / 34,3 / 65,5 [33,6] | 4,6 / 33,2 / 66,5 [28,6] | **0,8 / 33,3 / 66,5 [32,5]** |
+
+Uyarlamalı strateji "düşen"de kapsama bilen stratejiye (0,7–0,8) ve toplam kayıpta kayan ufuklu/Aşama 4 stratejisine (33,2–33,3) yakındır: **2–3 istasyonda kapsama bilenin toplam kaybından ≈ 1 puan iyi, kayan ufuklunun (3 gün) düşeninden 2–6 kat iyi**. Ama öncelikliye göre **hâlâ toplam kayıp +1,0…1,6 puan, teslim −1,0…−1,6 puan** (2–3 istasyon) — hacim açısından fayda yoktur. Duyarlılık (Mars 1 ve 3 ist., Ay 1 ve 3 ist.): `tailFactor` 0 … 2 ve `leadDays` 0,25 … 3 neredeyse etkisiz (düşen ≤ 0,1 puan oynar); `minDays` 0,5 → 3: Mars 1 ist. düşen 4,0 → 3,3.
+
+![(b) Mars 1 istasyon karşılaştırma](docs/asama9-mars-karsilastirma-1-istasyon.png)
+![(d) Mars istasyon sayısına göre](docs/asama9-mars-istasyon-karsilastirma.png)
+![(b) Ay 1 istasyon karşılaştırma](docs/asama9-ay-karsilastirma-1-istasyon.png)
+
+### 3. Kapsamayı artıran fiziksel model (Ay) ve Mars gölgesi
+
+**Model** (`network.ts`, `coverage.ts`, `timeline.ts`; hepsi `NetOptions` ile seçilir, varsayılan = Aşama 2–8 ağı, testle birebir):
+- **Ay yörüngesi:** `'equatorial'` (mevcut: 3000 km dairesel ekvatoral; Aşama 2–8 formülü aynen) ya da `'elliptical'`: Kepler yörüngesi (cisim merkezli, ekliptiğe paralel çerçeve; Newton ile Kepler denklemi), **uydurma elemanlar** `HYPOTHETICAL.moonOrbits.elliptical`: a = 6500 km, e = 0,6, i = 90° (kutupsal), ω = 90° (apolün güney kutbu üzerinde), periapsis yüksekliği ≈ 863 km, apoapsis ≈ 8663 km, dönem ≈ 13 sa. **Düzlem eylemsiz sabit** (J2/üçüncü cisim presesyonu yok; varsayım).
+- **İkinci Ay aktarma uydusu** (`HYPOTHETICAL.moonRelay2`): apolünü kuzeyde olan eşi eliptik/kutupsal yörünge (yarım dönem faz farkı); **kendi hat hızı (40 kbit/sn) ve tamponu (2 Gbit) vardır** — yani kapasiteyi de iki katına çıkarır (varsayım). Araçlar: **'best'** = uyduyu gören(ler) arasında önce Dünya hattı açık olanı, sonra en yüksek yükseklikte olanı kullanır; **'order'** = hat sırası (önce birinci, görmüyorsa ikinci). Çizelgeleyici `LinkSample.assetRelay` (her adımda araç başına kullanılan uydu) ile çok uydulu çalışır; strateji projeksiyonu araç için rotaları birleştirir (havuz = araç tamponu + her rotadaki uydu payları, boşalma = açık rotaların toplam hızı; **varsayım:** uydu tamponları birbirinin yerine kullanılabilir).
+- **Kutup aracı** (`moonPolarAsset`, −85° enlem, isteğe bağlı): varsayılan kapalı (eski sayılar değişmez). Ekvatoral yörünge onu hiç göremez (testli); eliptik yörünge görür.
+- **Mars gölgesi** (`marsEclipse`): silindirik gölge (Güneş yönü Mars'ın Güneş'e göre konumundan); **güç modeli yok**; gölgede yalnızca hat kapalı: `'earth'` = yalnız uydu → Dünya hattı, `'both'` = yüzey hattı da. Mars ekseni ekliptiğe paralel varsayıldığı için ekvatoral yörünge her turda gölgeden geçer (≈ %14; gerçekte eksen eğikliği ≈ 25°) — **varsayım**. Yeni `LinkState` `'eclipse'`.
+- **Kapsama özeti** (`CoverageRow`): uyduyu gören yer istasyonu %, Dünya hattı açık % (uydu başına ve en az bir uydu), yüzey görüşü %, araç → Dünya yolu açık %.
+
+**Ay sonuçları** (2028-03-03, 60 g, hatalı + yeniden iletim [periyodik], 300 sn; 2 araç; "yüzey görüşü" = Ay Aracı A / İniş Aracı B; hücre: düşen + hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen]; betik `yorunge`):
+
+| İst. | Yapılandırma | Uyduyu gören ist. % (uydu 1 / 2) | Dünya hattı açık % (uydu 1 / 2 / herhangi) | Yüzey görüşü % (A / B) | Öncelikli | Kayan ufuklu | Uyarlamalı |
+|---|---|---|---|---|---|---|---|
+| 1 | ekvatoral dairesel (mevcut) | 42,6 | 37,4 | 34,1 / 37,8 | 23,9 / 23,9 / 73,2 | 7,4 / 24,1 / 73,2 [16,7] | 7,5 / 24,1 / 73,2 [16,7] |
+| 1 | eğimli/eliptik | 41,9 | 41,4 | **71,2 / 19,2** | 17,0 / 17,0 / **80,9** | 6,1 / 17,2 / 81,0 [11,2] | 6,9 / 17,2 / 81,0 [10,3] |
+| 1 | ekv. + 2. uydu (en iyi) | 42,6 / 43,1 | 37,4 / 42,4 / 54,5 | 39,4 / 64,7 | 0,8 / 0,8 / 98,7 | aynı | aynı |
+| 1 | ekv. + 2. uydu (hat sırası) | 42,6 / 43,1 | 37,4 / 42,4 / 54,5 | 39,4 / 64,7 | 1,0 / 1,0 / 98,5 | aynı | aynı |
+| 1 | eliptik + 2. uydu (en iyi) | 41,9 / 43,1 | 41,4 / 42,4 / 54,6 | 71,2 / 43,3 | 0,1 / 0,1 / 99,5 | aynı | aynı |
+| 1 | eliptik + 2. uydu (hat sırası) | 41,9 / 43,1 | 41,4 / 42,4 / 54,6 | 71,2 / 43,3 | 0,7 / 0,7 / 98,9 | aynı | aynı |
+| 1 | *(kontrol) tek ekvatoral uydu, hat hızı ve tampon 2×* | — | — | — | **0,0 / 0,0 / 99,8** | aynı | aynı |
+| 2 | ekvatoral (mevcut) | 73,2 | 64,6 | 34,1 / 37,8 | 0,0 / 0,0 / 99,9 | 0,0 / 0,0 / 99,9 | 0,0 / 0,0 / 99,9 |
+| 2 | eğimli/eliptik | 72,4 | 71,2 | 71,2 / 19,2 | **5,6 / 5,6 / 94,3** | 5,6 / 5,6 / 94,3 | 5,6 / 5,6 / 94,3 |
+| 2 | ikinci uydulu (4 seçenek) | 72,4–73,2 / 73,8 | 64,6–71,2 / 72,6 / 83,1–83,2 | 39,4–71,2 / 43,3–64,7 | 0,0 / 0,0 / 99,9 | aynı | aynı |
+| 3 | ekvatoral (mevcut) | 98,5 | 87,0 | 34,1 / 37,8 | 0,0 / 0,0 / 99,9 | aynı | aynı |
+| 3 | eğimli/eliptik | 98,3 | 96,7 | 71,2 / 19,2 | **5,6 / 5,6 / 94,3** | aynı | aynı |
+| 3 | ikinci uydulu (4 seçenek) | 98,3–98,5 / 98,7 | 87,0–96,7 / 97,2 / 99,4–99,5 | 39,4–71,2 / 43,3–64,7 | 0,0 / 0,0 / 99,9 | aynı | aynı |
+
+**Kutup aracı eklenirse** (3 araç; öncelikli çizelge: düşen + hatta kayıp / toplam kayıp / teslim; 1 ve 3 istasyon):
+
+| Yapılandırma | Kutup aracı yüzey görüşü % | 1 ist. | 3 ist. |
+|---|---|---|---|
+| ekvatoral dairesel | 0,0 | 42,2 / 42,2 / 54,9 | 24,2 / 24,2 / 74,9 |
+| eğimli/eliptik | 78,8 | 35,4 / 35,4 / 61,5 | 4,2 / 4,2 / 95,7 |
+| ekvatoral + 2. uydu (en iyi) | 7,2 | 0,6 / 0,6 / 98,8 | 0,0 / 0,0 / 99,8 |
+| eliptik + 2. uydu (en iyi) | 78,8 | 7,9 / 7,9 / 90,7 | 0,0 / 0,0 / 99,9 |
+| eliptik + 2. uydu (hat sırası) | 78,8 | 14,4 / 14,4 / 83,8 | 0,0 / 0,0 / 99,9 |
+| *(kontrol) tek ekvatoral, hat hızı ve tampon 2×* | — | 24,2 / 24,2 / 74,9 | 24,2 / 24,2 / 75,0 |
+
+**Okuma (varsayımsal modelde):**
+- **Eliptik/kutupsal yörünge kapsamayı yeniden dağıtır, genel olarak artırmaz:** Ay Aracı A'nın yüzey görüşü %34 → %71, kutup aracı %0 → %79 olur ve (1 istasyonda) Dünya hattı açık süresi, uydunun Ay arkasında kalma süresinin azalmasıyla %37,4 → %41,4 (teslim 73,2 → 80,9) çıkar; ama ekvator yakınındaki **Ay İniş Aracı B'nin görüşü %38 → %19'a düşer** ve görüş boşlukları günlerce sürdüğü için (sabit düzlem + Ay'ın dönmesi) B'nin 1 Gbit'lik tamponu taşar: 2–3 istasyonda, Dünya hattı %71–97 açıkken bile **%5,6 düşen** (ekvatoral yörüngede 0,0). Yani kutupsal yörüngenin değeri araç yerleşimine bağlıdır (kutup aracı varsa 3 istasyonda %24,2 → %4,2).
+- **İkinci uydu çok yardım eder, ama neden kapasitedir:** 1 istasyonda düşen 23,9 → 0,8; **ancak tek uydunun hat hızı ve tamponu iki katına çıkarılınca sonuç aynı (hatta daha iyi: 0,0 / 99,8)**. İkinci uydunun kapsama katkısı küçüktür: yer istasyonu uyduyu hiçbir zaman Ay'dan görünür olduğundan fazla göremez (1 istasyon: uyduyu gören %42–43; "herhangi uydu hattı açık" %37,4 → %54,5, çünkü ikinci uydu Ay'ın arkasında kalmaz); sınırlayıcı olan istasyonun Ay'ı görme süresidir. Kutup aracı varken ise (eliptik + 2. uydu, 3 araç) kapasite kontrolü tek uyduyla 24,2 kayıp bırakır: kutup aracını yalnızca kutupsal yörünge görebildiği için orada **kapsama** (kapasite değil) belirleyicidir.
+- **'en iyi görünen' vs 'hat sırası':** küçük fark (1 istasyon: 0,8 vs 1,0; eliptik + 2. uydu 0,1 vs 0,7; kutup aracıyla 7,9 vs 14,4): hat sırası ikinci uyduyu yalnızca birinci görünmezken kullandığı için yükü birinciye yığar.
+- Kayan ufuklu / uyarlamalı strateji ikinci uydulu hatlarda öncelikliyle aynıdır (kayıp zaten ≤ %1).
+
+![(k) Ay yörüngesi ve ikinci uydu](docs/asama9-ay-yorunge.png)
+![Ay: eliptik + 2. uydu, yer istasyonu kapsaması](docs/asama9-ay-ikinci-uydu-kapsama.png)
+![Ay: eliptik + 2. uydu, tampon (iki uydunun ortalaması)](docs/asama9-ay-ikinci-uydu-tampon.png)
+
+**Mars gölgesi** (2028-03-08 kavuşum penceresi, 300 sn; hücre: düşen + hatta / toplam / teslim [üretilmeyen]; betik `golge`):
+
+| İst. | Yapılandırma | Dünya hattı açık % | Yüzey görüşü % (A / B) | Öncelikli | Kayan ufuklu | Uyarlamalı |
+|---|---|---|---|---|---|---|
+| 1 | gölge yok (mevcut) | 21,4 | 35,1 / 35,7 | 47,1 / 47,1 / 41,1 | 7,1 / 48,9 / 41,1 [41,8] | 3,5 / 48,9 / 41,1 [45,5] |
+| 1 | gölgede yalnız Dünya hattı kapalı | 21,1 | 35,1 / 35,7 | 47,7 / 47,7 / 40,4 | 7,2 / 49,6 / 40,4 [42,4] | 3,6 / 49,6 / 40,4 [46,0] |
+| 1 | gölgede yüzey + Dünya hattı kapalı | 21,1 | **30,2 / 30,7** | 48,4 / 48,4 / 40,4 | 7,1 / 49,5 / 40,4 [42,5] | 3,4 / 49,5 / 40,4 [46,2] |
+| 3 | gölge yok → 'earth' → 'both' | 48,3 → 47,7 → 47,7 | 35,1 → 35,1 → 30,2 | 32,2 → 32,3 → 32,2 (teslim 67,6 → 67,5 → 67,5) | 4,6 / 33,2 → 33,3 → 33,3 | 0,8 / 33,3 / 66,5 (değişmez) |
+
+Kavuşum penceresinde gölgenin etkisi **küçüktür** (1 istasyonda teslim 41,1 → 40,4; 2–3 istasyonda ≤ 0,1): uydu zamanın %14,2'sinde gölgededir ama bunun **%99,2'si zaten Dünya hattının kapalı olduğu zamana düşer**, çünkü kavuşuma yakın Dünya ile Güneş Mars'tan neredeyse aynı yönde görünür ve Mars'ın gölgesindeki uydu aynı zamanda Dünya'dan bakınca Mars'ın arkasındadır (cisim arkası kapanması). **Kavuşumdan uzak bir aralıkta** (2029-06-01, 60 gün; arayüzde "tarih aralığı, kavuşumsuz") etki **büyüktür**:
+
+| İst. | Yapılandırma | Dünya hattı açık % | Yüzey görüşü % | Öncelikli | Kayan ufuklu | Uyarlamalı |
+|---|---|---|---|---|---|---|
+| 1 | gölge yok | 35,6 | 35,0 / 35,8 | 21,0 / 21,0 / 67,1 | 3,3 / 22,8 / 67,1 [19,5] | 3,7 / 22,8 / 67,1 [19,1] |
+| 1 | gölgede yalnız Dünya hattı kapalı | 30,8 | 35,0 / 35,8 | **29,9 / 29,9 / 58,2** | 4,8 / 31,6 / 58,2 [26,8] | 5,2 / 31,6 / 58,2 [26,3] |
+| 1 | gölgede yüzey + Dünya hattı kapalı | 30,8 | 30,2 / 30,7 | 29,9 / 29,9 / 58,2 | 4,7 / 31,6 / 58,2 [26,9] | 5,2 / 31,5 / 58,2 [26,4] |
+| 3 | gölge yok → 'earth' | 85,9 → 74,6 | 35,0 / 35,8 | 0,0 / 0,0 / 99,7 (değişmez) | aynı | aynı |
+
+(Hat açık süresi 1 istasyonda −4,8, 3 istasyonda −11,3 puan; 1 istasyonda teslim 67,1 → 58,2; 3 istasyonda hat hâlâ yeterli.) Yüzey hattı da kapanırsa ('both') yüzey görüşü 35 → 30 olur; sonuçları ayrıca değiştirmez (hat zaten sınırlayıcı).
+
+![(k) Mars uydusu gölgesi (kavuşum penceresi)](docs/asama9-golge-mars.png)
+![(k) Mars uydusu gölgesi (kavuşumsuz aralık)](docs/asama9-golge-mars-kavusumsuz.png)
+
+### 4. Genelleme ve temizlik
+
+**(a) Genelleme.** Aşama 8'in "tek senaryodan genelleme yapılmadı" sınırı bu bölümle **kapatıldı** (bölüm (l) ve betik `genelleme`, `tahmin-genelleme`). **Ay, 1 istasyon, beş 60 günlük aralık** (Ay'ın düğüm döngüsüne göre seçildi: 2025 civarı büyük, 2034 civarı küçük durağanlık; hatalı + yeniden iletim [periyodik], 300 sn; düşen + hatta / toplam / teslim [üretilmeyen]):
+
+| Başlangıç | Hat açık % | FIFO | Öncelikli | Kayan ufuklu (3 g) | Uyarlamalı |
+|---|---|---|---|---|---|
+| 2021-03-01 | 36,8 | 24,2 / 24,2 / 72,6 | 24,5 / 24,5 / 72,3 | 7,7 / 24,7 / 72,3 [17,0] | 8,1 / 24,7 / 72,3 [16,6] |
+| 2025-09-01 | 35,3 | 27,0 / 27,0 / 69,1 | 27,4 / 27,4 / 69,1 | 8,2 / 27,8 / 69,1 [19,7] | 8,3 / 27,6 / 69,1 [19,3] |
+| 2028-03-03 | 37,5 | 24,2 / 24,2 / 72,8 | 23,9 / 23,9 / 73,2 | 7,4 / 24,1 / 73,2 [16,7] | 7,5 / 24,1 / 73,2 [16,7] |
+| 2034-05-01 | 36,2 | 26,1 / 26,1 / 70,6 | 26,0 / 26,0 / 70,7 | 8,2 / 26,2 / 70,7 [18,0] | 8,3 / 26,2 / 70,7 [17,8] |
+| 2038-01-15 | 37,7 | 22,5 / 22,5 / 74,4 | 23,0 / 23,0 / 74,0 | 7,3 / 23,3 / 74,1 [16,1] | 7,3 / 23,3 / 74,0 [16,0] |
+
+Öncelikliye göre fark (min / medyan / maks, puan): düşen + hatta **−19,2 / −16,8 / −15,8** (kayan ufuklu), −19,1 / −16,4 / −15,7 (uyarlamalı); toplam kayıp **+0,20 / +0,24 / +0,44** ve +0,20 / +0,21 / +0,26; teslim 0,00 / +0,02 / +0,02 ve +0,01 / +0,01 / +0,02; değer (sabit) ≈ 0; değer (bilim verisi 14 gün yarı ömür) **+0,31 / +0,33 / +0,35** (uyarlamalı). **2 istasyonda** beş aralığın hepsinde kayıp 0,0 ve fark 0,00 (kısma bir şey yapmaz). Yani Aşama 8'in Ay 2028 sonucu **her beş aralıkta aynı niteliktedir** (düşen çok azalır, toplam kayıp ve teslim değişmez, sapma ≤ 0,4 puan); aralığa göre değişen şey kayıp düzeyidir (düşen %22,5–27,4, teslim %69,1–74,4).
+
+**Mars, tüm 9 kavuşum penceresi** (1800 sn tarama adımı, kayan ufuk 30 gün [Aşama 8 ile aynı], 1 ve 3 istasyon; öncelikliye göre fark, min / medyan / maks, puan):
+
+| | Düşen + hatta | Toplam kayıp | Teslim | Değer (14 g yarı ömür) |
+|---|---|---|---|---|
+| **1 ist.** kapsama bilen | −50,9 / −42,4 / −31,2 | +1,25 / +1,90 / +2,14 | −0,00 / 0,00 / 0,00 | |
+| kayan ufuklu (30 g) | −51,4 / −42,6 / −31,2 | **+4,07 / +4,62 / +5,85** | **−4,36 / −2,74 / −2,25** | |
+| uyarlamalı | −49,3 / −40,7 / −30,3 | +1,23 / +1,83 / +2,14 | −0,00 / 0,00 / 0,00 | **+0,68 / +1,06 / +1,45** |
+| **3 ist.** kapsama bilen | −31,6 / −21,7 / −18,7 | +2,00 / +2,36 / +2,57 | −2,57 / −2,36 / −2,00 | |
+| kayan ufuklu (30 g) | −31,6 / −21,7 / −18,7 | +6,65 / +7,05 / +7,29 | −7,29 / −7,05 / −6,64 | |
+| uyarlamalı | −31,6 / −21,7 / −18,7 | +1,00 / +1,34 / +1,58 | −1,59 / −1,35 / −1,00 | **+0,54 / +0,62 / +0,69** |
+
+9 pencerenin her birinde aynı yön: strateji "düşen"i çok azaltır, toplam kaybı artırır (uyarlamalı en az: +1,0…2,1 puan), hacmi artırmaz. **Uyarlamalı strateji, sabit uzun ufuklu (30 gün) kayan ufukludan her pencerede 2,3–5,8 puan daha az toplam kayıp verir** (1 istasyon 2,3–4,4; 3 istasyon 5,6–5,8) (uzun sabit ufkun tutuculuğunu kapalı dönem uzunluğuna göre seçerek giderir); azalan değerde (14 gün) öncelikliye göre +0,5…+1,5 puan kazanç tutarlıdır.
+
+![(l) Genelleme: Ay 5 tarih aralığı](docs/asama9-genelleme-ay.png)
+![(l) Genelleme: Mars 9 kavuşum penceresi (hata yokken, öncelikliye göre fark, tahmin hatası)](docs/asama9-genelleme-mars.png)
+
+**Tahmin hatası, genelleme** (pencere başı/sonu kayması −240 / −120 / +120 / +240 dk, 600 sn; + iyimser, − kötümser; Ay: 5 aralık, 1 istasyon, kayan ufuk 3 g ve uyarlamalı; Mars: 9 pencere, 1 istasyon, kapsama bilen / kayan ufuk 30 g / uyarlamalı; **toplam kayıp farkı, öncelikliye göre**, senaryolar üzerinde min / medyan / maks, puan; betik `tahmin-genelleme`):
+
+| Politika | |hata| ≤ 120 dk içindeki en kötü fark | −240 dk | Düşen + hatta kayıp öncelikliden (> 0,1 puan) kötüleşen senaryo |
+|---|---|---|---|
+| Ay kayan ufuklu | +1,44 / +2,25 / +2,57 | +9,79 / +11,28 / +12,45 | 0 / 5 |
+| Ay uyarlamalı | +0,60 / +1,45 / +2,36 | **+51,93 / +53,87 / +55,25** | 0 / 5 |
+| Mars kapsama bilen | +5,74 / +11,28 / +17,81 | +6,71 / +14,59 / +24,03 | 0 / 9 |
+| Mars kayan ufuklu (30 g) | +8,63 / +14,43 / +22,21 | +10,65 / +18,13 / +28,65 | 0 / 9 |
+| Mars uyarlamalı | **+2,37 / +2,65 / +3,06** | +11,63 / +19,17 / +29,79 | 0 / 9 |
+
+**Okuma:** (1) **Düşen + hatta kayıp, hiçbir senaryoda ve taranan hiçbir hata düzeyinde (−240 … +240 dk) öncelikli çizelgenin altına düşmedi** (Ay 0/5, Mars 0/9): Aşama 8'in tek senaryolu bulgusu genelleşti. (2) **İyimser hata** (+120/+240 dk) ucuz: toplam kayıp hata yokkine eşit ya da biraz daha iyi, "düşen" birkaç puan artar (ör. Mars 2028 kapsama bilen düşen 2,8 → 4,4–4,5; Ay 2028 kayan ufuklu 6,7 → 6,8, 600 sn). (3) **Kötümser hata** (pencereler kısa sanılır → fazla kısılır) toplam kaybı artırır; **uyarlamalı strateji |hata| ≤ 120 dk'da Mars'ta çok daha dayanıklıdır** (+2,4…+3,1 puan; kapsama bilen +5,7…+17,8, sabit 30 gün ufuklu kayan ufuklu +8,6…+22,2), çünkü ufku kapalı dönem sonu + kısa bir kuyruğa kısıtlar. (4) **Büyük kötümser hatada (−240 dk) hepsi çöker; uyarlamalı en çok Ay 1 istasyonda** (toplam kayıp ≈ %78, teslim ≈ %19; kayan ufuklu 3 gün aynı hatada ≈ %36): −240 dk her istasyon penceresini (≲ 8 sa) tamamen siler, takvim "hiç açık değil" görünür, kapalı dönem 60 gün sanılır ve ufuk 45 güne çıkar. **Ufku kapalı dönem uzunluğuna göre seçmek, takvim hatası kapalı dönemleri birleştirip uzattığında kırılgandır** (bilinen bir zayıflık).
+
+**(b) (g)/(h) taramalarını açılışta otomatik çalıştırma: yapılmadı (varsayılan kapalı; isteğe bağlı kutu eklendi).** Ölçüm (Mars, ana bölümler bittikten hemen sonra iki düğme birlikte tıklanarak, 3 deneme): (g) + (h) birlikte **3,5–4,6 sn** ek hesap, bu sürede **hiç uzun görev yok** (çizimler görevlere bölündü). Ana bölümlerin süresi etkilenmez (taramalar sonra başlar), ama **"her şey hazır" süresi ≈ 5,5 sn → ≈ 9–10 sn** olur ve her kaydırıcı/seçim değişiminde yeniden çalışır (3 işçi 4 sn daha meşgul). İlk açılışı ve etkileşimi bunun için kötüleştirmeye değmez; **işaret kutusu** ("(g) ve (h) taramalarını ana bölümler bittikten sonra otomatik hesapla", varsayılan kapalı) ile isteyen açar. Bu arada (g) ve (h) grafikleri aynı listeyi paylaşıyor ve biri hesaplanırken diğerinin grafiklerini yok ediyordu (Aşama 8 hatası); ayrı listelere bölündü. (g) bölümüne uyarlamalı strateji de eklendi.
+
+**(c) Ana iş parçacığı görevleri.** *Başarılı:* (1) Çizelgeleyici paneli (büyük şablon ve Aşama 3–9 bölümleri) artık **ilk açılışta, ayrı parça** (`import()`) olarak yüklenir/kurulur; ana paket 167 → 58 KB (gzip 60 → 23 KB), harita açılışı bunlarla uzamaz. (2) Chart.js yalnızca kullanılan bileşenlerle yüklenir (`chart.js/auto` yerine) ve **her grafik ayrı bir makro görevde** çizilir (`setTimeout(0)` ile, yeni hesap başlarsa kalan çizim bırakılır); simülasyon işleri Worker havuzuna önce verilir, (a) gecikme grafikleri bu sırada çizilir. Sonuç: Chart.js yüklemesi ve ilk çizimler artık **uzun görev (>50 ms) değil**; Mars ilk açılışta `longtask` 3 → 1–2 (kalan: aşağıda). *Başarısız / yapılamayan:* kalan en uzun görev (≈ 120–175 ms, sayfa açılışında ≈ 190. ms) **sayfa başlatmadır** (planets.json 1,6 MB'ın ayrıştırılması ve izlerin kurulması, harita/sol panel/küre kartı ilk kurulumu); bu görev çizelgeleyici sekmesinden bağımsızdır, `JSON.parse` bölünemez, harita ana iş parçacığında kurulmak zorunda olduğundan taşınamaz; bölünmedi. Chart.js'in modül değerlendirmesi (≈ 205 KB) bölünemez ama çizimlerle aynı görevde olmadığı için artık 50 ms'nin altında.
+
+### Hesap süresi ve `longtask` (gerçek veri, `vite preview`, 4 çekirdekli kap, 3 işçi; `main` ve bu dal art arda, 5 deneme)
+
+| | Aşama 8 (`main`) | Bu dal |
+|---|---|---|
+| Mars ilk açılış, tüm ana bölümler | 5,8–6,9 sn | **5,2–6,4 sn** |
+| Senaryo (Mars: 5 → 6 çizelgeleyici) ilk çizim | 0,72–0,82 sn | 0,82–0,91 sn |
+| Ay hattına geçiş, toplam | 1,41–1,47 sn | 1,73–1,96 sn |
+| `longtask` sayısı (Mars açılış) | 3 | 1–2 |
+| En uzun ana iş parçacığı görevi | 133–145 ms | **121–175 ms** (sayfa başlatma; çizelgeleyiciye ait değil) |
+| (j) etki / (k) gölge / (l) genelleme [Mars 3 ist.] | — | 3,5 / 2,6 / 8,9 sn (hiçbiri uzun görev üretmez) |
+| (j) / (k) yörünge / (l) genelleme [Ay 3 ist.] | — | 0,5 / 3,6 / 1,8 sn |
+| (g) tahmin / (h) hata modeli [Mars] | ≈ 2,8 / 0,9 sn | 3,3 / 0,7 sn |
+
+Mars ilk açılış, 6. çizelgeleyici (uyarlamalı) ve değer toplamlarına rağmen **kötüleşmedi, ≈ 0,5 sn iyileşti**: simülasyon çekirdeği hızlandı (gecikme dizisi `Float64Array.sort()` ile sıralanıyor: bir çalıştırma ≈ %20–40 hızlandı, sonuçlar **bayt bayt aynı**; azalan değer toplamı `reduce + Math.pow` yerine döngü + `exp` ile hesaplanıyor, ilk denemede çalıştırma başına +50–90 ms tutuyordu). Ay hattı ≈ 0,3–0,5 sn yavaşladı (uyarlamalı strateji ve karşılaştırmadaki dördüncü politika). `longtask` ölçümü `PerformanceObserver` (`type: 'longtask'`) ile.
+
+### Gerçek veriyle doğrulama (Playwright/Chromium, `vite preview`, `?sentetik=1` yok)
+Denendi: **Mars ve Ay, 1/2/3 istasyon**; değer ağırlıklı ölçüt (telemetri ağırlığı ve yarı ömür seçicileri, ızgara politikası, tablo ve duyarlılık "Değer" ölçütü); **eliptik yörünge, ikinci uydu (en iyi / hat sırası), kutup aracı** (ayrı ayrı ve birlikte); Mars gölgesi (earth / both) ve kavuşumsuz aralık; **iki projeksiyon seçeneği**; (j), (k), (l) bölümleri (Mars ve Ay); (g)/(h) taramaları ve otomatik kutusu; **dar ekran** (420 px: sayfa yatay taşmıyor, `#sched` `scrollWidth` 420; Aşama 9 seçenekleri sığıyor, uzun seçici metinleri taşmıyor; harita 681 px, alt çubuk 43 px — Aşama 7 ile aynı); **harita sekmesinde Aşama 6 ve 7 özellikleri:** 10 cisim satırı, küre kartı, 5 katman anahtarı (+ `localStorage`), zoom ve sürükleme, 2B/3B, Mars kavuşumu düğmeleri ardışık pencerelere gidiyor (2028-03-05, 2030-05-10, 2032-06-28), dar ekranda ⋯ ve katlanır bilgi paneli, çizelgeleyici sekmesine gidip dönme. **Konsolda hata/uyarı yok** (tüm akışlarda).
+
+![Harita](docs/asama9-harita-masaustu.png)
+![Harita 3B](docs/asama9-harita-3b.png)
+![420 px](docs/asama9-dar-ekran-kapali.png) ![420 px, ⋯](docs/asama9-dar-ekran-kontroller.png) ![420 px, bilgi](docs/asama9-dar-ekran-bilgi.png) ![420 px, çizelgeleyici](docs/asama9-dar-ekran-cizelgeleyici.png) ![420 px, Ay seçenekleri](docs/asama9-dar-ekran-ay-secenekleri.png)
+
+### Testler
+`npm test`: **157 test** (önce 114). Yeni (hepsi **sentetik**: uydurma tek araçlı topolojiler, uydurma hızlar/boşluklar, sentetik dairesel konum izleri, uydurma yörünge elemanları; testte yazılı): `projection.test.ts` (varsayılan = Aşama 8 birebir; yüzey kapalılığı sık/hızlı yüzeyde tek havuza iner ve uzun kapalılıkta daha çok kısar/daha az düşürür; ARQ RTT payı; ARQ yokken etkisiz; iki seçenek birlikte korunum, deterministiklik, girdiyi değiştirmeme; kapsama stratejisiyle korunum), `adaptive.test.ts` (kapalı dönem yokken öncelikliyle aynı; ufuk sabitlenince kayan ufukluyla birebir aynı; telemetri kısılmaz/düşmez; **korunum ve talep denklemleri**; ufuk kapalı dönem uzunluğuna göre seçilir; tahmin hatası; çok rotalı `assetRelay` yönlendirmesi ve çok rotalı projeksiyon korunumu; değer ölçütü: `decayMb`, uç yarı ömürler, `valuePct` ağırlık/yarı ömür, mevcut ölçütler değişmez, azalan değerde kısmanın göreli iyileşmesi), `orbit.test.ts` (Kepler: dairesel/eliptik/kutupsal, vis-viva; varsayılan seçenekler = seçeneksiz; ikinci uydu aday ve seçim kuralları; kutup aracı; `restrictToRelays`; silindirik gölge geometrisi, gölge oranı ≈ asin(R/a)/π, 'earth'/'both' davranışı; kapsama özeti; **yeni yollarda korunum: ikinci Ay uydusu + kutup aracı + eliptik yörünge + gölge, 6 politika, kayıpsız/periyodik/kümelenmiş hat, iki projeksiyon seçeneği açıkken**), `compute.test.ts` (ağ seçenekli çizelge: işleyici doğrudan çağrıyla aynı; `tlInfo` uydu başına açık oranı; `coverage` ağ seçenekleri; `policy` ikinci uydunun parametrelerini de uygular). Mevcut testlere dokunulmadı.
+
+### Beklenmedik ve dikkat edilecekler
+1. **İki iyimser projeksiyon varsayımı etkisiz çıktı** (≤ 0,05 puan, zorlanmış ayarlarda da ≤ 0,1): Aşama 7–8 sonuçları bunlardan kaynaklanmıyordu; strateji-kayıp ayrımı modelin iyimserliğinden değil, hat kapasitesinin sınırlayıcı olmasından geliyor.
+2. **Kısmanın değerce faydası yalnızca "değer zamanla azalır" varsayımında** ve ≤ ~2,5 puan; sabit değerde yok (bölüm 2). Bu bir ölçüt/varsayım bulgusudur, strateji bulgusu değildir.
+3. **İkinci uydunun faydası kapasiteden geliyor** (kontrol satırı); kapsamadan değil. Yer istasyonunun Ay'ı görme süresi sınırlayıcı kalır.
+4. **Eliptik kutupsal yörünge B aracını bozar** (görüş %38 → %19, günlerce boşluk, tampon taşar): kutupsal yörünge yerleşime duyarlı. Düzlemin eylemsiz sabit olması (presesyon yok) bunu büyütüyor olabilir; bilmiyorum.
+5. **Mars gölgesi kavuşumda büyük ölçüde maskeleniyor** (%99,2 örtüşme): ilk denememde "gölgede geçen süre %0,3" göründü, çünkü gölgedeki durumlar önce 'Mars'ın arkasında' diye etiketleniyordu; `RelayState.eclipsed` eklenerek ayrıldı. Gölgenin etkisini görmek için kavuşumsuz aralık senaryosu eklendi.
+6. **Uyarlamalı strateji büyük kötümser takvim hatasında çöker** (Ay 1 ist., −240 dk: toplam kayıp ≈ %78); kayan ufuklu 3 gün bunu %36'da tutar. Ufku kapalı dönem uzunluğuna bağlamak takvim hatasına kırılgandır.
+7. **`CoverageRow` anlamı değişti:** `see`/`up` artık uydu başına bir kez sayılır (eskiden araç sayısı kadar toplanıp bölünüyordu; yüzdeler aynı). `TlInfo` `openFracByRelay` ve `openFracAny` aldı; tek uyduda `openFrac` ile aynı.
+8. **(g)/(h) grafik listesi paylaşımı** Aşama 8'den kalma bir hataydı (ikisini art arda çalıştırınca ilkinin grafikleri yok oluyordu); düzeltildi.
+9. **Dar ekranda kavuşum penceresi seçicisi 477 px taşıyordu** (Aşama 7'den kalma; sayfa değil `#sched` yatay kayıyordu); düzeltildi (etiketli seçiciler dar ekranda alt alta).
+10. **Hız:** değer toplamı ilk uygulamada çalıştırma başına +50–90 ms tutuyordu (`reduce + Math.pow`), Mars ilk açılışı ≈ 7,5–8,6 sn'ye çıkarmıştı; döngü + `exp`, taramalarda toplamın hiç hesaplanmaması ve gecikme dizisinin tipli dizide sıralanması ile geri alındı (ölçüm tablosu).
+11. **Çok uydulu projeksiyon varsayımı:** uydu tamponları birbirinin yerine kullanılabilir sayılır (bir araç verisi bir uyduya girmişse diğerinin hattı da onu boşaltabilirmiş gibi); gerçekte veri girdiği uyduda kalır. İkinci uydulu hatlarda kayıp ≤ %1 olduğundan sonuçları etkilemedi, ama sınır kapasite darsa iyimserdir.
+12. **İki projeksiyon seçeneğinin tek uyduda tek rotayla Aşama 8 aritmetiği birebir korunur** (`Metrics`/sayaçlar aynı); ek alanlar (`decayMb`, `valueParts`) yalnızca eklendi.
+13. **Ay ARQ tutma gecikmesi** adım ayrıklaştırmasının sonucudur (RTT 3 sn → 1 adım = 300 sn); Ay'da gerçek etkisi ihmal edilebilir.
+14. **Azalan değer yalnızca ölçüt hesabındadır:** çizelgeleme kararlarını (hangi paketin gideceğini) değiştirmez; yani "yaşlanan veriyi önce gönder / eski veriyi at" gibi değere duyarlı bir kuyruk politikası **denenmedi** (azalan değerde öncelikli çizelgenin eski paketi önce göndermesi ayrı bir politika konusu).
+
+### Kararlar
+- Yeni dış bağımlılık ve GitHub Actions iş akışı yok (Chart.js dışında bağımlılık eklenmedi; Playwright yalnızca doğrulama için, depoya eklenmedi). Yeni politika ayrı ad (`'adaptive'`); `strategy`/`coverage`/`rolling` aynen.
+- Yeni varsayımsal değerlerin hepsi `hypothetical.ts` içindedir: `projection`, `value`, `scheduler.classes[].valuePerMb`, `adaptiveStrategy`, `moonOrbits`, `moonRelay2`, `moonPolarAsset`, `marsEclipse`, `marsFreeScenario`, `generalization`; ikinci uydunun hat hızı/tamponu `scheduler.relay*` içinde.
+- Varsayılanlar eski sayıları verir: `projection` ikisi de kapalı, yörünge ekvatoral, ikinci uydu/kutup aracı/gölge yok; `schedConfig()` yalnızca ek alanlar ekler.
+- Uyarlamalı ufuk parametreleri (`tailFactor` 1, `leadDays` 1, `minDays` 1, `maxDays` 45) duyarlılık taramasında neredeyse etkisiz olduğundan makul orta değerler seçildi (ayar yapılmadı).
+- (g)/(h) otomatik çalıştırma varsayılan kapalı (ölçüm gerekçesi yukarıda); çizelgeleyici paneli ve Chart.js ilk kullanımda yüklenir.
+- Tarama ve hata modeli hesapları azalan değer toplamı üretmez (yalnızca sabit değer ölçütü); değer ızgarası senaryo/karşılaştırma hesaplarından beslenir.
+
 
 ## Veri kaynağı ve kararlar
 
@@ -580,10 +846,10 @@ Denendi: Ay 1/2/3 ve Mars 1/2/3 istasyon (kayan ufuklu strateji, kayan ufuk 30 g
 ```
 src/data/    veri okuma, tipler, genel fiziksel bilgiler (bodyFacts)
 src/map/     interpolasyon (ephemeris), Canvas çizimi, etiket yerleştirici (labels), gezegen dokuları ve küre kartı hesabı
-src/ui/      kontroller, bilgi paneli + küre kartı, sol panel (Cisimler, katmanlar), ağ paneli
-src/network/ ağ modeli (gecikme, bağlantı durumu, kavuşum), çizelgeleyici + stratejiler + hata modeli, tarama, zaman çizelgesi; compute.ts / compute.worker.ts / computeClient.ts (uzun hesabı Web Worker havuzunda çalıştıran işleyici ve istemci)
+src/ui/      kontroller, bilgi paneli + küre kartı, sol panel (Cisimler, katmanlar), ağ paneli; Çizelgeleyici sekmesi: schedulerPanel.ts (ana panel), schedulerExtras.ts (Aşama 9 bölümleri: değer, etki, yörünge/gölge, genelleme), schedShared.ts (ortak yardımcılar, değer modeli seçimi)
+src/network/ ağ modeli (gecikme, bağlantı durumu, kavuşum; Aşama 9: Kepler yörüngesi, ikinci Ay uydusu, Mars gölgesi), çizelgeleyici + stratejiler (Aşama 9: uyarlamalı ufuk, projeksiyon seçenekleri, değer ölçütü) + hata modeli, tarama, zaman çizelgesi, kapsama özeti (coverage.ts); compute.ts / compute.worker.ts / computeClient.ts (uzun hesabı Web Worker havuzunda çalıştıran işleyici ve istemci)
 src/config/  varsayımsal değerler (tek dosya)
-scripts/     Horizons veri çekme betiği; asama7-sonuclar.ts, asama8-sonuclar.ts (README sayılarını gerçek veriyle üreten betikler, Horizons'a erişmez)
+scripts/     Horizons veri çekme betiği; asama7-sonuclar.ts, asama8-sonuclar.ts, asama9-sonuclar.ts (+ asama9-lib.ts ortak yardımcılar) (README sayılarını gerçek veriyle üreten betikler, Horizons'a erişmez)
 public/data/ Horizons JSON dosyaları (gerçek veri, depoda)
 docs/        gerçek veriyle alınmış ekran görüntüleri
 .github/workflows/  GitHub Pages yayını
@@ -603,12 +869,20 @@ docs/        gerçek veriyle alınmış ekran görüntüleri
 9. **Strateji varsayımları:** kesintinin başı/sonu önceden bilinir (hatasız); bütçe tamponun %90'ı (`margin`), 1 gün önceden başlar. Gerçekçi bir görev bu parametreleri bilmez; sonuçlar kavramsaldır.
 10. **Üretilmeyen veri "kayıp" sayılmaz** (ayrı sütun); bunu tanım olarak seçtim ve karşılaştırmada hem "düşen" hem "düşen + üretilmeyen" gösteriyorum. Sizin için "üretilmeyen" farklı bir maliyete denk geliyorsa (ör. bilimsel değeri olan kısma) bu tanımı birlikte gözden geçirelim.
 11. **Ay Aracı A görüş sorunu:** Aşama 5'te enlem −40°'ye alınarak giderildi (kutup bölgesi modellenmedi, yukarıya bakın). Aşama 7'de arayüze Ay hattı senaryosu eklendi (seçilebilir tarih aralığı).
-12. **Mars aktarma uydusunun Mars gölgesi (tutulma) ve güç modeli** yok; yalnızca "Dünya cismin arkasında" kesintisi var.
+12. **Mars aktarma uydusunun Mars gölgesi (tutulma) ve güç modeli:** Aşama 9'da basit bir gölge kesintisi eklendi (silindirik, güç modeli yok, seçenek; bölüm 3); güç/batarya modeli hâlâ yok.
 13. **3B görünüm:** Aşama 6'da arayüz işleri yapıldı (sol panel, kart, etiketler, katmanlar); projeksiyon değişmedi.
 14. **Yer istasyonu ve ARQ varsayımları:** konumlar derin uzay istasyonlarına benzer seçilmiş varsayımsal değerlerdir; kayıp modeli belirleyici (periyodik ya da, Aşama 7'den beri, sabit tohumlu kümelenmiş); Aşama 4'ün stratejisi kapsamayı bilmez, Aşama 7'deki yeni strateji bilir (kapsama takvimi önceden bilinir varsayımıyla).
 15. **Kapsama takvimi önceden bilinir mi?** (Aşama 7) Yörünge ve Dünya dönüşü öngörülebilirdir, ama gerçek bir görevin istasyon çizelgesini, bakım ve çakışmaları ne kadar önceden bildiğini bilmiyorum; tahmin hatası modellenmedi. Ortalama hat kaybının önceden bilindiği varsayımı da aynı sınırlamayı taşır.
 16. **Kümelenmiş hata parametreleri** (kötü durumda %80 kayıp, ortalama 30 dk, iyi durumda %0,5) uydurmadır; gerçek hat ölçümüne dayanmaz. Sonuçlar (özellikle `maxAttempts` aşımı) bu parametrelere ve RTT'ye çok duyarlıdır.
 17. **Havuz tanımı (kapsama bilen strateji):** araç tamponu havuza dahil (`assetBufferShare` = 1) varsayıldı; 0 yapılırsa düşen sıfıra iner ama daha çok kısar. Hangisinin doğru maliyet olduğu bir tasarım kararıdır, sizinle gözden geçirilmeli.
+
+18. **Yörünge elemanları (Aşama 9) uydurmadır:** eliptik Ay yörüngesi (a 6500 km, e 0,6, i 90°, ω 90°), ikinci uydu (ω 270°, yarım dönem faz farkı), kutup aracı (−85°, 30°). Düzlem eylemsiz sabit (presesyon yok): gerçek kutupsal/NRHO benzeri yörüngeler Ay ve Dünya'nın çekimiyle farklı davranır; sonuçların (özellikle B aracının kaybı) buna ne kadar duyarlı olduğunu bilmiyorum.
+19. **İkinci uydunun kapasitesi** (40 kbit/sn hat, 2 Gbit tampon; birinciyle aynı) bir varsayımdır ve faydanın kaynağıdır (kapasite, kapsama değil; bölüm 3). Çok uydulu projeksiyonda uydu tamponlarının birbirinin yerine kullanılabildiği varsayıldı.
+20. **Değer ağırlıkları ve yarı ömürler** (telemetri 4, bilim verisi 1 birim/Mb; 3–90 gün yarı ömür) uydurmadır; gerçek bilimsel değer bu biçimde (Mb başına sabit, üstel azalan) olmayabilir. Sonuç "sabit değerde fayda yok, azalan değerde ≤ ~2,5 puan" biçimindedir; ağırlıkların kendisini sizinle gözden geçirmeliyiz.
+21. **Mars gölgesi:** silindirik, yarıgölge ve Güneş çapı yok, Mars ekseni ekliptiğe paralel (gerçekte ≈ 25° eğik: gölge mevsimsel olarak azalır/kalkar); gölgede hat kapalı sayıldı, güç modeli yok. Etki kavuşum penceresinde maskelendiği için gölgenin önemini ancak kavuşumsuz aralıkta görüyoruz.
+22. **Uyarlamalı ufuk takvim hatasına kırılgandır** (Ay 1 istasyonda −240 dk'da çöker; bölüm 4a): kapalı dönem uzunluğunu doğru bilmek gerekir. Ufku kırpma/güven aralığı gibi bir korunma denenmedi.
+23. **Azalan değer yalnızca ölçüttedir:** çizelgeleme kararlarını (hangi paket önce gider, hangisi atılır) değiştirmez. "Yaşlanan veriyi önce at / yeniden sırala" gibi değere duyarlı bir kuyruk politikası denenmedi; kısmanın sağladığı küçük kazancın bir kısmını böyle bir politika üretimi kısmadan da sağlayabilir (bilmiyorum).
+24. **Sayfa başlatma görevi** (planets.json ayrıştırma ve harita kurulumu ≈ 120–175 ms) bölünmedi (bölüm 4c); çizelgeleyici sekmesi artık uzun görev üretmiyor.
 
 ## Kullanılan dış kaynaklar
 
@@ -619,9 +893,10 @@ docs/        gerçek veriyle alınmış ekran görüntüleri
 
 ## Sonraki aşamalar
 
-Aşama 9 adayları (değerler **varsayımsal** kalır; sonuçlar gerçek bir görev sonucu değildir):
-- **Kalan ana iş parçacığı görevleri** (Chart.js yüklemesi ve ilk çizimler ≈ 0,1 sn) ve (g)/(h) taramalarının açılışta otomatik çalıştırılması (Worker ile artık ucuz).
-- **Toplam kaybı gerçekten azaltan strateji:** kısma yalnızca kaybı "üretilmeyen"e çeviriyor; telemetriyi de ele alan (daha sık/küçük paket, telemetri kısma) ya da bilim verisi değerine göre kısan strateji; ufuk seçimini (kısa/uzun) uyarlamalı yapmak.
-- **Yüzey hattı kapalılığını havuz projeksiyonuna katmak** ve ARQ kopyalarının tampon payını hesaba katmak.
-- **Ay'da kutup bölgesi ve eğimli/eliptik yörünge**, Mars aktarma uydusu gölgesi ve güç modeli.
-- **Başka Ay aralıkları ve 1 istasyon dışında tahmin hatası taraması** (tek senaryodan genelleme yapılmadı).
+Aşama 10 adayları (değerler **varsayımsal** kalır; sonuçlar gerçek bir görev sonucu değildir):
+- **Değere duyarlı kuyruk politikası:** azalan değerde eski veriyi atmak/yeniden sıralamak (kısma yerine ya da onunla); Aşama 9'daki küçük (≤ ~2,5 puan) kazancın üretimi kısmadan elde edilip edilemediğini ölçmek.
+- **Takvim hatasına dayanıklı uyarlamalı ufuk:** ufku kırpma, kapalı dönem uzunluğu için güven aralığı, tahmin hatası altında geri çekilme (−240 dk çöküşü).
+- **Gerçek çok uydulu yönlendirme:** veri girdiği uyduda kalır; aracın uydu seçimi tampon/hat durumuna göre; uydular arası bağlantı; uydu tamponları birbirinin yerine kullanılamaz (Aşama 9 projeksiyonu iyimser).
+- **Yörünge ve güç:** presesyon/üçüncü cisim etkili Ay yörüngeleri (NRHO/ELFO benzeri), Mars ekseni eğikliğiyle gerçekçi gölge, güç/batarya modeli (gölgede yalnızca hat kapanması yerine).
+- **Telemetriyi de ele alan strateji** (daha sık/küçük paket, telemetri kısma) ve toplam kaybı gerçekten azaltacak ilkeler: hat kapasitesi sınırlayıcı kaldığı için asıl kaldıraç kapasite (ikinci uydu kontrolü, istasyon sayısı) görünüyor.
+- **Sayfa başlatma görevinin bölünmesi** (planets.json ayrıştırması Worker'da / parçalı), gerekirse.
