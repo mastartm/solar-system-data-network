@@ -245,6 +245,27 @@ if (!only || only === 'deger-esik') {
       let line = '';
       for (let i = 0; i < HL.length; i++) line += `| ${HL[i]} | ${pols.map((p) => { const g = valuePct(ms[p], { ...w, halfLifeIdx: i }) - valuePct(pr, { ...w, halfLifeIdx: i }); return `${g >= 0 ? '+' : ''}${f(g, 2)}`; }).join(' | ')} |\n`;
       console.log(line.trimEnd());
+      // kırılma yarı ömrü: kazancın (yarı ömür büyüdükçe) pozitiften negatife geçtiği nokta (log-doğrusal ara değer); hiç geçmiyorsa en büyük/en küçük kazanç
+      console.log('  kırılma yarı ömrü (gün) ve en büyük kazanç: ' + pols.map((p) => {
+        const g = HL.map((_, i) => valuePct(ms[p], { ...w, halfLifeIdx: i }) - valuePct(pr, { ...w, halfLifeIdx: i }));
+        const best = Math.max(...g), at = HL[g.indexOf(best)];
+        let be = 'yok (hep ' + (g[g.length - 1] > 0 ? '+' : '−') + ')';
+        for (let i = 1; i < HL.length; i++) if (g[i - 1] > 0 && g[i] <= 0) { const t = g[i - 1] / (g[i - 1] - g[i]); be = f(Math.exp(Math.log(HL[i - 1]) + t * (Math.log(HL[i]) - Math.log(HL[i - 1]))), 0); break; }
+        return `${p}: ${be} (en büyük +${f(best, 2)} @ ${at} g)`;
+      }).join(' · '));
     }
+  }
+}
+
+if (only === 'projeksiyon-zor') {
+  // Zorlanmış ayarlarda iyimser varsayımların etkisi: yüzey hattı hızı üretime yaklaştırılır / uydu tamponu ve hat hızı küçültülür (varsayılan ayarlarda etki yok; burada aranır).
+  console.log('## Madde 1 — zorlanmış ayarlarda projeksiyon seçenekleri; hücre: düşen+hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen %]');
+  const PO: [string, ProjectionOptions][] = [['varsayılan', {}], ['yüzey', { surfaceClosure: true }], ['ARQ', { arqHold: true }], ['ikisi', { surfaceClosure: true, arqHold: true }]];
+  for (const kb of [100, 50, 30]) {
+    const cfg = { surfaceLinkKbps: { moon: kb, mars: 600 } };
+    console.log(`Ay 2028-03-03 (60 g), 1 ist., rolling, Ay yüzey hattı ${kb} kbit/sn: ` + PO.map(([n, p]) => `${n} ${cell(run(moonScn(), 1, 'rolling', { projection: p, cfg }).m)}`).join(' | ') + ` | öncelikli ${cell(run(moonScn(), 1, 'priority', { cfg }).m)}`);
+  }
+  for (const [buf, dl] of [[8000, 600], [8000, 250], [16000, 400]]) {
+    for (const pol of ['coverage', 'rolling'] as Policy[]) console.log(`Mars 2028, 3 ist., ${pol}, uydu tamponu ${buf / 1000} Gbit, hat ${dl} kbit/sn: ` + PO.map(([n, p]) => `${n} ${cell(run(marsScn(), 3, pol, { projection: p, params: { relayBufferMb: buf, relayDownlinkKbps: dl } }).m)}`).join(' | '));
   }
 }
