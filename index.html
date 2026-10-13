@@ -12,11 +12,13 @@
         <h1>Güneş Sistemi Veri Ağı</h1>
         <span class="note">Konumlar: NASA/JPL Horizons · Ölçek karekökle sıkıştırılmıştır</span>
         <span class="badge-hyp">Varsayımsal değerler: araçlar, uydular, veri hızları</span>
+        <nav id="tabs" role="tablist"><button id="tab-map" type="button" role="tab" aria-selected="true" class="on">Harita</button><button id="tab-sched" type="button" role="tab" aria-selected="false">Çizelgeleyici</button></nav>
       </header>
       <main>
         <canvas id="map" aria-label="Güneş sistemi haritası"></canvas>
         <div id="side"><aside id="info"></aside><aside id="net"></aside></div>
       </main>
+      <section id="sched" hidden></section>
       <footer id="controls"></footer>
     </div>
     <script type="module" src="/src/main.ts"></script>

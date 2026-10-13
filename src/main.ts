@@ -1,12 +1,13 @@
 import './style.css';
 import { eclipseLabel, loadEclipses, nearestEclipse } from './data/eclipses';
-import { loadTracks } from './data/loader';
+import { isSynthetic, loadTracks } from './data/loader';
 import type { BodyId } from './data/types';
 import { dateToJd, trackEndJD } from './map/ephemeris';
 import { MapView } from './map/MapView';
 import { createControls } from './ui/controls';
 import { renderInfo } from './ui/infoPanel';
 import { renderNetwork } from './ui/networkPanel';
+import { mountScheduler } from './ui/schedulerPanel';
 import { NetworkLayer } from './map/networkLayer';
 import { computeNetwork, findBlackoutWindows } from './network/network';
 
@@ -61,12 +62,35 @@ async function start() {
     if (w) controls.jumpTo(w.startJD - 3);
   });
   let lastPanel = 0;
+
+  // Aşama 3: çizelgeleyici sekmesi (harita gizlenir, çizim döngüsü durur; geri gelince olduğu gibi devam eder)
+  const main = document.querySelector('main') as HTMLElement;
+  const footer = document.getElementById('controls')!;
+  const schedEl = document.getElementById('sched')!;
+  const sched = mountScheduler(schedEl, tracks, windows, isSynthetic());
+  let tab: 'map' | 'sched' = 'map';
+  const setTab = (t: 'map' | 'sched') => {
+    tab = t;
+    main.hidden = footer.hidden = t !== 'map';
+    schedEl.hidden = t !== 'sched';
+    for (const [id, name] of [['tab-map', 'map'], ['tab-sched', 'sched']] as const) {
+      const b = document.getElementById(id)!;
+      b.classList.toggle('on', name === t);
+      b.setAttribute('aria-selected', String(name === t));
+    }
+    if (t === 'sched') void sched.show();
+    else map.dirty = true;
+  };
+  document.getElementById('tab-map')!.addEventListener('click', () => setTab('map'));
+  document.getElementById('tab-sched')!.addEventListener('click', () => setTab('sched'));
+  if (location.hash === '#cizelgeleyici') setTab('sched');
   controls.setJD(jd);
 
   let last = performance.now();
   const frame = (now: number) => {
     const dt = (now - last) / 1000;
     last = now;
+    if (tab !== 'map') { requestAnimationFrame(frame); return; }
     if (controls.isPlaying()) {
       let next = jd + controls.speed() * dt;
       if (next >= maxJD) next = minJD; // sona gelince başa dön
