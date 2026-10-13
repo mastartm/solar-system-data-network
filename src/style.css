@@ -147,3 +147,8 @@ tr.cur td { background:rgba(74,144,226,.12); }
   #date-label { bottom:46px; font-size:18px; }
   main.side-open #date-label { display:none; }
 }
+
+/* Aşama 9: dar ekranda uzun seçici metinleri (kavuşum penceresi, hat) kutunun dışına taşmasın */
+.sched-wrap label { max-width:100%; }
+@media (max-width:700px) { .sched-wrap .row > label:has(> select) { display:flex; flex-direction:column; align-items:flex-start; gap:3px; } .sched-wrap .row > label > select { max-width:100%; } .sched-wrap #date-ctl, .sched-wrap #moon-opts, .sched-wrap #mars-opts { max-width:100%; } }
+.sched-wrap .row > label { min-width:0; }

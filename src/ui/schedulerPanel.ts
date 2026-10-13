@@ -118,8 +118,9 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
           <label>Hat modu <select id="sel-mode">${(Object.keys(LINK_MODE_LABEL) as LinkMode[]).map((m) => `<option value="${m}"${m === linkMode ? ' selected' : ''}>${LINK_MODE_LABEL[m]}</option>`).join('')}</select></label>
         </div>
         <div class="row" id="a9-row">
-          <label title="Havuz projeksiyonu araç tamponundaki verinin yüzey hattı (araç → uydu) kapalıyken boşalmadığını hesaba katar">Projeksiyon <span class="badge-hyp">Aşama 9</span> <input type="checkbox" id="pj-surface"> yüzey hattı kapalılığı</label>
-          <label><input type="checkbox" id="pj-arq"> ARQ kopyaları RTT boyunca tamponda</label>
+          <span class="legend"><b>Havuz projeksiyonu</b> <span class="badge-hyp">Aşama 9</span></span>
+          <label title="Araç tamponundaki veri yüzey hattı (araç → uydu) kapalıyken boşalmaz"><input type="checkbox" id="pj-surface"> yüzey hattı kapalılığı</label>
+          <label title="Gönderici, onaylanmamış kopyayı RTT (2 × ışık gecikmesi) boyunca uydu tamponunda tutar"><input type="checkbox" id="pj-arq"> ARQ kopyaları RTT boyunca tamponda</label>
           <span id="moon-opts" class="row" hidden>
             <label>Ay yörüngesi <select id="sel-orbit"><option value="equatorial">ekvatoral dairesel (mevcut)</option><option value="elliptical">eğimli/eliptik (kutupsal)</option></select></label>
             <label>İkinci Ay uydusu <select id="sel-second"><option value="none">yok</option><option value="best">var: araç en iyi görüneni kullanır</option><option value="order">var: hat sırasıyla</option></select></label>

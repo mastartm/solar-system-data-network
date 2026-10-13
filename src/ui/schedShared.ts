@@ -8,7 +8,7 @@ import type { ValueOpts } from '../network/sweep';
 export const fmt = (n: number, d = 0) => n.toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
 export const day = (jd: number) => jdToDate(jd).toISOString().slice(0, 10);
 export const year = (jd: number) => 1970 + (jd - 2440587.5) / 365.2425;
-export const signed = (n: number, d = 1) => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n), d)}`;
+export const signed = (n: number, d = 1) => { const r = Math.round(Math.abs(n) * 10 ** d) / 10 ** d; return r === 0 ? fmt(0, d) : `${n > 0 ? '+' : '−'}${fmt(r, d)}`; };
 
 // Seriler: FIFO = mavi, öncelikli = turuncu, strateji = yeşil, kapsama bilen strateji = mor, kayan ufuklu = sarı, uyarlamalı = camgöbeği (koyu yüzeyde ayırt edilen kategorik renkler). Metin rengi seri rengi değildir.
 export const C = { fifo: '#3987e5', prio: '#d95926', strat: '#3fb68b', stratLoss: '#9be3c6', cov: '#b88cf2', covLoss: '#dcc5fa', roll: '#e8c13d', rollLoss: '#f5e2a0', adapt: '#2fd4e0', adaptLoss: '#a8eef2', moon: '#cfcfcf', mars: '#d9593a', text: '#8a96b2', grid: '#1e2740', ink: '#e6ebf5' };
