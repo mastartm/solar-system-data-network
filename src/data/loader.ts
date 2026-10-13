@@ -34,3 +34,21 @@ export async function loadTracks(): Promise<Record<string, Track>> {
   const [planets, moon] = await Promise.all([loadFile('planets.json'), loadFile('moon.json')]);
   return { ...planets, ...moon };
 }
+
+/**
+ * Yüklenen verinin temel sağlık kontrolü. Sorun listesi döner (boşsa veri kullanılabilir).
+ * Amaç: bozuk/eksik veride panoyu çökertmek yerine kullanıcıya açık bir mesaj göstermek.
+ */
+export function validateTracks(tracks: Record<string, Track>): string[] {
+  const problems: string[] = [];
+  for (const id of ['earth', 'mars', 'moon', 'mercury', 'venus', 'jupiter', 'saturn', 'uranus', 'neptune']) {
+    const t = tracks[id];
+    if (!t) { problems.push(`${id}: veri yok`); continue; }
+    if (!(t.count >= 2) || !(t.stepDays > 0) || !Number.isFinite(t.startJD)) { problems.push(`${id}: başlık alanları geçersiz`); continue; }
+    if (t.pos.length !== t.count * 3 || t.vel.length !== t.count * 3) { problems.push(`${id}: uzunluk uyuşmuyor (pos ${t.pos.length}, vel ${t.vel.length}, beklenen ${t.count * 3})`); continue; }
+    for (let i = 0; i < t.pos.length; i++) {
+      if (!Number.isFinite(t.pos[i]) || !Number.isFinite(t.vel[i])) { problems.push(`${id}: sayısal olmayan değer (indeks ${Math.floor(i / 3)})`); break; }
+    }
+  }
+  return problems;
+}

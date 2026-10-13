@@ -1,6 +1,6 @@
 import './style.css';
 import { eclipseLabel, loadEclipses, nearestEclipse } from './data/eclipses';
-import { isSynthetic, loadTracks } from './data/loader';
+import { isSynthetic, loadTracks, validateTracks } from './data/loader';
 import type { BodyId } from './data/types';
 import { dateToJd, trackEndJD } from './map/ephemeris';
 import { MapView } from './map/MapView';
@@ -20,6 +20,15 @@ async function start() {
     info.innerHTML = `<h2>Veri yüklenemedi</h2>
       <p>${(e as Error).message}</p>
       <p><code>npm run fetch-data</code> komutunu çalıştırıp sayfayı yenileyin.</p>`;
+    return;
+  }
+
+  const problems = validateTracks(tracks);
+  if (problems.length) {
+    info.innerHTML = `<h2>Veri bozuk ya da eksik</h2>
+      <p>Horizons verisi beklenen biçimde değil; harita ve çizelgeleyici başlatılmadı:</p>
+      <ul>${problems.map((p) => `<li>${p}</li>`).join('')}</ul>
+      <p><code>npm run fetch-data -- --force</code> ile veriyi yeniden çekin.</p>`;
     return;
   }
 
@@ -54,11 +63,11 @@ async function start() {
   jumpRow.innerHTML = '<button id="cprev" type="button">◀ Önceki Mars kavuşumu</button><button id="cnext" type="button">Sonraki Mars kavuşumu ▶</button><span class="legend">Kesinti penceresinin başına gider (Güneş–Mars açısı eşiğin altında).</span>';
   document.getElementById('controls')!.appendChild(jumpRow);
   jumpRow.querySelector('#cprev')!.addEventListener('click', () => {
-    const w = [...windows].reverse().find((x) => x.startJD < jd - 1);
+    const w = [...windows].reverse().find((x) => x.startJD - 3 < jd - 0.5); // atlanan hedef (başlangıç − 3 gün) bugünden geride olmalı
     if (w) controls.jumpTo(w.startJD - 3);
   });
   jumpRow.querySelector('#cnext')!.addEventListener('click', () => {
-    const w = windows.find((x) => x.startJD > jd + 1);
+    const w = windows.find((x) => x.startJD - 3 > jd + 0.5); // aynı pencerede takılmasın: hedef bugünden ileride olmalı
     if (w) controls.jumpTo(w.startJD - 3);
   });
   let lastPanel = 0;
