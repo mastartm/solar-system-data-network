@@ -5,7 +5,8 @@ import { jdToDate, trackEndJD } from '../map/ephemeris';
 import type { BlackoutWindow } from '../network/network';
 import { simulate, type LinkSample, type Policy, type SchedTopology, type SimResult } from '../network/scheduler';
 import { POLICIES, metricsOf, runPolicy, sweepValues, type PolicyMetrics, type SweepKey } from '../network/sweep';
-import { buildLinkTimeline, defaultParams, lightDelaySeries, restrictToRelay, schedConfig, schedTopology, withParams, type SweepParams } from '../network/timeline';
+import { computeNetwork } from '../network/network';
+import { LINK_MODE_LABEL, buildLinkTimeline, defaultParams, lightDelaySeries, restrictToRelay, schedConfig, schedTopology, withParams, type LinkMode, type SweepParams } from '../network/timeline';
 
 const fmt = (n: number, d = 0) => n.toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const day = (jd: number) => jdToDate(jd).toISOString().slice(0, 10);
@@ -38,6 +39,7 @@ function sliderDefs(def: SweepParams): SliderDef[] {
     { key: 'marsRelayBufferMb', label: 'Mars uydu tamponu', unit: 'Gbit', scale: 1000, digits: 0, ...widen(s.marsRelayBufferMb, def.marsRelayBufferMb) },
     { key: 'marsRelayDownlinkKbps', label: 'Mars uydu → Dünya hat hızı', unit: 'kbit/sn', scale: 1, digits: 0, ...widen(s.marsRelayDownlinkKbps, def.marsRelayDownlinkKbps) },
     { key: 'dutyCycle', label: 'Görev döngüsü (üretim oranı)', unit: '%', scale: 0.01, digits: 1, ...widen(s.dutyCycle, def.dutyCycle) },
+    { key: 'earthLossPct', label: 'Uydu → Dünya hat kaybı', unit: '%', scale: 1, digits: 0, ...widen(HYPOTHETICAL.arq.earthLossRangePct, def.earthLossPct) },
   ];
 }
 
@@ -54,6 +56,8 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
   let ChartCtor: typeof import('chart.js').Chart | null = null;
   let built = false;
   let token = 0; // her yeni hesaplama bir öncekini geçersiz kılar (iptal)
+  let stationCount = HYPOTHETICAL.groundStations.stations.length;
+  let linkMode: LinkMode = 'arq';
 
   const pad = sc.scenarioPadDays;
   const usable = windows.filter((w) => w.startJD - pad.before >= tracks.earth.startJD && w.endJD + pad.after <= Math.min(trackEndJD(tracks.earth), trackEndJD(tracks.mars)));
@@ -62,6 +66,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     marsRelayBufferMb: { title: 'Tampon boyutu', x: (v) => v / 1000, xTitle: 'Mars uydu tamponu (Gbit)' },
     marsRelayDownlinkKbps: { title: 'Hat hızı', x: (v) => v, xTitle: 'Mars uydu → Dünya hızı (kbit/sn)' },
     dutyCycle: { title: 'Görev döngüsü', x: (v) => v * 100, xTitle: 'Görev döngüsü (%)' },
+    earthLossPct: { title: 'Hat kaybı', x: (v) => v, xTitle: 'Uydu → Dünya hat kaybı (%)' },
   };
   const KEYS = sliders.map((s) => s.key);
 
@@ -78,6 +83,12 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       </section>
 
       <section>
+        <h3>Yer istasyonu görüşü <small>(seçili kavuşum penceresi, 30 dk adım · ${HYPOTHETICAL_LABEL})</small></h3>
+        <div id="st-table"></div>
+        <p class="hint" id="st-hint"></p>
+      </section>
+
+      <section>
         <h3>Senaryo ve ayarlar <small>(Mars kavuşumu çevresi · ${HYPOTHETICAL_LABEL})</small></h3>
         <div class="row"><label>Kavuşum penceresi <select id="sc-window">${opts || '<option>Uygun pencere yok</option>'}</select></label><span class="legend" id="sc-status" role="status"></span></div>
         <div class="sliders" id="sliders">
@@ -86,9 +97,14 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
             <output id="out-${d.key}"></output><small id="def-${d.key}"></small></label>`).join('')}
           <button type="button" id="sl-reset">Varsayılana dön</button>
         </div>
+        <div class="row">
+          <label>Yer istasyonu sayısı <select id="sel-stations">${[0, ...HYPOTHETICAL.groundStations.stations.map((_, i) => i + 1)].map((n) => `<option value="${n}"${n === stationCount ? ' selected' : ''}>${n === 0 ? 'Yok (ideal: Dünya merkezi)' : n}</option>`).join('')}</select></label>
+          <label>Hat modu <select id="sel-mode">${(Object.keys(LINK_MODE_LABEL) as LinkMode[]).map((m) => `<option value="${m}"${m === linkMode ? ' selected' : ''}>${LINK_MODE_LABEL[m]}</option>`).join('')}</select></label>
+        </div>
+        <p class="hint"><b>Yer istasyonu:</b> Mars hattının Dünya bağlantısı, istasyonlardan en az biri uyduyu ${HYPOTHETICAL.groundStations.minElevationDeg}° üstünde görüyorsa açıktır. <b>Hat modu:</b> <i>kayıpsız</i> = Aşama 3-4 davranışı; <i>hatalı, yeniden iletimsiz</i> = kaybolan paket kalıcı kayıp (“hatta kayıp”); <i>hatalı + yeniden iletim</i> = gönderici paketi ışık gidiş-dönüş süresi (RTT) boyunca tamponunda tutar, kaybolursa en çok ${HYPOTHETICAL.arq.maxAttempts} denemeye kadar yeniden gönderir. Hat kaybı kaydırıcısı yalnızca hatalı modlarda etkilidir; yüzey hattı kaybı sabit %${HYPOTHETICAL.arq.surfaceLossPct}.</p>
         <p class="hint">Kaydırıcıların başlangıç değerleri <code>src/config/hypothetical.ts</code> değerleridir; yalnızca <b>Mars</b> hattını değiştirirler (Ay hattı sabit). Bırakınca (kısa bir bekleme sonrası) senaryo ve diğer parametrelerin taramaları yeniden hesaplanır.</p>
         <p class="hint">Aynı bağlantı çizelgesi (ufuk, Dünya görüşü, kavuşum) üç çizelgeleyiciyle çalıştırılır: <b>FIFO</b> (geliş sırası), <b>öncelikli</b> (${cls.map((c) => c.name).join(' > ')}) ve <b>strateji</b> (öncelikli + kavuşum öncesi/sırasında bilim verisi üretimini kısma). Taşan tamponda FIFO yeni geleni atar; öncelikli ve strateji, daha düşük sınıfın en yeni paketini atarak yer açar.</p>
-        <p class="hint">Kapsam: bu bölümün tamamı <b>Mars aktarma hattını</b> (uydu + ona bağlı 2 araç) simüle eder. Ay hattı kavuşumdan etkilenmez; ayrıca Ay Aracı A (−85° enlem) ekvator yörüngeli uyduyu hiç göremediği için verisi hep tamponunda kalıp düşer ve toplamı bulandırırdı (README'de not).</p>
+        <p class="hint">Kapsam: bu bölümün tamamı <b>Mars aktarma hattını</b> (uydu + ona bağlı 2 araç) simüle eder; kavuşum ve strateji yalnızca Mars'ı ilgilendirir. Ay hattı (Ay Aracı A enlemi −85°'den −40°'ye alınarak uyduyu görebilir hale getirildi) yer istasyonu tablosunda ve haritada yer alır; sonuçları README'de.</p>
       </section>
 
       <section>
@@ -98,7 +114,8 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
           <b>Üretilmeyen:</b> strateji yüzünden hiç üretilmeyen (kısılan) veri. Tampona hiç girmediği için <i>düşen sayılmaz</i>; ayrı sütunda gösterilir.<br>
           <b>Talep</b> = üretilen + üretilmeyen: çizelgeleyiciden bağımsız, araçların kısma olmasaydı üreteceği veri. FIFO ve öncelikli çizelgeler üretimi kısmaz (üretilmeyen = 0), bu yüzden talepleri üretilene eşittir.<br>
           <b>Karşılaştırma ölçütleri:</b> “düşen %” = düşen / talep; “düşen + üretilmeyen %” = stratejiyi kısmakla kayıptan kurtulmuş saymayan, daha sert ölçüt. Strateji ikisini de gösterir. “Teslim %” = teslim / talep.<br>
-          <b>Her zaman:</b> üretilen = teslim + düşen + tamponda kalan; talep = üretilen + üretilmeyen (testle doğrulanır).
+          <b>Hatta kayıp:</b> hat hatası yüzünden maxAttempts denemede iletilemeyen paket (yeniden iletimsiz modda ilk kayıp kalıcıdır). Tampon taşması olan “düşen”den ayrıdır; kayıp ölçütlerine (düşen + hatta kayıp [+ üretilmeyen]) birlikte girer.<br>
+          <b>Her zaman:</b> üretilen = teslim + düşen + hatta kayıp + tamponda kalan; talep = üretilen + üretilmeyen (testle doğrulanır). Yeniden iletimde gönderici, onaylanmamış kopyayı tamponunda tutar; bu tampon doluluğuna sayılır.
         </div>
       </section>
 
@@ -122,13 +139,13 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       <section>
         <h3>(d) Duyarlılık analizi <small>(her grafikte yalnızca o parametre değişir, diğerleri kaydırıcı değerinde)</small></h3>
         <div class="row">
-          <label>Kayıp ölçütü <select id="sw-loss-metric"><option value="total">Toplam (hacim %)</option><option value="top">Telemetri (hacim %)</option><option value="deliv">Teslim edilen (talebin %'si)</option></select></label>
+          <label>Kayıp ölçütü <select id="sw-loss-metric"><option value="total">Toplam (hacim %)</option><option value="top">Telemetri (hacim %)</option><option value="deliv">Teslim edilen (talebin %'si)</option><option value="abandoned">Hatta kayıp (hacim %)</option><option value="retx">Yeniden gönderilen (paket)</option></select></label>
           <label>Süre ölçütü <select id="sw-time-metric"><option value="topP95">Telemetri, %95</option><option value="lowP95">Bilim verisi, %95</option><option value="topMean">Telemetri, ortalama</option><option value="lowMean">Bilim verisi, ortalama</option></select></label>
           <span class="legend" id="sw-status" role="status"></span>
         </div>
-        <div class="charts three" id="sw-loss-grid">${KEYS.map((k) => `<div class="chart"><canvas id="sw-loss-${k}" aria-label="${SWEEP_TITLE[k].title}: kayıp"></canvas></div>`).join('')}</div>
-        <div class="charts three" id="sw-time-grid">${KEYS.map((k) => `<div class="chart"><canvas id="sw-time-${k}" aria-label="${SWEEP_TITLE[k].title}: teslim süresi"></canvas></div>`).join('')}</div>
-        <p class="hint">Düşey kesikli çizgi kaydırıcının şu anki değeridir. FIFO ve öncelikli çizelgeler tüm hacmi aynı oranda kaybedebilir (ikisi de işi korur; kalın mavi çizgi altta kalır); fark “Telemetri” ölçütünde ve sınıf tablosunda görülür. Telemetri kısılmadığı için telemetri tek başına tamponu aşarsa (yüksek görev döngüsü, küçük tampon) strateji düşenleri engelleyemez. “Strateji (düşen)” yalnızca tampon taşmasını, “Strateji (düşen + üretilmeyen)” kısılan veriyi de kayıp sayar; stratejiyi adil değerlendirmek için ikisine birlikte bakın. Tarama adımı ${HYPOTHETICAL.sensitivity.sweepStepSec} sn (ana senaryo ${sc.stepSec} sn); sayılar iki hesap arasında küçük farklar gösterebilir. Bu bir tek kavuşum penceresi içindir; başka pencerede (farklı mesafe/gecikme) değerler değişir.</p>
+        <div class="charts four" id="sw-loss-grid">${KEYS.map((k) => `<div class="chart"><canvas id="sw-loss-${k}" aria-label="${SWEEP_TITLE[k].title}: kayıp"></canvas></div>`).join('')}</div>
+        <div class="charts four" id="sw-time-grid">${KEYS.map((k) => `<div class="chart"><canvas id="sw-time-${k}" aria-label="${SWEEP_TITLE[k].title}: teslim süresi"></canvas></div>`).join('')}</div>
+        <p class="hint">Düşey kesikli çizgi kaydırıcının şu anki değeridir. FIFO ve öncelikli çizelgeler tüm hacmi aynı oranda kaybedebilir (ikisi de işi korur; kalın mavi çizgi altta kalır); fark “Telemetri” ölçütünde ve sınıf tablosunda görülür. Telemetri kısılmadığı için telemetri tek başına tamponu aşarsa (yüksek görev döngüsü, küçük tampon) strateji düşenleri engelleyemez. “Strateji (düşen + hatta kayıp)” üretilmeyen veriyi saymaz, “Strateji (+ üretilmeyen)” kısılan veriyi de kayıp sayar; stratejiyi adil değerlendirmek için ikisine birlikte bakın. Tarama adımı ${HYPOTHETICAL.sensitivity.sweepStepSec} sn (ana senaryo ${sc.stepSec} sn); sayılar iki hesap arasında küçük farklar gösterebilir. Bu bir tek kavuşum penceresi içindir; başka pencerede (farklı mesafe/gecikme) değerler değişir.</p>
       </section>
 
       <section>
@@ -160,7 +177,9 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       ${row('"Gecikmeli" eşiği', `kuyrukta ${fmt(sc.delayedAfterSec / 60)} dk'dan uzun bekleme`)}
       ${row('Senaryo aralığı', `kavuşumdan ${sc.scenarioPadDays.before} gün önce – ${sc.scenarioPadDays.after} gün sonra`)}
       ${row('Strateji (bütçeli kısma)', `kesintiye ${fmt(st.lookaheadDays, 1)} gün kala başlar · boş tamponun %${fmt(st.margin * 100)}'i bilim verisi bütçesi · çarpan alt sınırı ${fmt(st.minFactor, 2)} · telemetri kısılmaz`)}
-      ${row('Kaydırıcı aralıkları', `tampon ${fmt(se.marsRelayBufferMb.min / 1000)}–${fmt(se.marsRelayBufferMb.max / 1000)} Gbit · hat ${fmt(se.marsRelayDownlinkKbps.min)}–${fmt(se.marsRelayDownlinkKbps.max)} kbit/sn · görev döngüsü %${fmt(se.dutyCycle.min * 100, 1)}–%${fmt(se.dutyCycle.max * 100, 1)} · tarama ${fmt(se.sweepPoints)} nokta + varsayılan`)}
+      ${row('Yer istasyonları', `${HYPOTHETICAL.groundStations.stations.map((g) => `${g.name} (${fmt(g.latDeg, 1)}°, ${fmt(g.lonDeg, 1)}°)`).join(' · ')} · en düşük yükseklik ${HYPOTHETICAL.groundStations.minElevationDeg}° · anlık devir, tek hat`)}
+      ${row('Hat hatası / yeniden iletim', `yüzey hattı %${fmt(HYPOTHETICAL.arq.surfaceLossPct, 1)}, Dünya hattı %${fmt(HYPOTHETICAL.arq.earthLossPct, 1)} (belirleyici biriktirici, rastgelelik yok) · en çok ${HYPOTHETICAL.arq.maxAttempts} deneme · Dünya hattında kopya RTT (2 × ışık gecikmesi) boyunca tamponda tutulur`)}
+      ${row('Kaydırıcı aralıkları', `tampon ${fmt(se.marsRelayBufferMb.min / 1000)}–${fmt(se.marsRelayBufferMb.max / 1000)} Gbit · hat ${fmt(se.marsRelayDownlinkKbps.min)}–${fmt(se.marsRelayDownlinkKbps.max)} kbit/sn · görev döngüsü %${fmt(se.dutyCycle.min * 100, 1)}–%${fmt(se.dutyCycle.max * 100, 1)} · hat kaybı %${fmt(HYPOTHETICAL.arq.earthLossRangePct.min)}–%${fmt(HYPOTHETICAL.arq.earthLossRangePct.max)} · tarama ${fmt(se.sweepPoints)} nokta + varsayılan`)}
     </tbody></table>`;
   }
 
@@ -184,13 +203,47 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     $('#delay-stats').textContent = `Ay: ${fmt(m0, 2)}–${fmt(m1, 2)} sn · Mars: ${fmt(a0 / 60, 1)}–${fmt(a1 / 60, 1)} dk. Eksenler ayrı grafiklerdedir (ölçekler çok farklı). Uydu yüksekliği ve yüzey yolu (varsayımsal) bu eğriye dahil değildir.`;
   }
 
+  // ---- Yer istasyonu kapsaması (pencere başına bir kez; istasyon sayısından bağımsız tüm sayılar için) ----
+  const coverageCache = new Map<number, string>();
+  async function renderCoverage(my: number, w: BlackoutWindow, idx: number) {
+    const el = $('#st-table');
+    const cached = coverageCache.get(idx);
+    if (cached) { el.innerHTML = cached; return; }
+    el.textContent = 'Hesaplanıyor…';
+    const counts = [0, ...HYPOTHETICAL.groundStations.stations.map((_, i) => i + 1)];
+    const relays = HYPOTHETICAL.relays;
+    const rows: string[] = [];
+    let surface: Record<string, number> = {};
+    for (const n of counts) {
+      await tick();
+      if (my !== token) return;
+      const see: Record<string, number> = {}, up: Record<string, number> = {}, surf: Record<string, number> = {};
+      let t = 0;
+      for (let jd = w.startJD - pad.before; jd < w.endJD + pad.after; jd += 1 / 48) {
+        t++;
+        for (const st of computeNetwork(tracks, jd, n).statuses) {
+          see[st.relay.id] = (see[st.relay.id] ?? 0) + (n === 0 || st.station ? 1 : 0);
+          up[st.relay.id] = (up[st.relay.id] ?? 0) + (st.earthLink === 'up' ? 1 : 0);
+          surf[st.asset.id] = (surf[st.asset.id] ?? 0) + (st.surfaceLink === 'up' ? 1 : 0);
+        }
+      }
+      const perRelay = (r: string) => HYPOTHETICAL.assets.filter((a) => a.relay === r).length;
+      if (n === 0) surface = Object.fromEntries(Object.entries(surf).map(([k, v]) => [k, (100 * v) / t]));
+      rows.push(`<tr><td>${n === 0 ? 'Yok (ideal)' : n}</td>${relays.map((r) => `<td>${n === 0 ? '—' : fmt((100 * see[r.id]) / t / perRelay(r.id), 1)}</td><td>${fmt((100 * up[r.id]) / t / perRelay(r.id), 1)}</td>`).join('')}</tr>`);
+    }
+    const html = `<table class="stats"><thead><tr><th>İstasyon sayısı</th>${relays.map((r) => `<th>${r.name.replace(' Aktarma Uydusu', '')}: istasyon uyduyu görüyor %</th><th>${r.name.replace(' Aktarma Uydusu', '')}: Dünya hattı açık %</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`;
+    coverageCache.set(idx, html);
+    el.innerHTML = html;
+    $('#st-hint').innerHTML = `“Görüyor”: en az bir istasyon uyduyu ${HYPOTHETICAL.groundStations.minElevationDeg}° üstünde görüyor. “Dünya hattı açık”: ayrıca uydu cismin arkasında değil ve (Mars) kavuşum kesintisinde değil. Yüzey görüşü (araç → uydu, istasyon sayısından bağımsız): ${HYPOTHETICAL.assets.map((a) => `${a.name} %${fmt(surface[a.id] ?? 0)}`).join(' · ')}.`;
+  }
+
   // ---- Zaman çizelgesi önbelleği (yalnızca Mars hattı); kaydırıcılar bağlantıları değiştirmez, bu yüzden yeniden kullanılır ----
   const tlCache = new Map<string, { topo: SchedTopology; samples: LinkSample[] }>();
   function timeline(w: BlackoutWindow, idx: number, stepSec: number) {
-    const key = `${idx}|${stepSec}`;
+    const key = `${idx}|${stepSec}|${stationCount}`;
     let t = tlCache.get(key);
     if (!t) {
-      const full = buildLinkTimeline(tracks, w.startJD - pad.before, w.endJD + pad.after, stepSec, schedTopology());
+      const full = buildLinkTimeline(tracks, w.startJD - pad.before, w.endJD + pad.after, stepSec, schedTopology(), stationCount);
       if (!full.length) throw new Error('Bağlantı çizelgesi boş: tarih aralığı veri dışında.');
       if (full.some((x) => [...x.surfaceDelaySec, ...x.earthDelaySec].some((v) => !Number.isFinite(v)))) throw new Error('Işık gecikmesi sayısal değil: konum verisi bozuk görünüyor.');
       t = restrictToRelay(schedTopology(), full, MARS_RELAY);
@@ -206,14 +259,14 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       const r = res[p];
       return [...cls.map((c) => [c.name, r.perClass[c.id]] as const), ['Toplam', r.total] as const]
         .map(([n, s]) => {
-          if (s.generated !== s.delivered + s.dropped + s.remaining) ok = false;
+          if (s.generated !== s.delivered + s.dropped + s.abandoned + s.remaining) ok = false;
           const demand = s.generated + s.suppressed;
-          return `<tr><td>${NAME[p]}</td><td>${n}</td><td>${fmt(demand)}</td><td>${fmt(s.generated)}</td><td>${p === 'strategy' ? fmt(s.suppressed) : '—'}</td><td>${fmt(s.delivered)}</td><td>${fmt(s.stored)}</td><td>${fmt(s.delayed)}</td><td class="${s.dropped ? 'bad' : ''}">${fmt(s.dropped)}</td><td>${fmt(s.remaining)}</td><td>${s.delivered ? h(s.latencyMeanSec) : '—'}</td><td>${s.delivered ? h(s.latencyP95Sec) : '—'}</td><td>${demand ? fmt((100 * s.deliveredMb) / (s.generatedMb + s.suppressedMb), 1) : '—'}</td></tr>`;
+          return `<tr><td>${NAME[p]}</td><td>${n}</td><td>${fmt(demand)}</td><td>${fmt(s.generated)}</td><td>${p === 'strategy' ? fmt(s.suppressed) : '—'}</td><td>${fmt(s.delivered)}</td><td>${fmt(s.stored)}</td><td>${fmt(s.delayed)}</td><td class="${s.dropped ? 'bad' : ''}">${fmt(s.dropped)}</td><td class="${s.abandoned ? 'bad' : ''}">${fmt(s.abandoned)}</td><td>${fmt(s.retransmissions)}</td><td>${fmt(s.remaining)}</td><td>${s.delivered ? h(s.latencyMeanSec) : '—'}</td><td>${s.delivered ? h(s.latencyP95Sec) : '—'}</td><td>${demand ? fmt((100 * s.deliveredMb) / (s.generatedMb + s.suppressedMb), 1) : '—'}</td></tr>`;
         })
         .join('');
     };
-    return `<table class="stats"><thead><tr><th>Çizelgeleyici</th><th>Sınıf</th><th>Talep</th><th>Üretilen</th><th>Üretilmeyen</th><th>Teslim</th><th>Tamponlanan</th><th>Gecikmeli</th><th>Düşen</th><th>Tamponda kalan</th><th>Ort. süre</th><th>%95 süre</th><th>Teslim %</th></tr></thead><tbody>${POLICIES.map(rows).join('')}</tbody></table>
-      <p class="hint">Paket sayıları (Teslim % hacim üzerinden, talebe oranla). <b>Talep</b> = üretilen + üretilmeyen. <b>Üretilmeyen</b>: stratejinin kıstığı, hiç üretilmeyen veri (kayıp değil). <b>Tamponlanan</b>: teslim edilmeden önce bir adımdan uzun tamponda bekleyen. <b>Gecikmeli</b>: kuyrukta ${fmt(sc.delayedAfterSec / 60)} dk'dan uzun bekleyip teslim edilen. <b>Düşen</b>: tampon taşması. Üretilen = teslim + düşen + tamponda kalan. Korunum denetimi: <span class="${ok ? 'ok' : 'bad'}">${ok ? 'tüm satırlarda tamam' : 'BOZUK — bir satırda eşitlik tutmuyor'}</span>.</p>`;
+    return `<table class="stats"><thead><tr><th>Çizelgeleyici</th><th>Sınıf</th><th>Talep</th><th>Üretilen</th><th>Üretilmeyen</th><th>Teslim</th><th>Tamponlanan</th><th>Gecikmeli</th><th>Düşen</th><th>Hatta kayıp</th><th>Yeniden gönderilen</th><th>Tamponda kalan</th><th>Ort. süre</th><th>%95 süre</th><th>Teslim %</th></tr></thead><tbody>${POLICIES.map(rows).join('')}</tbody></table>
+      <p class="hint">Paket sayıları (Teslim % hacim üzerinden, talebe oranla). <b>Talep</b> = üretilen + üretilmeyen. <b>Üretilmeyen</b>: stratejinin kıstığı, hiç üretilmeyen veri (kayıp değil). <b>Tamponlanan</b>: teslim edilmeden önce bir adımdan uzun tamponda bekleyen. <b>Gecikmeli</b>: kuyrukta ${fmt(sc.delayedAfterSec / 60)} dk'dan uzun bekleyip teslim edilen. <b>Düşen</b>: tampon taşması. <b>Hatta kayıp</b>: hat hatası yüzünden hakkı tükenen paket. <b>Yeniden gönderilen</b>: kaybolup yeniden iletilen paket sayısı. Üretilen = teslim + düşen + hatta kayıp + tamponda kalan. Korunum denetimi: <span class="${ok ? 'ok' : 'bad'}">${ok ? 'tüm satırlarda tamam' : 'BOZUK — bir satırda eşitlik tutmuyor'}</span>.</p>`;
   }
 
   function drawScenario(w: BlackoutWindow, startJD: number, topo: SchedTopology, res: Record<Policy, SimResult>) {
@@ -319,15 +372,21 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     if (lossMode === 'top') {
       lossSets = POLICIES.map((p) => line(NAME[p], COLOR[p], col((m) => m[p].topDropPct), p === 'priority' ? [6, 3] : p === 'strategy' ? [2, 2] : undefined));
       lossY = 'Telemetri düşen (%)'; lossTitle = `${meta.title}: telemetri kaybı`;
+    } else if (lossMode === 'abandoned') {
+      lossSets = POLICIES.map((p) => line(NAME[p], COLOR[p], col((m) => m[p].abandonedPct), p === 'priority' ? [6, 3] : p === 'strategy' ? [2, 2] : undefined));
+      lossY = 'Hatta kayıp (talebin %\'si)'; lossTitle = `${meta.title}: hatta kayıp`;
+    } else if (lossMode === 'retx') {
+      lossSets = POLICIES.map((p) => line(NAME[p], COLOR[p], col((m) => m[p].retransmissions), p === 'priority' ? [6, 3] : p === 'strategy' ? [2, 2] : undefined));
+      lossY = 'Yeniden gönderilen paket'; lossTitle = `${meta.title}: yeniden iletim`;
     } else if (lossMode === 'deliv') {
       lossSets = POLICIES.map((p) => line(NAME[p], COLOR[p], col((m) => m[p].deliveredPct), p === 'priority' ? [6, 3] : p === 'strategy' ? [2, 2] : undefined));
       lossY = 'Teslim edilen / talep (%)'; lossTitle = `${meta.title}: teslim edilen`;
     } else {
       lossSets = [
-        line('FIFO', C.fifo, col((m) => m.fifo.dropPct)),
-        line('Öncelikli', C.prio, col((m) => m.priority.dropPct), [6, 3]),
-        line('Strateji (düşen)', C.strat, col((m) => m.strategy.dropPct), [2, 2]),
-        line('Strateji (düşen + üretilmeyen)', C.stratLoss, col((m) => m.strategy.lossPct)),
+        line('FIFO', C.fifo, col((m) => m.fifo.dropPct + m.fifo.abandonedPct)),
+        line('Öncelikli', C.prio, col((m) => m.priority.dropPct + m.priority.abandonedPct), [6, 3]),
+        line('Strateji (düşen + hatta kayıp)', C.strat, col((m) => m.strategy.dropPct + m.strategy.abandonedPct), [2, 2]),
+        line('Strateji (+ üretilmeyen)', C.stratLoss, col((m) => m.strategy.lossPct)),
       ];
       lossY = 'Kayıp (talebin %\'si)'; lossTitle = `${meta.title}: kayıp`;
     }
@@ -345,7 +404,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
         plugins: [marker(key)],
       });
     };
-    mk(`#sw-loss-${key}`, lossSets, lossY, lossTitle, lossMode === 'total' || lossMode === 'top' ? undefined : 100);
+    mk(`#sw-loss-${key}`, lossSets, lossY, lossTitle, lossMode === 'deliv' ? 100 : undefined);
     mk(`#sw-time-${key}`, timeSets, 'Teslim süresi (gün)', `${meta.title}: ${timeLabel}`);
   }
 
@@ -353,12 +412,12 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
 
   async function runSweeps(my: number, w: BlackoutWindow, idx: number) {
     const se = HYPOTHETICAL.sensitivity;
-    const cfg = { ...schedConfig(), stepSec: se.sweepStepSec };
+    const cfg = { ...schedConfig(linkMode), stepSec: se.sweepStepSec };
     const { topo, samples } = timeline(w, idx, se.sweepStepSec);
     const status = $('#sw-status');
     for (const d of sliders) {
       const others = KEYS.filter((k) => k !== d.key).map((k) => params[k]);
-      const deps = JSON.stringify([idx, d.key, others]);
+      const deps = JSON.stringify([idx, d.key, others, stationCount, linkMode]);
       if (sweeps[d.key]?.deps === deps) { drawSweep(d.key); continue; }
       const values = sweepValues(d.min, d.max, se.sweepPoints, def[d.key]);
       const rows: PolicyMetrics[] = [];
@@ -391,7 +450,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       const t0 = performance.now();
       const startJD = w.startJD - pad.before;
       const { topo, samples } = timeline(w, idx, sc.stepSec);
-      const cfg = withParams(schedConfig(), params);
+      const cfg = withParams(schedConfig(linkMode), params);
       const res = {} as Record<Policy, SimResult>;
       for (const p of POLICIES) {
         res[p] = simulate(topo, samples, p, cfg);
@@ -401,6 +460,8 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       drawScenario(w, startJD, topo, res);
       const m = metricsOf(res.strategy, cfg);
       status.textContent = `${fmt(samples.length)} adım × 3 çizelgeleyici, ${fmt(performance.now() - t0)} ms (Mars hattı) · strateji: düşen %${fmt(m.dropPct, 1)}, üretilmeyen %${fmt((100 * m.suppressedMb) / (m.demandMb || 1), 1)}`;
+      await renderCoverage(my, w, idx);
+      if (my !== token) return;
       await runSweeps(my, w, idx);
     } catch (e) {
       // Veri bozuk/eksikse sayfa çökmesin: hatayı göster, dur.
@@ -437,6 +498,11 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     schedule(0);
   });
   $('#sc-window').addEventListener('change', () => schedule(0));
+  const lossInput = () => $<HTMLInputElement>('#sl-earthLossPct');
+  const syncLossEnabled = () => { lossInput().disabled = linkMode === 'ideal'; };
+  $<HTMLSelectElement>('#sel-stations').addEventListener('change', (e) => { stationCount = Number((e.target as HTMLSelectElement).value); token++; schedule(0); });
+  $<HTMLSelectElement>('#sel-mode').addEventListener('change', (e) => { linkMode = (e.target as HTMLSelectElement).value as LinkMode; syncLossEnabled(); token++; schedule(0); });
+  syncLossEnabled();
   for (const id of ['#sw-loss-metric', '#sw-time-metric']) $(id).addEventListener('change', () => KEYS.forEach(drawSweep));
 
   return {

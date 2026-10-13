@@ -15,9 +15,14 @@ export interface Metrics {
   suppressedMb: number;
   /** Düşen / talep (%). Kısılan (üretilmeyen) veri BURADA kayıp sayılmaz. */
   dropPct: number;
-  /** (Düşen + üretilmeyen) / talep (%). Stratejiyi haksız avantajdan koruyan, kısmayı da "kaybedilen" sayan ölçüt. */
+  /** Hatta kayıp (maxAttempts denemede iletilemeyen) / talep (%). Tampon taşması (dropPct) ile karıştırılmaz. */
+  abandonedPct: number;
+  /** Kaybolan iletim denemesi ve yeniden gönderilen paket sayısı. */
+  txLost: number;
+  retransmissions: number;
+  /** (Düşen + hatta kayıp + üretilmeyen) / talep (%). Stratejiyi haksız avantajdan koruyan, kısmayı da "kaybedilen" sayan ölçüt. */
   lossPct: number;
-  /** En önemli sınıfın (telemetri) düşen Mb / kendi talebi (%). Bu sınıf kısılmaz. */
+  /** En önemli sınıfın (telemetri) düşen + hatta kayıp Mb / kendi talebi (%). Bu sınıf kısılmaz. */
   topDropPct: number;
   /** Teslim edilen / talep (%). */
   deliveredPct: number;
@@ -39,7 +44,7 @@ export function metricsOf(r: SimResult, cfg: SchedConfig): Metrics {
   const pct = (x: number) => (demandMb > 0 ? (100 * x) / demandMb : 0);
   return {
     demandMb, deliveredMb: t.deliveredMb, droppedMb: t.droppedMb, suppressedMb: t.suppressedMb,
-    dropPct: pct(t.droppedMb), lossPct: pct(t.droppedMb + t.suppressedMb), deliveredPct: pct(t.deliveredMb), topDropPct: topDemand > 0 ? (100 * top.droppedMb) / topDemand : 0,
+    dropPct: pct(t.droppedMb), abandonedPct: pct(t.abandonedMb), txLost: t.txLost, retransmissions: t.retransmissions, lossPct: pct(t.droppedMb + t.abandonedMb + t.suppressedMb), deliveredPct: pct(t.deliveredMb), topDropPct: topDemand > 0 ? (100 * (top.droppedMb + top.abandonedMb)) / topDemand : 0,
     topP95Sec: top.latencyP95Sec, topMeanSec: top.latencyMeanSec, lowP95Sec: low.latencyP95Sec, lowMeanSec: low.latencyMeanSec,
   };
 }
