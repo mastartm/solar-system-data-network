@@ -2,7 +2,7 @@
 
 Gerçek gezegen konumlarını gösteren etkileşimli bir güneş sistemi haritası. İlerleyen aşamalarda Ay ve Mars yüzeyindeki araçların aktarma uyduları üzerinden Dünya'ya veri gönderdiği bir haberleşme ağı simülasyonu eklenecek.
 
-> **Durum: Aşama 6 (3B görünüm ve harita arayüzü: sol "Cisimler" paneli, dönen küre kartı, etiket yerleştirici, katman aç/kapa); önceki: Aşama 5 (yer istasyonu görüşü, hat hatası ve yeniden iletim, Ay Aracı A düzeltmesi; kendinden önce Aşama 4: Mars kavuşumu stratejisi, duyarlılık analizi, gerçek veriyle doğrulama).** Ağdaki araç/uydu/veri hızı/paket/tampon/strateji değerleri **varsayımsaldır**; çizelgeleyici sonuçları **gerçek bir görev sonucu değildir**. Gerçek olan yalnızca Horizons konumları, bunlardan çıkan ışık gecikmeleri ve bağlantı geometrisidir. Aşama 3 ve 4 artık depodaki **gerçek Horizons verisiyle** (2020–2040) tarayıcıda denendi; sonuçlar ve sentetik veriyle farklar [Aşama 4](#aşama-4-kavuşum-stratejisi-duyarlılık-analizi-gerçek-veri-doğrulaması) bölümünde.
+> **Durum: Aşama 7 (kapsama bilen strateji, kümelenmiş hata modeli, Ay hattı senaryosu arayüzde, dar ekran düzeni); önceki: Aşama 6 (3B görünüm ve harita arayüzü: sol "Cisimler" paneli, dönen küre kartı, etiket yerleştirici, katman aç/kapa); ondan önce Aşama 5 (yer istasyonu görüşü, hat hatası ve yeniden iletim, Ay Aracı A düzeltmesi; kendinden önce Aşama 4: Mars kavuşumu stratejisi, duyarlılık analizi, gerçek veriyle doğrulama).** Ağdaki araç/uydu/veri hızı/paket/tampon/strateji değerleri **varsayımsaldır**; çizelgeleyici sonuçları **gerçek bir görev sonucu değildir**. Gerçek olan yalnızca Horizons konumları, bunlardan çıkan ışık gecikmeleri ve bağlantı geometrisidir. Aşama 3 ve 4 artık depodaki **gerçek Horizons verisiyle** (2020–2040) tarayıcıda denendi; sonuçlar ve sentetik veriyle farklar [Aşama 4](#aşama-4-kavuşum-stratejisi-duyarlılık-analizi-gerçek-veri-doğrulaması) bölümünde.
 
 **Canlı site:** GitHub Pages açıldıktan sonra `https://mastartm.github.io/solar-system-data-network/` (Settings → Pages → Source: *GitHub Actions*).
 
@@ -10,7 +10,7 @@ Ekran görüntüleri **gerçek Horizons verisiyle** alınmıştır (`?sentetik=1
 
 ![Harita, 2028-03-21, Mars kavuşumu kesintisi](docs/harita-kavusum-gercek-veri.png)
 
-Çizelgeleyici sekmesinin görüntüleri [Aşama 4](#aşama-4-kavuşum-stratejisi-duyarlılık-analizi-gerçek-veri-doğrulaması) bölümünde.
+Çizelgeleyici sekmesinin görüntüleri [Aşama 4](#aşama-4-kavuşum-stratejisi-duyarlılık-analizi-gerçek-veri-doğrulaması) ve [Aşama 7](#aşama-7-kapsama-bilen-strateji-kümelenmiş-hata-ay-hattı-dar-ekran) bölümlerinde.
 
 ## Kurulum
 
@@ -33,6 +33,7 @@ Diğer komutlar: `npm run build` (yayın derlemesi), `npm test` (birim testler),
 - Tekerlek ve +/− düğmeleri yakınlaştırır; zoom imlecin altındaki noktaya sabit kalır. **2B** modda sürükleme kaydırır; kaydırma ve uzaklaşma sınırlıdır (harita sahneden çıkmaz) ve yakınlaşınca ağ ayrıntısı (araç/uydu etiketleri, bağlantılar) görünür (PR [#5](https://github.com/mastartm/solar-system-data-network/pull/5)).
 - **3B** düğmesi eğik görünüme geçer: sürükleyerek döndürün (Shift+sürükleme kaydırır). 3B'de gezegenlerin ekliptik düzlemden sapması 3 kat abartılır (görünsün diye).
 - **Sol panel (Aşama 6):** "Cisimler" listesi ve "Katmanlar"; ayrıntı için [Aşama 6](#aşama-6-3b-görünüm-ve-harita-arayüzü).
+- **Dar ekran (≤ 700 px, Aşama 7):** alt kontroller tek satırdır (oynat, tarih çubuğu, tarih); **⋯** düğmesi hız, Bugün, 2B/3B, zoom, tutulma ve Mars kavuşumu düğmelerini açar. Sağdaki bilgi/ağ paneli **"Bilgi ve ağ durumu ▸"** çubuğuyla katlanır (başlangıçta kapalı); sol "Cisimler" paneli eskisi gibi katlanır. Ayrıntı: [Aşama 7](#4-dar-ekran-düzeni).
 - **Tutulmalar:** kaydırıcının üstündeki noktalar tutulmaları gösterir (sarı: güneş, mavi: Ay; dolu: tam/halkalı, boş: kısmi/yarıgölge). Noktaya veya "Tutulmalar" listesine tıklayınca o tarihe gider; ◀ ▶ düğmeleri önceki/sonraki tutulmaya atlar.
 
 ## Aşama 2: veri ağı (varsayımsal)
@@ -215,8 +216,8 @@ Hatta kayıp (yeniden iletimsiz mod, öncelikli): Mars'ta talebin %4,0'ı, Ay'da
 - 3 istasyonla Mars'ta ARQ'nun etkisi kayıpsız moda göre ihmal edilebilir (teslim farkı < %0,1).
 
 ### Beklenmedik ve dikkat edilecekler
-1. **Strateji yer istasyonu kapsamasını bilmez:** bütçeyi yalnızca boş tampondan hesaplar, kavuşum sonrası boşaltma kapasitesini (hat açık oranı) hesaba katmaz. 1 istasyonda (hat %21 açık) kavuşum sonrası yine taşar (strateji düşeni %1,3 → %13,4). Düzeltilmedi; sonraki aşama adayı.
-2. **Belirleyici kayıp periyodiktir:** her 20. deneme kaybolur (%5). Gerçek hatalar rastgele ve kümelidir (kümelenmiş, art arda kayıplar); bu yüzden burada `maxAttempts` aşımı gerçekçi olandan çok daha az görülür ve yeniden iletimin kayıp kurtarma başarısı iyimserdir.
+1. **Strateji yer istasyonu kapsamasını bilmez:** bütçeyi yalnızca boş tampondan hesaplar, kavuşum sonrası boşaltma kapasitesini (hat açık oranı) hesaba katmaz. 1 istasyonda (hat %21 açık) kavuşum sonrası yine taşar (strateji düşeni %1,3 → %13,4). Düzeltilmedi; sonraki aşama adayı. **→ Aşama 7'de ele alındı** (kapsama bilen strateji; düşen %13,4 → %2,8, ama toplam kayıp/teslim iyileşmedi).
+2. **Belirleyici kayıp periyodiktir:** her 20. deneme kaybolur (%5). Gerçek hatalar rastgele ve kümelidir (kümelenmiş, art arda kayıplar); bu yüzden burada `maxAttempts` aşımı gerçekçi olandan çok daha az görülür ve yeniden iletimin kayıp kurtarma başarısı iyimserdir. **→ Aşama 7'de kümelenmiş model eklendi; tahmin doğrulandı** (aynı ortalama kayıpla hatta kayıp 0–2 → 122–267 paket).
 3. **Yüzey hattında RTT yok sayıldı** (5–9 bin km ≈ 20–30 ms ≪ adım 300 sn); uydu → Dünya hattında ise tam RTT var. ACK/NAK kendi hattında kayıpsız ve anlıktır (varsayım).
 4. **Kapsama tablosu 30 dk adımlıdır;** kısa (<30 dk) görüş boşlukları kaçabilir.
 5. **Dünya küresel,** GMST UT1≈TDB varsayımıyla (~1 dk ≈ 0,3° fark); istasyon görüşü için yeterli, yükseklik eşiğinde 0,3° belirsizlik var. Atmosfer, kırılma, anten kısıtları, hava, bakım ve zamanlama çakışmaları yok; üç istasyon sürekli kullanılabilir varsayılır.
@@ -271,7 +272,7 @@ Sol panel, kart (10 cisim), etiketler (Dünya–Ay ve Mars bölgesinde yakınla�
 2. **Doku, gerçek yüzey değildir:** Dünya'daki kıtalar gerçek haritayı değil gürültüyü izler; Jüpiter'in Büyük Kırmızı Leke'si ve Neptün'ün koyu lekesinin konumu sabit, gerçek boylamla ilgisiz. Dönme hızı üsluptur (gerçek dönme periyodunun karekökü ile ölçeklenir; 20–80 sn/tur). Ters dönenler (Venüs 177°, Uranüs 98°) eşdeğer eğikliğe indirgenip dönüş yönü çevrilerek çizilir; kuzey/güney çizimde ters görünebilir.
 3. **Uydu sayıları (≥ 95 / 274 / 28 / 16) hafızadan** yazıldı ve zamanla artar; kaynağı doğrulanmadı. Diğer değerler de öyle (ekranda belirtilir). Ay için "Güneş'e uzaklık" Dünya'nınkiyle aynıdır (ekranda belirtilir).
 4. **Haritadaki gölge** ekran düzleminde Güneş yönünü kullanır (3B'de derinlik bileşeni yok sayılır); şematiktir.
-5. **Dar ekran** düzeni önceki aşamalardaki gibi sıkışık: sol panel katlanır ama alt kontroller yüksek olduğundan harita küçük kalır. İyileştirilmedi.
+5. **Dar ekran** düzeni önceki aşamalardaki gibi sıkışık: sol panel katlanır ama alt kontroller yüksek olduğundan harita küçük kalır. İyileştirilmedi. **→ Aşama 7'de düzeltildi** (asıl neden canvas `min-height:auto`; ayrıntı Aşama 7, bölüm 4).
 6. **Yörünge çizgileri anahtarı** 3B başvuru halkalarını da kapatır (ayrı anahtar yapılmadı; karar).
 7. **Etiket yerleştirici çıkıntı çizgileri** pratikte nadiren görünür (yakın adaylar çoğu zaman yeter); testte zorlanarak doğrulandı.
 8. Sol panelde seçim değişince satır görünür alana kaydırılır; bu yüzden "Katmanlar" kutusu yukarı kayabilir.
@@ -280,6 +281,152 @@ Sol panel, kart (10 cisim), etiketler (Dünya–Ay ve Mars bölgesinde yakınla�
 - Yeni bağımlılık, Web Worker veya GitHub Actions iş akışı eklenmedi; Three.js yok.
 - Yeni varsayımsal değer eklenmedi (sayılar mevcut `hypothetical.ts`'ten türetilir); fiziksel bilgiler `bodyFacts.ts`'te, varsayımsal değildir ama doğrulanmamıştır.
 - Unit testler sentetiktir (testte yazılı). `npm test`: 75 test.
+
+## Aşama 7: kapsama bilen strateji, kümelenmiş hata, Ay hattı, dar ekran
+
+> Her şey **varsayımsaldır** (`src/config/hypothetical.ts`; ekranda "Varsayımsal değerler" yazar); sonuçlar **gerçek bir görev sonucu değildir.** Gerçek olan: Horizons konumları, ışık gecikmeleri, geometri. Birim testler **sentetiktir** (testte yazılı). Aşağıdaki sayılar depodaki **gerçek Horizons dosyalarıyla** (`public/data/`, dokunulmadı; Horizons'a erişilmedi; `?sentetik=1` kullanılmadı) tarayıcıda ve `scripts/asama7-sonuclar.ts` betiğiyle (`npx vite-node scripts/asama7-sonuclar.ts [kapsama|tum-pencereler|ufuk|havuz|hata|hat-ayrimi|ay]`) alındı; ikisi aynı sayıları verir. Kaydırma/zoom (PR [#5](https://github.com/mastartm/solar-system-data-network/pull/5)), 3B'de Güneş'e göre referans, Aşama 6 sol paneli, küre kartı, etiket yerleştirici ve katmanlar ile Aşama 3–5'in çizelgeleyicileri (FIFO, öncelikli, strateji) ve sayıları **değişmedi** (Aşama 5 tablosundaki 1 istasyon/strateji sayıları — düşen %13,4, teslim %41,1 — birebir yeniden üretildi).
+
+### Nasıl kullanılır (Çizelgeleyici sekmesi)
+- **Hat:** *Mars aktarma hattı (kavuşum penceresi)* ya da yeni **Ay aktarma hattı (tarih aralığı, kavuşum yok)**. Ay'da başlangıç tarihi (veri aralığı içinde) ve süre (7/14/30/60 gün) seçilir; varsayılan 2028-03-03, 60 gün. Kaydırıcılar seçili hattın uydu tamponunu ve Dünya hat hızını değiştirir (Ay için ayrı aralıklar, `HYPOTHETICAL.sensitivity.moon*`).
+- **Hat modu:** dördüncü seçenek **Kümelenmiş hata + yeniden iletim** (aynı ortalama kayıp, iki durumlu dağılım).
+- Karşılaştırma tabloları ve grafikler artık **dört** çizelgeleyiciyi gösterir (Ay'da ikisini: kavuşum yok, stratejiler kısma yapmaz): FIFO, öncelikli, strateji (Aşama 4, değişmedi) ve **kapsama bilen strateji** (mor).
+- Yeni bölümler: **(d) Yer istasyonu sayısına göre karşılaştırma** (1, 2, 3 istasyon; düşen ve düşen+üretilmeyen sütunları + tablo) ve **(e) Hata modeli: periyodik ve kümelenmiş**. Duyarlılık taraması **(f)** oldu (eski (d)).
+
+![Mars: istasyon sayısına göre karşılaştırma](docs/asama7-istasyon-karsilastirma-mars.png)
+![Mars, 1 istasyon: kavuşumda uydu tamponu (dört çizelgeleyici)](docs/asama7-tampon-1-istasyon.png)
+![Mars, 1 istasyon: sınıf tablosu](docs/asama7-karsilastirma-1-istasyon.png)
+
+### 1. Kapsama bilen strateji (`'coverage'` politikası)
+
+**Varsayım (öncelikle):** bağlantı takvimi **önceden bilinir**: yörünge, Dünya dönüşü, yer istasyonu görüşü, kavuşum öngörülebilir; ayrıca hattın ortalama kaybı bilinir. Gerçek bir görevin bunu ne kadar doğru bildiğini bilmiyorum; tahmin hatası modellenmedi. Eski strateji de kesinti takvimini biliyordu; yeni olan **kapsamanın** (uyduyu gören istasyonlar, hat açık süresi) önceden bilinmesidir.
+
+**Nasıl çalışır** (`scheduler.ts`): kesintiye `lookaheadDays` (1) kala, kesinti boyunca ve bittikten sonra `recoveryDays` (30) boyunca, her araç için tampon "havuzu" (araç tamponu + uydu tamponunun hız oranındaki payı) **ileriye doğru izlenir**: Dünya hattı açıkken hat hızı × payı × (1 − ortalama kayıp) hızıyla boşalır, kapalıyken (kavuşum, istasyon görmüyor, cisim arkası) boşalmaz; tepe doluluk havuzun `margin` (0,9) oranını aşmayacak en büyük bilim verisi üretim çarpanı ikili aramayla bulunur. Telemetri kısılmaz; kısılan veri "üretilmeyen"dir (kayıp değil). Eski strateji (`'strategy'`) olduğu gibi durur; yalnızca boşaltma terimi ve toparlanma ufku yenidir. Çarpan 1800 sn'de bir yenilenir (yalnızca hesap maliyeti için; sonuçlar her adımda yenilemeyle aynı çıktı).
+
+Parametreler `HYPOTHETICAL.coverageStrategy`: `lookaheadDays`, `recoveryDays`, `margin`, `minFactor`, `assetBufferShare` (araç tamponunun havuza katılan oranı; 1 = Aşama 4 ile aynı havuz, böylece karşılaştırma yalnızca boşaltma kapasitesi terimini ölçer).
+
+**Sonuçlar** (2028-03-08 penceresi, Mars hattı, hatalı hat + yeniden iletim [periyodik], 300 sn adım; hücre: düşen % / düşen + üretilmeyen % / teslim %; **varsayımsal**):
+
+| İstasyon | Hat açık % | FIFO | Öncelikli | Strateji (Aşama 4) | Kapsama bilen strateji |
+|---|---|---|---|---|---|
+| 1 | 21,6 | 47,0 / 47,0 / 41,0 | 47,1 / 47,1 / 41,1 | 13,4 / 47,1 / 41,1 | **2,8** / 48,9 / 41,1 |
+| 2 | 36,9 | 32,4 / 32,4 / 67,2 | 32,6 / 32,6 / 67,0 | 1,6 / 33,7 / 65,9 | **0,8** / 34,6 / 65,0 |
+| 3 | 48,2 | 32,2 / 32,2 / 67,6 | 32,2 / 32,2 / 67,6 | 1,3 / 33,3 / 66,5 | **0,7** / 34,3 / 65,5 |
+
+Üretilmeyen %: strateji 33,7 / 32,0 / 32,0, kapsama bilen 46,1 / 33,7 / 33,6 (1 / 2 / 3 istasyon).
+
+Aynı karşılaştırma 9 kavuşum penceresinde, **1 istasyon**, düşen % (öncelikli → strateji → kapsama bilen) ve kapsama bilen stratejinin düşen + üretilmeyen %'si (öncelikli/strateji: aynı değer):
+
+| Pencere | Öncelikli düşen | Strateji düşen | Kapsama bilen düşen | Kapsama bilen düşen+üretilmeyen (diğerleri) | Teslim % |
+|---|---|---|---|---|---|
+| 2021-09-29 | 44,7 | 22,3 | 2,5 | 46,8 (44,7) | 41,8 |
+| 2023-11-08 | 52,8 | 26,8 | 2,9 | 54,8 (52,8) | 34,2 |
+| 2025-12-29 | 54,3 | 24,5 | 3,2 | 56,1 (54,3) | 33,7 |
+| 2028-03-08 | 47,1 | 13,4 | 2,8 | 48,9 (47,1) | 41,1 |
+| 2030-05-13 | 38,3 | 9,6 | 2,2 | 39,6 (38,3) | 50,3 |
+| 2032-07-01 | 33,4 | 10,4 | 2,0 | 35,2 (33,4) | 53,3 |
+| 2034-08-10 | 35,7 | 15,0 | 2,3 | 37,7 (35,7) | 50,3 |
+| 2036-09-15 | 40,9 | 19,9 | 2,3 | 42,9 (40,9) | 45,3 |
+| 2038-10-23 | 49,9 | 25,8 | 2,8 | 52,0 (49,9) | 36,7 |
+
+**Duyarlılık** (2028, düşen % / düşen + üretilmeyen % / teslim %):
+
+| Parametre | 1 istasyon | 3 istasyon |
+|---|---|---|
+| Toparlanma ufku 0 / 3 / 7 / 14 / 21 / **30** gün | 11,9 / 47,1 · 10,6 / 47,4 · 9,1 / 47,6 · 6,5 / 47,6 · 4,6 / 47,9 · **2,8 / 48,9** (teslim hepsinde 41,1) | 0,7 / 34,2–34,3 hepsinde (teslim 65,5) |
+| Araç tamponu payı 0 / 0,5 / **1** | 0,0 / 50,3 · 0,3 / 49,6 · **2,8 / 48,9** (teslim 41,1) | 0,0 / 36,5 / 63,3 · 0,2 / 35,5 / 64,3 · **0,7 / 34,3 / 65,5** |
+
+**Okuma (varsayımsal modelde):**
+- Kapsamayı bilmek **düşeni 3–5 kat azaltır** (1 istasyonda 13,4 → 2,8; 2–3 istasyonda ≈ yarıya) ve düşenin neredeyse tamamını "üretilmeyen"e çevirir. **Ama toplam kaybı ve teslim edilen hacmi iyileştirmez:** 1 istasyonda teslim aynıdır (41,1; hat kapasitesi sınırlayıcı), 2–3 istasyonda toplam kayıp ≈ 1 puan *artar* (34,3 vs 33,3) ve teslim ≈ 1 puan *azalır* (65,5 vs 66,5), çünkü taşmayı daha sıkı önleyip daha çok kısar. Aşama 4'ün sonucu burada da geçerlidir: strateji hangi verinin ve hangi aşamada kaybolduğunu değiştirir, hacmi artırmaz.
+- Neden **1 istasyonda** eski strateji yetmedi: kavuşumdan sonra hat zamanın %21,6'sında açık; ortalama boşaltma (~52 kbit/sn) üretimin (125 kbit/sn) altındadır, yani kavuşumdan sonra da tampon dolu kalır. Kapsama bilen strateji bunu gördüğü için kavuşumdan *sonra* da kısmaya devam eder (toparlanma ufku büyüdükçe düşen azalır: 11,9 → 2,8); ufuk 30 günden (senaryonun sonu) uzun tutulmadı.
+- **Kalan düşen** (%0,7–2,8) uydu tamponu doyunca telemetri paketinin daha düşük sınıfı **atarak** girmesinden gelir (öncelikli kural; Aşama 4'te de böyleydi). `assetBufferShare = 0` (yalnızca uydu tamponu bütçelenir) düşeni 0'a indirir ama ≈ 2 puan daha çok kısar; varsayılan 1 seçildi çünkü Aşama 4 ile aynı havuzla adil karşılaştırma verir. Hangisinin tercih edileceği bir maliyet kararıdır (bilmiyorum).
+
+### 2. Kümelenmiş hata modeli (Gilbert–Elliott benzeri, belirleyici)
+- **Model:** her hat (her araç→uydu yüzey hattı, her uydu→Dünya hattı) için adım adım iki durumlu (iyi/kötü) bir zincir üretilir (`genLinkStates`). **Rastgelelik yok:** durum geçişleri ve kayıp çekilişleri kendi yazdığım, sabit tohumlu `mulberry32` üretecinden gelir (`HYPOTHETICAL.arq.burst.seed`); aynı girdi aynı sonucu verir (testli). Kötü durumun uzun dönem oranı, hattın **ortalama kaybı** (yüzey %1, Dünya kaydırıcısı %5) iyi/kötü durum kayıplarının karışımı olacak şekilde seçilir; yani **ortalama kayıp periyodik modelle aynıdır, yalnızca dağılımı farklıdır**. Zincir **zamana** bağlıdır (denemeye değil): kaybolan bir paketin yeniden denemesi RTT kısaysa büyük olasılıkla aynı kötü durumda kalır — periyodik modelde bu hiç olmuyordu.
+- **Parametreler** (`HYPOTHETICAL.arq.burst`, uydurma): iyi durum kaybı %0,5, kötü durum kaybı %80, kötü durumun ortalama süresi 30 dk, tohum 20281031. Başlangıç durumu iyi.
+- **Hat modu** olarak seçilir ("Kümelenmiş hata + yeniden iletim"); `maxAttempts` 4 aynı. (e) bölümü seçili senaryo ve istasyon sayısı için *yeniden iletimsiz*, *periyodik* ve *kümelenmiş* modları yan yana verir (öncelikli çizelge).
+
+**Sonuçlar** (3 ve 1 istasyon, öncelikli, 300 sn adım; **varsayımsal**). "Hatta kayıp paket" = `maxAttempts` (4) denemede iletilemeyen:
+
+| Senaryo | İst. | Mod | İletim denemesi | Kaybolan deneme % (iki hat) | En uzun art arda kayıp | Yeniden gönderilen | **Hatta kayıp paket** | Teslim % |
+|---|---|---|---|---|---|---|---|---|
+| Mars 2028 | 3 | periyodik | 288.296 | 3,03 | 1 | 8.732 | **0** | 67,6 |
+| Mars 2028 | 3 | kümelenmiş | 289.372 | 3,56 | 30 | 10.042 | **267** (%0,06) | 67,5 |
+| Mars 2028 | 1 | periyodik | 275.591 | 2,99 | 1 | 8.245 | **2** | 41,1 |
+| Mars 2028 | 1 | kümelenmiş | 274.130 | 2,67 | 30 | 7.060 | **266** (%0,06) | 41,0 |
+| Ay 2028-03-03, 60 g | 3 | periyodik | 45.749 | 3,04 | 1 | 1.390 | **0** | 99,9 |
+| Ay 2028-03-03, 60 g | 3 | kümelenmiş | 46.380 | 4,73 | 28 | 2.046 | **146** (%0,28) | 99,6 |
+| Ay 2028-03-03, 60 g | 1 | periyodik | 43.859 | 3,02 | 1 | 1.324 | **0** | 73,2 |
+| Ay 2028-03-03, 60 g | 1 | kümelenmiş | 44.133 | 3,88 | 28 | 1.592 | **122** (%0,35) | 73,3 |
+
+**Okuma:**
+- **Aynı ortalama kayıpla `maxAttempts` aşımı 0–2 pakette → 122–267 pakete çıktı:** periyodik modelde her 20. deneme kaybolduğu için aynı paket art arda 4 kez hiç kaybolmaz (en uzun art arda kayıp 1); kümelenmiş modelde 28–30 deneme art arda kaybolur. Yani Aşama 5'teki "yeniden iletim kaybı neredeyse tamamen kurtarır" sonucu **iyimserdi** (Aşama 5, "Beklenmedik" 2'deki tahmin doğrulandı), ama büyüklüğü küçük kalır (%0,06–0,35).
+- **Kaybın hangi hattan geldiği RTT'ye bağlı** (betik `hat-ayrimi`, 3 istasyon): Mars'ta 267 paketin **250'si yüzey hattından** (RTT ≈ 0, yeniden deneme aynı adımda, aynı kötü durumda) ve yalnızca **17'si Dünya hattından** (RTT ~40 dk ≳ kötü durumun ortalama süresi 30 dk, yeniden deneme çoğu zaman kötü durumdan sonra); 1 istasyonda 260 / 6. Ay'da 146 paketin **121'i Dünya hattından** (RTT ~3 sn ≪ 30 dk: yeniden deneme aynı kötü durumda), 25'i yüzeyden; 1 istasyonda 31 / 91. Arayüzde (e) tablosundaki "…yüzey / Dünya hattı" sütunu bunu gösterir.
+- Kaybolan deneme oranı nominalden sapar (2,7–4,7 %, periyodik %3,0; oranlar iki hattın tüm denemelerinin payıdır, Dünya hattı %5 nominal): kötü durumda kaybolan paketler yeniden denendiği için denemeler kötü durumda aşırı temsil edilir, ve 60 günde yalnızca ~100–170 kötü durum dönemi örneklenir (deterministik sapma).
+- Teslim edilen hacim neredeyse değişmez (Mars 67,6 → 67,5; Ay 99,9 → 99,6): hata modeli bu varsayımlarda hacmi değil, *hangi paketlerin kalıcı kaybolduğunu* etkiler.
+
+![Mars: hata modeli karşılaştırması](docs/asama7-hata-modeli-mars.png)
+![Ay: hata modeli karşılaştırması](docs/asama7-ay-hata-modeli.png)
+
+### 3. Ay hattı senaryosu (arayüz)
+- Çizelgeleyici sekmesinde **Hat → Ay aktarma hattı**. Ay'da kavuşum yok; senaryo, seçilen **tarih aralığı** (başlangıç + 7/14/30/60 gün) boyunca Ay aktarma uydusu + 2 araçtır. Yer istasyonu kapsama tablosu, istasyon karşılaştırması, hata modeli ve duyarlılık taraması Ay için de çalışır; tampon grafiğinde gölgeli alanlar Dünya hattının kapalı olduğu zamanlardır (istasyon görmüyor ya da Ay'ın arkasında). Stratejiler Ay'da kısma yapmaz (öncelikliyle birebir aynı, testli) ve gösterilmez.
+- **Gerçek veriyle** (2028-03-03, 60 gün, hatalı hat + yeniden iletim, 300 sn; **varsayımsal**). Aşama 5'in README tablosuyla uyumludur (pencere 61 → 60 gün olduğundan küçük fark):
+
+| İstasyon | Uyduyu görüyor % | Dünya hattı açık % | FIFO düşen / teslim % | Öncelikli düşen / teslim % | Telemetri %95 süre (FIFO / öncelikli) |
+|---|---|---|---|---|---|
+| 1 | 42,6 | 37,4 | 24,2 / 72,8 | 23,9 / 73,2 | 4,9 gün / 0,7 gün |
+| 2 | 73,2 | 64,6 | 0,0 / 99,9 | 0,0 / 99,9 | 0,5 / 0,4 gün |
+| 3 | 98,5 | 87,0 | 0,0 / 99,9 | 0,0 / 99,9 | 0,2 / 0,2 gün |
+
+- **Okuma:** Ay hattında belirleyici olan **yer istasyonu kapsamasıdır**: 1 istasyonda hat %37 açık, tampon (2 Gbit) her boşlukta dolup taşar (düşen ≈ %24), 2 istasyonda kayıp ortadan kalkar. Öncelikli çizelge burada FIFO'ya göre yalnızca telemetri süresini düşürür (4,9 → 0,7 gün) ve düşenden telemetriyi korur. ARQ etkisi küçüktür ama (e) bölümünde görülür: kümelenmiş hatada hatta kayıp %0,28–0,35.
+- **Tarih aralığına duyarlıdır:** aynı hat 2030-06-01, 30 gün, 1 istasyon: teslim %74,6, düşen %20,3 (2028'de 73,2 / 23,9). Tek bir aralıktan genelleme yapmayın.
+
+![Ay: ayarlar](docs/asama7-ay-ayarlar.png)
+![Ay: istasyon sayısına göre karşılaştırma](docs/asama7-ay-istasyon-karsilastirma.png)
+![Ay: Dünya hattı kapalıyken tampon](docs/asama7-ay-tampon.png)
+![Ay: yer istasyonu kapsaması](docs/asama7-ay-yer-istasyonu.png)
+
+### 4. Dar ekran düzeni
+- **Asıl neden Aşama 6'da yazdığımdan farklıydı** ("alt kontroller yüksek"): ≤ 700 px'te `#map` canvas'ının `height` niteliği (kendi ölçüsüne eşitlenir) flex `min-height:auto` yüzünden **haritanın küçülmesini engelliyordu**. 420×860'da `main` 324 px iken canvas 667 px kalıyor, alt çubuğun arkasına taşıyor (Güneş ve iç gezegenler görünmüyordu) ve bilgi/ağ paneli (`#side`) ekranın dışına itiliyordu: **bilgi paneli ve küre kartı dar ekranda hiç erişilemiyordu.** `#map { min-height:0 }` ile çözüldü.
+- **Düzen (≤ 700 px):** alt kontroller **tek satır** (▶ Oynat · tarih çubuğu · tarih · **⋯**); **⋯** hız, Bugün, 2B/3B, zoom, tutulma ve Mars kavuşumu düğmelerini açar/kapar (başlangıçta kapalı). Başlık küçüldü (Konumlar notu dar ekranda gizli; "Varsayımsal değerler" rozeti duruyor). Bilgi/ağ paneli **"Bilgi ve ağ durumu ▸"** çubuğuyla katlanır (başlangıçta kapalı). Sol "Cisimler" paneli eskisi gibi başlangıçta katlı ve ▸/▾ ile açılır. Tarih etiketi bilgi paneli açıkken gizlenir (örter). 701 px ve üstünde masaüstü düzeni **değişmedi**.
+- **Ölçü (420×860, gerçek veri):** harita yüksekliği görünür ≈ 280 px → **681 px**; alt çubuk 415 → **43 px**; başlık 121 → 60 px. ⋯ açıkken harita 509 px, bilgi açıkken 350 px. 360×740'ta harita 539 px; 700/701 sınırı denendi.
+- Dar ekranda Çizelgeleyici sekmesinin başlığı sığıyor; sayfa yatay taşmıyor (`scrollWidth` = 420), geniş tablolar kendi içinde kayıyor.
+
+![420 px, kapalı kontroller](docs/asama7-dar-ekran-kapali.png)
+![420 px, ⋯ ile açılan kontroller](docs/asama7-dar-ekran-kontroller.png)
+![420 px, bilgi ve ağ paneli açık](docs/asama7-dar-ekran-bilgi.png)
+![420 px, sol Cisimler paneli açık](docs/asama7-dar-ekran-sol-panel.png)
+![420 px, Çizelgeleyici](docs/asama7-dar-ekran-cizelgeleyici.png)
+
+### Gerçek veriyle doğrulama (Playwright/Chromium, `vite preview`, `?sentetik=1` yok)
+Denendi: kapsama bilen strateji (1/2/3 istasyon, 2028 penceresi), kümelenmiş hata modu (Mars ve Ay), Ay hattı senaryosu (başlangıç tarihi/süre değişimi dahil), dar ekran (420, 360, 700/701), harita sekmesinde Aşama 6 özellikleri (10 cisim satırı, kart, 5 katman anahtarı ve `localStorage`, zoom, 2B/3B sürükleme, Mars kavuşumu düğmeleri ardışık pencerelere gidiyor, Çizelgeleyici sekmesine gidip dönme, 60 kare/sn). **Konsolda hata/uyarı yok** (tüm akışlarda).
+- **Hesap süresi** (tarayıcıda, parçalı: her çizelgeleyici/istasyon/mod/tarama noktası ayrı `setTimeout` parçası, sayfa o sırada girdiye yanıt verir; `PerformanceObserver` `longtask` ile ölçüldü):
+  - **Mars, ilk açılış** (3 istasyon, hatalı hat + yeniden iletim): toplam ≈ **14–15 sn** (senaryo 0,5–0,8 sn [4 çizelgeleyici], kapsama tablosu 0,06 sn, **istasyon karşılaştırması 1,7–2,2 sn**, **hata modeli 0,4–0,5 sn**, duyarlılık taraması 10,8–11,8 sn). Aşama 5'te ilk açılış ≈ 10 sn idi; artışın nedeni dördüncü çizelgeleyici (taramada 5 → 6 sonuç/nokta) ve iki yeni bölüm. Önbellek: istasyon sayısı seçimi değişince istasyon karşılaştırması yeniden hesaplanmaz (9 ms; zaten 1/2/3'ü kapsar), hat modu değişince hata modeli tablosu yeniden hesaplanmaz (1 ms; üç modu zaten içerir); kaydırıcı değişince ikisi de yeniden hesaplanır.
+  - **En uzun tek görev: 229–396 ms** (çoğunlukla 300 sn adımlı tek bir çizelgeleyici çalıştırması ya da ilk çizim; ilk açılışta 396 ms, Chart.js'in ilk yüklenmesi dahil); Aşama 4–5'te ≈ 150–280 ms'ydi. Sayfa donmuyor ama kısa takılmalar (~0,3–0,4 sn) olabilir. Kapsama bilen stratejinin ileri projeksiyonu 1800 sn'de bir yenilenir; yenilenmeseydi tek çalıştırma ≈ 0,7 sn olurdu.
+  - **Ay hattı:** toplam 1,3–2,6 sn, en uzun görev 51–114 ms.
+- Harita ekran görüntüleri (masaüstü, 3B): ![](docs/asama7-harita-masaustu.png) ![](docs/asama7-harita-3b.png)
+
+### Testler
+`npm test`: **89 test** (önce 75). Yeni (hepsi **sentetik**: uydurma tek araçlı topoloji, uydurma hızlar ve kayıplar, testte yazılı): kapsama bilen strateji (kesinti işareti yokken öncelikliyle birebir aynı; zayıf kapsamada eski strateji taşarken yenisi çok daha az düşürür ve daha çok kısar; tam kapsamada aşırı kısmaz; telemetri kısılmaz/düşmez; **korunum ve talep denklemleri**; toparlanma ufku tekdüzeliği; belirleyicilik, girdiyi değiştirmeme; ARQ varken korunum; `runPolicies` kısayolunun gerçek hesapla aynılığı), üreteç ve durum zinciri (belirleyicilik, kötü oran ve ortalama süre hedefe yakın), kümelenme (periyodik modelde en uzun art arda kayıp ≤ 1, kümelenmişte çok daha uzun; `maxAttempts` aşımı; uzun RTT'nin yeniden denemeyi kurtarması; kaybın yüzey/Dünya ayrımı; tohum değişince dizi değişir), ARQ + küçük tampon + kapsama stratejisi + kümelenmiş hata birlikte korunum. Mevcut testlere dokunulmadı; yalnızca `SweepParams` alan adları değişti (aşağıda).
+
+### Beklenmedik ve dikkat edilecekler
+1. **Dar ekran sorunu başka bir yerdeydi** (yukarıda): Aşama 6'daki teşhisim ("alt kontroller yüksek") eksikti; canvas'ın `min-height:auto` davranışı haritayı alt çubuğun arkasına itiyor ve bilgi panelini erişilemez yapıyordu.
+2. **Kapsama bilen strateji toplam kaybı iyileştirmedi:** düşeni azaltır, üretilmeyeni artırır; 2–3 istasyonda toplam kayıp ≈ +1 puan, teslim ≈ −1 puan (yukarıda). "Düşen" tek başına bakılırsa strateji çok başarılı görünür; **"düşen + üretilmeyen"** ve teslim sütunlarıyla birlikte okuyun.
+3. **Kalan düşenin kaynağı** uydu tamponu doygunluğunda telemetrinin düşük sınıfı atmasıdır (öncelikli kural); `assetBufferShare = 0` bunu 0'a indirir ama daha çok kısar.
+4. **Kümelenmiş modelde gerçekleşen kayıp oranı nominalden sapar** (yukarıda): "ortalama kayıp aynı" parametre düzeyinde doğrudur, gerçekleşen oran değil. Ayrıca zincir adım zamanıyla (300 sn; taramada 1800 sn) ayrıklaştırılır; meanBadSec ≥ adım olduğu sürece ortalama doğrudur, sayılar iki adım arasında küçük sapabilir.
+5. **`maxAttempts` aşımı yüzey hattında baskındır** (Mars): yüzey hattında yeniden deneme aynı adımda yapıldığından (RTT ≈ 0 varsayımı, Aşama 5) kötü durumda kalır. Gerçek bir yüzey hattında yeniden deneme aralığı ve kısa süreli bozulmalar farklı olabilir; bilmiyorum.
+6. **Hesap süresi arttı:** ilk açılış ≈ 10 → 14–15 sn, en uzun tek görev ≈ 280 → 396 ms (dört çizelgeleyici + istasyon karşılaştırması + hata modeli); parçalı olduğu için sayfa donmuyor. Ay hattı çok daha hafif (≈ 2 sn). Web Worker eklenmedi (kural gereği sorulmadan eklenmez); gerekirse bir sonraki adımda önerilir.
+7. **Ay senaryosunda strateji yok:** `strategy` ve `coverage` yalnızca kavuşum kesintisini (`earthBlackout`) kullanır; Ay'da istasyon boşlukları (öngörülebilir kapalı hat) için akış kontrolü yapmaz. Bu bir sınırlama; sonraki aşama adayı.
+8. **`SweepParams` alanları yeniden adlandırıldı** (`marsRelayBufferMb` → `relayBufferMb`, `marsRelayDownlinkKbps` → `relayDownlinkKbps`; `defaultParams`/`withParams`/`runPolicy`/`sweepPoint` hangi uydu için kullanılacağını isteğe bağlı `relayId` ile alır, varsayılan Mars): davranış aynı, Mars sayıları aynı; yalnızca testlerde anahtar adları güncellendi.
+9. **Bölüm harfleri değişti:** duyarlılık taraması (d) → (f); eski bölümlerdeki "(d)" anılar Aşama 4–5 metinlerinde tarihsel olarak kaldı.
+10. **Kapsama bilen strateji ortalama kaybı bilir** (periyodik ya da kümelenmiş; aynı ortalama) ve ARQ kopyalarının RTT boyunca tamponda yer tutmasını yok sayar (iyimser).
+11. **Sentetik veriyle ekran görüntüsü konmadı;** birim testler sentetiktir ve testte yazılıdır.
+
+### Kararlar
+- Yeni dış bağımlılık, Web Worker veya GitHub Actions iş akışı eklenmedi; Chart.js dışında bağımlılık yok. `scripts/asama7-sonuclar.ts` yalnızca `public/data/` dosyalarını okur (Horizons'a erişmez), `vite-node` (vitest ile birlikte gelir) ile çalışır.
+- Yeni varsayımsal değerlerin hepsi `hypothetical.ts` içindedir: `coverageStrategy`, `arq.burst`, `moonScenario`, `sensitivity.moon*`. Strateji (Aşama 4) olduğu gibi korundu; yeni politika ayrı bir ad (`'coverage'`).
+- Kapsama bilen strateji için araç tamponu havuza dahil (Aşama 4 ile karşılaştırılabilirlik); toparlanma ufku 30 gün (senaryo sonu); pay 0,9 (Aşama 4 ile aynı).
+- Kümelenmiş hata zamana bağlı, ortalama kayıp periyodik modelle eşit, tohum sabit.
+- Dar ekranda bilgi paneli başlangıçta kapalı; harita seçimiyle otomatik açılmaz (haritanın aniden küçülmemesi için).
 
 ## Veri kaynağı ve kararlar
 
@@ -299,9 +446,9 @@ Sol panel, kart (10 cisim), etiketler (Dünya–Ay ve Mars bölgesinde yakınla�
 src/data/    veri okuma, tipler, genel fiziksel bilgiler (bodyFacts)
 src/map/     interpolasyon (ephemeris), Canvas çizimi, etiket yerleştirici (labels), gezegen dokuları ve küre kartı hesabı
 src/ui/      kontroller, bilgi paneli + küre kartı, sol panel (Cisimler, katmanlar), ağ paneli
-src/network/ ağ modeli (gecikme, bağlantı durumu, kavuşum), çizelgeleyici + strateji, tarama, zaman çizelgesi
+src/network/ ağ modeli (gecikme, bağlantı durumu, kavuşum), çizelgeleyici + stratejiler + hata modeli, tarama, zaman çizelgesi
 src/config/  varsayımsal değerler (tek dosya)
-scripts/     Horizons veri çekme betiği
+scripts/     Horizons veri çekme betiği; asama7-sonuclar.ts (README sayılarını gerçek veriyle üreten betik, Horizons'a erişmez)
 public/data/ Horizons JSON dosyaları (gerçek veri, depoda)
 docs/        gerçek veriyle alınmış ekran görüntüleri
 .github/workflows/  GitHub Pages yayını
@@ -320,10 +467,13 @@ docs/        gerçek veriyle alınmış ekran görüntüleri
 8. **Gerçek veriyle doğrulama:** Aşama 4'te yapıldı (yukarıya bakın).
 9. **Strateji varsayımları:** kesintinin başı/sonu önceden bilinir (hatasız); bütçe tamponun %90'ı (`margin`), 1 gün önceden başlar. Gerçekçi bir görev bu parametreleri bilmez; sonuçlar kavramsaldır.
 10. **Üretilmeyen veri "kayıp" sayılmaz** (ayrı sütun); bunu tanım olarak seçtim ve karşılaştırmada hem "düşen" hem "düşen + üretilmeyen" gösteriyorum. Sizin için "üretilmeyen" farklı bir maliyete denk geliyorsa (ör. bilimsel değeri olan kısma) bu tanımı birlikte gözden geçirelim.
-11. **Ay Aracı A görüş sorunu:** Aşama 5'te enlem −40°'ye alınarak giderildi (kutup bölgesi modellenmedi, yukarıya bakın). Arayüzdeki senaryo hâlâ yalnızca Mars hattını kapsar; Ay hattı sonuçları README'de betikle alınmış tablodadır.
+11. **Ay Aracı A görüş sorunu:** Aşama 5'te enlem −40°'ye alınarak giderildi (kutup bölgesi modellenmedi, yukarıya bakın). Aşama 7'de arayüze Ay hattı senaryosu eklendi (seçilebilir tarih aralığı).
 12. **Mars aktarma uydusunun Mars gölgesi (tutulma) ve güç modeli** yok; yalnızca "Dünya cismin arkasında" kesintisi var.
 13. **3B görünüm:** Aşama 6'da arayüz işleri yapıldı (sol panel, kart, etiketler, katmanlar); projeksiyon değişmedi.
-14. **Yer istasyonu ve ARQ varsayımları:** konumlar derin uzay istasyonlarına benzer seçilmiş varsayımsal değerlerdir; kayıp modeli belirleyici/periyodik; strateji kapsamayı bilmez (Aşama 5, "Beklenmedik" madde 1).
+14. **Yer istasyonu ve ARQ varsayımları:** konumlar derin uzay istasyonlarına benzer seçilmiş varsayımsal değerlerdir; kayıp modeli belirleyici (periyodik ya da, Aşama 7'den beri, sabit tohumlu kümelenmiş); Aşama 4'ün stratejisi kapsamayı bilmez, Aşama 7'deki yeni strateji bilir (kapsama takvimi önceden bilinir varsayımıyla).
+15. **Kapsama takvimi önceden bilinir mi?** (Aşama 7) Yörünge ve Dünya dönüşü öngörülebilirdir, ama gerçek bir görevin istasyon çizelgesini, bakım ve çakışmaları ne kadar önceden bildiğini bilmiyorum; tahmin hatası modellenmedi. Ortalama hat kaybının önceden bilindiği varsayımı da aynı sınırlamayı taşır.
+16. **Kümelenmiş hata parametreleri** (kötü durumda %80 kayıp, ortalama 30 dk, iyi durumda %0,5) uydurmadır; gerçek hat ölçümüne dayanmaz. Sonuçlar (özellikle `maxAttempts` aşımı) bu parametrelere ve RTT'ye çok duyarlıdır.
+17. **Havuz tanımı (kapsama bilen strateji):** araç tamponu havuza dahil (`assetBufferShare` = 1) varsayıldı; 0 yapılırsa düşen sıfıra iner ama daha çok kısar. Hangisinin doğru maliyet olduğu bir tasarım kararıdır, sizinle gözden geçirilmeli.
 
 ## Kullanılan dış kaynaklar
 
@@ -334,4 +484,10 @@ docs/        gerçek veriyle alınmış ekran görüntüleri
 
 ## Sonraki aşamalar
 
-Aşama 7 adayları: kapsama bilen strateji, kümelenmiş (Gilbert–Elliott benzeri, yine belirleyici) hata modeli, Ay hattı için arayüz senaryosu, dar ekran düzeni. Değerler **varsayımsaldır** ve `src/config/hypothetical.ts` içinde kalır; sonuçlar gerçek bir görev sonucu değildir.
+Aşama 8 adayları (değerler **varsayımsal** kalır, `src/config/hypothetical.ts`; sonuçlar gerçek bir görev sonucu değildir):
+- **Kayan ufuklu akış kontrolü:** kapsama bilen stratejiyi yalnızca Mars kavuşumuna değil, **her** öngörülebilir kapalı hat dönemine (özellikle Ay'da yer istasyonu boşlukları) uygulamak; Ay senaryosunda strateji şu an hiçbir şey yapmıyor.
+- **Tahmin hatası:** stratejinin kapsama/kayıp tahmininin yanlış olmasının etkisi (gecikmiş ya da eksik takvim).
+- **Telemetriyi de ele alan strateji** (daha sık/küçük paketler ya da telemetri kısma); şu an telemetri hiç kısılmıyor ve süresi kesinti uzunluğuna eşit.
+- **Hata modeli duyarlılığı:** kötü durum süresi/kaybı için tarama grafiği; yüzey hattında RTT ve yeniden deneme aralığı.
+- **Ay'da kutup bölgesi ve eğimli/eliptik yörünge**, Mars aktarma uydusu gölgesi ve güç modeli.
+- İsterseniz uzun hesapları **Web Worker**'a taşımak (şu an `setTimeout` ile parçalı; ilk açılış 14–15 sn, en uzun görev ≈ 0,4 sn). Yeni bağımlılık/iş akışı gerektirdiği için önce sorulur.

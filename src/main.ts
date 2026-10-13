@@ -83,7 +83,7 @@ async function start() {
   let net = computeNetwork(tracks, jd);
   map.overlay = (ctx, screen, radii, zoom, labels) => { if (map.layers.network) layer.draw(ctx, screen, radii, zoom, net, labels, map.layers); };
   const jumpRow = document.createElement('div');
-  jumpRow.className = 'row';
+  jumpRow.className = 'row more-row';
   jumpRow.innerHTML = '<button id="cprev" type="button">◀ Önceki Mars kavuşumu</button><button id="cnext" type="button">Sonraki Mars kavuşumu ▶</button><span class="legend">Kesinti penceresinin başına gider (Güneş–Mars açısı eşiğin altında).</span>';
   document.getElementById('controls')!.appendChild(jumpRow);
   jumpRow.querySelector('#cprev')!.addEventListener('click', () => {
@@ -95,6 +95,18 @@ async function start() {
     if (w) controls.jumpTo(w.startJD - 3);
   });
   let lastPanel = 0;
+
+  // Dar ekranda (≤700 px) bilgi/ağ paneli katlanır (başlangıçta kapalı); geniş ekranda düğme gizli, panel her zaman açık (CSS).
+  const side = document.getElementById('side')!;
+  const sideToggle = document.getElementById('side-toggle')!;
+  const setSideOpen = (open: boolean) => {
+    side.classList.toggle('side-open', open);
+    document.querySelector('main')!.classList.toggle('side-open', open); // dar ekranda açık panel tarih etiketini örter: CSS gizler (tarih altta kutuda da var)
+    sideToggle.setAttribute('aria-expanded', String(open));
+    sideToggle.textContent = `Bilgi ve ağ durumu ${open ? '▾' : '▸'}`;
+    map.dirty = true;
+  };
+  sideToggle.addEventListener('click', () => setSideOpen(!side.classList.contains('side-open')));
 
   // Aşama 3: çizelgeleyici sekmesi (harita gizlenir, çizim döngüsü durur; geri gelince olduğu gibi devam eder)
   const main = document.querySelector('main') as HTMLElement;

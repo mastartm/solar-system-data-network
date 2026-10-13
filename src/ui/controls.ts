@@ -38,7 +38,7 @@ export function createControls(root: HTMLElement, o: ControlOptions): Controls {
   root.innerHTML = `
     <div class="row">
       <button id="play" type="button">▶ Oynat</button>
-      <label>Hız
+      <label class="hide-narrow">Hız
         <select id="speed">
           <option value="1">1 gün/sn</option>
           <option value="10" selected>10 gün/sn</option>
@@ -51,9 +51,10 @@ export function createControls(root: HTMLElement, o: ControlOptions): Controls {
         <input id="slider" type="range" min="0" max="${Math.floor(span * 10)}" step="1" value="0" aria-label="Tarih" />
       </div>
       <input id="date" type="date" aria-label="Tarih seç" />
-      <button id="today" type="button">Bugün</button>
+      <button id="today" type="button" class="hide-narrow">Bugün</button>
+      <button id="more" type="button" class="more-btn" aria-expanded="false" aria-controls="controls" title="Diğer kontroller">⋯</button>
     </div>
-    <div class="row">
+    <div class="row more-row">
       <span class="seg" role="group" aria-label="Görünüm">
         <button id="v2" type="button" class="on">2B</button>
         <button id="v3" type="button">3B</button>
@@ -79,6 +80,13 @@ export function createControls(root: HTMLElement, o: ControlOptions): Controls {
     </div>`;
 
   const $ = <T extends HTMLElement>(id: string) => root.querySelector<T>('#' + id)!;
+  // Dar ekranda (≤700 px) yalnızca ilk satır görünür (oynat, tarih çubuğu, tarih); "⋯" diğer kontrolleri açar/kapar. Geniş ekranda düğme gizlidir.
+  const more = $<HTMLButtonElement>('more');
+  more.addEventListener('click', () => {
+    const open = root.classList.toggle('open');
+    more.setAttribute('aria-expanded', String(open));
+    more.textContent = open ? '✕' : '⋯';
+  });
   const slider = $<HTMLInputElement>('slider');
   const date = $<HTMLInputElement>('date');
   const play = $<HTMLButtonElement>('play');

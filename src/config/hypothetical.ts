@@ -1,4 +1,4 @@
-// VARSAYIMSAL DEĞERLER — Aşama 2, 3, 4 ve 5'in tüm uydurma sayıları yalnızca bu dosyadadır.
+// VARSAYIMSAL DEĞERLER — Aşama 2, 3, 4, 5 ve 7'nin tüm uydurma sayıları yalnızca bu dosyadadır.
 // Buradaki araç, uydu, yörünge, veri hızı ve eşik değerleri gerçek bir göreve ait DEĞİLDİR;
 // sonuçlar gerçek bir görev sonucu sayılmamalıdır. Gerçek olan tek şey Horizons konumlarıdır.
 // (Cisim yarıçapı ve dönme dönemi gibi fiziksel sabitler src/network/network.ts içinde, gerçek değerlerle.)
@@ -120,6 +120,9 @@ export const HYPOTHETICAL = {
     marsRelayBufferMb: { min: 8000, max: 160000, step: 2000 },
     marsRelayDownlinkKbps: { min: 100, max: 600, step: 10 },
     dutyCycle: { min: 0.02, max: 0.15, step: 0.005 },
+    /** Aşama 7: Ay hattı senaryosunda kaydırıcıların aralığı (başlangıçlar scheduler.* değerleridir). */
+    moonRelayBufferMb: { min: 500, max: 16000, step: 250 },
+    moonRelayDownlinkKbps: { min: 10, max: 100, step: 5 },
   },
 
   /**
@@ -148,5 +151,46 @@ export const HYPOTHETICAL = {
     maxAttempts: 4,
     /** Hata/ARQ kaydırıcısının aralığı (Dünya hattı kaybı, %). */
     earthLossRangePct: { min: 0, max: 40, step: 1 },
+    /**
+     * Aşama 7: kümelenmiş hata modeli (Gilbert–Elliott benzeri iki durum, "Kümelenmiş hata + yeniden iletim" hat modu). Rastgelelik YOK:
+     * durum zinciri sabit tohumlu kendi üretecimizle üretilir. Ortalama kayıp yukarıdaki yüzey/Dünya kaybıdır (periyodik modelle aynı),
+     * burada yalnızca iyi/kötü durum kayıpları ve kötü durumun süresi vardır. Değerler uydurmadır, gerçek bir hat ölçümü değildir.
+     */
+    burst: {
+      goodLossPct: 0.5,
+      badLossPct: 80,
+      /** Kötü durumun ortalama süresi (sn): 30 dk. */
+      meanBadSec: 1800,
+      seed: 20281031,
+    },
+  },
+
+  /**
+   * Aşama 7: kapsama bilen strateji. Aşama 4'ün stratejisinin (strategy) yanında yeni politika; bütçeye kavuşum sonrası boşaltma
+   * kapasitesini (yer istasyonu kapsaması + hat hızı) katar. Varsayım: bağlantı takvimi önceden bilinir (yörünge ve Dünya dönüşü öngörülebilir);
+   * ortalama hat kaybı bilinir. Kesintiye lookaheadDays kala başlar, kesinti boyunca ve bittikten sonra recoveryDays boyunca sürer.
+   */
+  coverageStrategy: {
+    lookaheadDays: 1,
+    recoveryDays: 30,
+    /** Tepe doluluk, bütçe havuzunun bu oranını geçmeyecek şekilde kısılır (Aşama 4 stratejisiyle aynı pay). */
+    margin: 0.9,
+    /**
+     * Bütçe havuzuna katılan araç tamponu oranı (0–1). 1 = araç tamponu + uydu tamponunun hız payı (Aşama 4 ile aynı havuz; karşılaştırma
+     * yalnızca boşaltma kapasitesi terimini ölçer). 0 = yalnızca uydu tamponu: uydu tamponu dolunca telemetri düşük sınıfı atarak girdiği
+     * için "düşen" daha da azalır ama daha çok kısılır (README'de duyarlılık).
+     */
+    assetBufferShare: 1,
+    minFactor: 0,
+  },
+
+  /**
+   * Aşama 7: Ay hattı senaryosu (arayüz). Ay'da kavuşum yok; pencere serbest bir tarih aralığıdır. Varsayılan, Aşama 5 README tablosundaki
+   * pencereye (2028-03-03 – ~2028-05-03) yakındır.
+   */
+  moonScenario: {
+    defaultStart: '2028-03-03',
+    defaultDays: 60,
+    lengthOptions: [7, 14, 30, 60],
   },
 };

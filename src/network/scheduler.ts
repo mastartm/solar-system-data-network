@@ -7,8 +7,10 @@
 /**
  * 'fifo' ve 'priority': yalnızca sıralama/atma kuralı. 'strategy': 'priority' + kavuşum stratejisi
  * (bilim verisi üretimini kısma). Strateji kapalı sınıf (en önemli sınıf) hiç kısılmaz.
+ * 'coverage' (Aşama 7): 'strategy' ile aynı kısma kuralı, ama bütçeyi yalnızca boş tampondan değil, kavuşum SONRASI boşaltma
+ * kapasitesinden de (yer istasyonu kapsaması + hat hızı; önceden bilinen takvim) hesaplar. 'strategy' olduğu gibi korunur.
  */
-export type Policy = 'fifo' | 'priority' | 'strategy';
+export type Policy = 'fifo' | 'priority' | 'strategy' | 'coverage';
 
 /**
  * Kavuşum stratejisi ("bütçeli kısma"; varsayılanı src/config/hypothetical.ts). Kesinti takvimi öngörülebilir varsayılır
@@ -38,6 +40,44 @@ export interface ArqConfig {
   earthLossPct: number;
   /** Bir hatta bir paket için en çok deneme sayısı; aşılırsa paket "hatta kayıp" (abandoned) sayılır. */
   maxAttempts: number;
+  /** Yoksa kayıp periyodiktir (biriktirici); varsa iki durumlu kümelenmiş model kullanılır. */
+  burst?: BurstConfig;
+}
+
+/**
+ * Kapsama bilen strateji (Aşama 7). Varsayım: bağlantı takvimi (yörünge, Dünya dönüşü, yer istasyonu görüşü, kavuşum) ve ARQ'nun
+ * ortalama kaybı önceden bilinir. Kesintiye lookaheadSec kala, kesinti boyunca ve bittikten sonra recoverySec boyunca, her araç için
+ * üretim çarpanı şöyle seçilir: tampon (araç + uydunun hız oranındaki payı) ileriye doğru izlenir; hat açıkken boşalır (hat hızı × ortalama
+ * başarı oranı × pay), kapalıyken (kavuşum, istasyon görmüyor, cisim arkası) boşalmaz; tepe doluluk margin × kapasiteyi aşmayacak
+ * en büyük çarpan (ikili aramayla) seçilir. Telemetri (en önemli sınıf) kısılmaz.
+ */
+export interface CoverageConfig {
+  lookaheadSec: number;
+  /** Kesinti bittikten sonra boşaltma kapasitesinin hesaba katıldığı süre (sn). Sonrası kısılmaz. */
+  recoverySec: number;
+  /** Tepe doluluğun kapasiteye oranının üst sınırı (0–1). */
+  margin: number;
+  minFactor: number;
+  /** Araç tamponunun bütçeye katılan oranı (0–1). 1: araç + uydu payı (Aşama 4 ile aynı havuz); 0: yalnızca uydu tamponu payı. */
+  assetBufferShare?: number;
+  /** Üretim çarpanının yeniden hesaplanma aralığı (sn, varsayılan 1800); yalnızca hesap maliyetini düşürür. */
+  refreshSec?: number;
+}
+
+/**
+ * Kümelenmiş hata modeli (Gilbert–Elliott benzeri, iki durumlu; RASTGELELİK YOK, sabit tohumlu kendi üretecimiz). Her hat için
+ * adım adım iyi/kötü durum zinciri üretilir; kötü durumun ortalama süresi meanBadSec, kötü durumda geçirilen uzun dönem oranı, hattın
+ * ortalama kaybı (surfaceLossPct / earthLossPct) iyi ve kötü durum kayıplarının karışımı olacak şekilde seçilir, yani ORTALAMA KAYIP
+ * periyodik modelle aynıdır, yalnızca dağılımı (kümelenme) farklıdır. Durum zinciri zamana bağlıdır (denemelere değil): bu yüzden
+ * kaybolan bir paketin yeniden denemesi, RTT kısaysa büyük olasılıkla aynı kötü durumda kalır.
+ */
+export interface BurstConfig {
+  goodLossPct: number;
+  badLossPct: number;
+  /** Kötü durumun ortalama süresi (sn). */
+  meanBadSec: number;
+  /** Üreteç tohumu (sabit). */
+  seed: number;
 }
 
 export interface SchedClass { id: string; priority: number; share: number; packetMb: number }
@@ -54,6 +94,8 @@ export interface SchedConfig {
   seriesEverySec: number;
   /** 'strategy' politikası için gerekli; yoksa strateji kısma yapmaz (öncelikli ile aynı). */
   strategy?: StrategyConfig;
+  /** 'coverage' politikası için gerekli; yoksa kısma yapmaz (öncelikli ile aynı). */
+  coverage?: CoverageConfig;
   /** Yoksa hatlar kayıpsızdır ve gönderici paketi gönderir göndermez bırakır (Aşama 3-4 davranışı). */
   arq?: ArqConfig;
 }
@@ -88,6 +130,8 @@ export interface ClassStats {
   /** Kaybolan iletim denemesi sayısı ve bunlardan yeniden gönderilenler (retransmissions = txLost − abandoned). */
   txLost: number;
   retransmissions: number;
+  /** Tüm iletim denemeleri (başarılı + kaybolan; her iki hat). Yalnızca ARQ/hat hatası açıkken sayılır. */
+  attempts: number;
   /** Strateji yüzünden hiç üretilmeyen (kısılan) veri; kayıp (dropped) DEĞİLDİR. Talep = generated + suppressed. */
   suppressed: number;
   suppressedMb: number;
@@ -116,6 +160,42 @@ export interface SimResult {
   series: SeriesPoint[];
   peakRelayFill: Record<string, number>;
   peakAssetFill: Record<string, number>;
+  /** En uzun art arda kaybolan deneme sayısı (herhangi bir hatta). Kümelenmeyi gösterir. */
+  maxLossRun: number;
+  /** Hatta kayıp paketlerden (total.abandoned) yüzey hattında (araç → uydu) hakkı tükenenler; kalanı uydu → Dünya hattındadır. */
+  abandonedSurface: number;
+}
+
+/** Küçük, sabit tohumlu üreteç (mulberry32): aynı tohum aynı diziyi verir, Math.random yok. [0,1) döner. */
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Bir hat için n adımlık iyi(0)/kötü(1) durum zinciri. Kötü durumun uzun dönem oranı, ortalama kaybın (avgPct) iyi/kötü kayıp
+ * karışımı olması için seçilir (sınırlara kırpılır). Adım başına geçiş olasılıkları: kötü→iyi = dt / meanBadSec (en çok 1),
+ * iyi→kötü buna göre. Başlangıç: iyi. Belirleyici (tohum sabit).
+ */
+export function genLinkStates(n: number, dt: number, avgPct: number, b: BurstConfig, seed: number): Uint8Array {
+  const out = new Uint8Array(n);
+  const span = b.badLossPct - b.goodLossPct;
+  const pi = span > 0 ? Math.min(1, Math.max(0, (avgPct - b.goodLossPct) / span)) : 0;
+  if (pi <= 0 || n === 0) return out;
+  const rng = mulberry32(seed);
+  const pBG = Math.min(1, dt / Math.max(dt, b.meanBadSec));
+  const pGB = pi >= 1 ? 1 : Math.min(1, (pi / (1 - pi)) * pBG);
+  for (let i = 1; i < n; i++) {
+    const u = rng();
+    out[i] = out[i - 1] ? (u < pBG ? 0 : 1) : (u < pGB ? 1 : 0);
+  }
+  return out;
 }
 
 interface Pkt { cls: number; sizeMb: number; createdSec: number; sentMb: number; seq: number; propSec: number; attempts: number }
@@ -167,6 +247,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const sup = new Array(nC).fill(0), supMb = new Array(nC).fill(0);
   const topRank = Math.min(...rank);
   const st = policy === 'strategy' ? cfg.strategy : undefined;
+  const cv = policy === 'coverage' ? cfg.coverage : undefined;
   // Kesinti öngörüsü (yalnızca strateji): relay başına, adım i için kesintiye kalan süre içinde mi, ve o kesintinin bitişine kalan adım.
   const ahead = topo.relays.map(() => new Array<boolean>(samples.length).fill(false));
   const endsIn = topo.relays.map(() => new Array<number>(samples.length).fill(0));
@@ -179,6 +260,29 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
         if (b) { end = i + 1 < samples.length && samples[i + 1].earthBlackout?.[ri] ? end : i + 1; start = i; }
         ahead[ri][i] = start - i <= L;
         endsIn[ri][i] = end - i;
+      }
+    });
+  }
+  // Kapsama bilen strateji: relay başına (a) her adımın kısma ufku (kesinti öncesi/içi/sonrası; -1 = kapalı) ve (b) Dünya hattının
+  // açık/kapalı geçiş adımları (ufuk içinde tepe doluluğu ileri izlerken kesitler bunlardır).
+  // Projeksiyon pahalıdır: çarpan refreshSec'te bir yeniden hesaplanır, aradaki adımlarda önceki değer kullanılır.
+  const refreshSteps = Math.max(1, Math.round((cfg.coverage?.refreshSec ?? 1800) / dt));
+  const covThrottle = topo.assets.map(() => 1);
+  const horizon = topo.relays.map(() => new Int32Array(samples.length).fill(-1));
+  const flips = topo.relays.map(() => [] as number[]);
+  const flipPtr = topo.relays.map(() => 0);
+  if (cv) {
+    const L = Math.ceil(cv.lookaheadSec / dt), R = Math.ceil(cv.recoverySec / dt);
+    topo.relays.forEach((_, ri) => {
+      for (let i = 1; i < samples.length; i++) if (samples[i].earthUp[ri] !== samples[i - 1].earthUp[ri]) flips[ri].push(i);
+      let i = 0;
+      while (i < samples.length) {
+        if (!samples[i].earthBlackout?.[ri]) { i++; continue; }
+        let e = i;
+        while (e < samples.length && samples[e].earthBlackout?.[ri]) e++;
+        const T = Math.min(samples.length, e + R);
+        for (let j = Math.max(0, i - L); j < T; j++) horizon[ri][j] = Math.max(horizon[ri][j], T);
+        i = e;
       }
     });
   }
@@ -197,6 +301,14 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const stored = new Array(nC).fill(0), delayed = new Array(nC).fill(0);
   const lat: number[][] = Array.from({ length: nC }, () => []);
   const arq = cfg.arq;
+  const att = new Array(nC).fill(0);
+  let maxLossRun = 0, abandSurface = 0;
+  const surfRun = topo.assets.map(() => 0), earthRun = topo.relays.map(() => 0);
+  const burst = arq?.burst;
+  const surfBad = burst && arq ? topo.assets.map((_, ai) => genLinkStates(samples.length, dt, arq.surfaceLossPct, burst, burst.seed + 11 + ai)) : [];
+  const earthBad = burst && arq ? topo.relays.map((_, ri) => genLinkStates(samples.length, dt, arq.earthLossPct, burst, burst.seed + 101 + ri)) : [];
+  const surfRng = burst ? topo.assets.map((_, ai) => mulberry32(burst.seed + 211 + ai)) : [];
+  const earthRng = burst ? topo.relays.map((_, ri) => mulberry32(burst.seed + 311 + ri)) : [];
   const aband = new Array(nC).fill(0), abandMb = new Array(nC).fill(0), txLost = new Array(nC).fill(0), retx = new Array(nC).fill(0);
   const surfAcc = topo.assets.map(() => 0), earthAcc = topo.relays.map(() => 0);
   const inflight: Held[][] = topo.relays.map(() => []);
@@ -205,6 +317,15 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     acc[i] += pct / 100;
     if (acc[i] >= 1 - 1e-12) { acc[i] -= 1; return true; }
     return false;
+  };
+  /** Bu deneme (adım i, hat idx) kaybolur mu? Periyodik: biriktirici. Kümelenmiş: o adımın iyi/kötü durumuna göre sabit tohumlu üreteç. */
+  const attemptLost = (earth: boolean, idx: number, i: number): boolean => {
+    const lost = burst
+      ? (earth ? earthRng : surfRng)[idx]() < ((earth ? earthBad : surfBad)[idx][i] ? burst.badLossPct : burst.goodLossPct) / 100
+      : draw(earth ? earthAcc : surfAcc, idx, earth ? arq!.earthLossPct : arq!.surfaceLossPct);
+    const run = earth ? earthRun : surfRun;
+    if (lost) { if (++run[idx] > maxLossRun) maxLossRun = run[idx]; } else run[idx] = 0;
+    return lost;
   };
   let seq = 0;
   let droppedCum = 0;
@@ -291,6 +412,43 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     topo.assets.forEach((a, ai) => {
       const mbPerSec = (a.dataRateKbps / 1000) * cfg.dutyCycle;
       let throttle = 1;
+      if (cv) {
+        throttle = covThrottle[ai];
+        const ri = relayIndex.get(a.relay)!;
+        const T = horizon[ri][i];
+        if (T >= 0 && assetRate[ai].rest > 0 && (i % refreshSteps === 0 || !(i - 1 >= 0 && horizon[ri][i - 1] >= 0))) {
+          const frac = relayTotal[ri] > 0 ? assetRate[ai].total / relayTotal[ri] : 0;
+          const used = Math.max(0, assetBuf[ai].usedMb + relayBuf[ri].usedMb * frac);
+          // Beklenen boşaltma hızı: hat hızı × payı × ortalama başarı oranı (ARQ'da kayıp tekrar gönderilir ama kopya RTT boyunca yer tutar; yok sayıldı)
+          const drain = ((cfg.relayDownlinkKbps[a.relay] ?? 0) / 1000) * frac * (arq ? 1 - arq.earthLossPct / 100 : 1);
+          // Üst sınır uydu tamponunun payıdır (araç tamponu değil): uydu tamponu dolunca telemetri paketi daha düşük sınıfı atarak girer
+          // (öncelikli kuralı), yani doygun uydu tamponu kayıp demektir. Araç tamponu yalnızca geçici (yüzey hattı kapalıyken) biriktirir.
+          const limit = cv.margin * (relayBuf[ri].capMb * frac + (cv.assetBufferShare ?? 0) * assetBuf[ai].capMb);
+          const fl = flips[ri];
+          while (flipPtr[ri] < fl.length && fl[flipPtr[ri]] <= i) flipPtr[ri]++;
+          const peak = (f: number) => {
+            const g = assetRate[ai].top + assetRate[ai].rest * f;
+            let t = i, k = flipPtr[ri], b = used, pk = used;
+            while (t < T) {
+              const nx = k < fl.length && fl[k] < T ? fl[k] : T;
+              const len = (nx - t) * dt;
+              b = samples[t].earthUp[ri] ? Math.max(0, b + (g - drain) * len) : b + g * len;
+              if (b > pk) pk = b;
+              if (nx === fl[k]) k++;
+              t = nx;
+            }
+            return pk;
+          };
+          if (peak(1) <= limit) throttle = 1;
+          else if (peak(cv.minFactor) > limit) throttle = cv.minFactor;
+          else {
+            let lo = cv.minFactor, hi = 1;
+            for (let it = 0; it < 10; it++) { const mid = (lo + hi) / 2; if (peak(mid) <= limit) lo = mid; else hi = mid; }
+            throttle = lo;
+          }
+          covThrottle[ai] = throttle;
+        } else if (T < 0) { throttle = 1; covThrottle[ai] = 1; }
+      }
       if (st) {
         const ri = relayIndex.get(a.relay)!;
         if (ahead[ri][i]) {
@@ -334,10 +492,11 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
         if (budget < need) { p.sentMb += budget; break; }
         if (!canAccept(dst, p)) break; // uydu tamponu dolu: araç gönderemez, kendi tamponunda tutar
         budget -= need;
-        if (arq && draw(surfAcc, ai, arq.surfaceLossPct)) {
+        if (arq) att[k]++;
+        if (arq && attemptLost(false, ai, i)) {
           // kayıp deneme: bant genişliği harcandı; paket tamponda kalır ve yeniden denenir (ya da hak tükenir)
           txLost[k]++; p.attempts++; p.sentMb = 0;
-          if (p.attempts >= arq.maxAttempts) { take(src, k); aband[k]++; abandMb[k] += p.sizeMb; } else retx[k]++;
+          if (p.attempts >= arq.maxAttempts) { take(src, k); aband[k]++; abandMb[k] += p.sizeMb; abandSurface++; } else retx[k]++;
           continue;
         }
         take(src, k);
@@ -363,7 +522,8 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
           // gönderici kopyayı RTT boyunca tamponunda tutar: kuyruktan çıkar ama yer tutmaya devam eder
           buf.q[k].shift(); p.sentMb = 0; p.attempts++; buf.held[k] += p.sizeMb;
           const rtt = 2 * s.earthDelaySec[ri];
-          if (draw(earthAcc, ri, arq.earthLossPct)) { txLost[k]++; inflight[ri].push({ p, k, at: end + rtt, ok: false }); continue; }
+          att[k]++;
+          if (attemptLost(true, ri, i)) { txLost[k]++; inflight[ri].push({ p, k, at: end + rtt, ok: false }); continue; }
           inflight[ri].push({ p, k, at: end + rtt, ok: true });
         } else take(buf, k);
         const wait = end - p.createdSec;
@@ -394,7 +554,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const mk = (k: number): ClassStats => {
     const l = [...lat[k]].sort((x, y) => x - y);
     return {
-      abandoned: aband[k], abandonedMb: abandMb[k], txLost: txLost[k], retransmissions: retx[k],
+      abandoned: aband[k], abandonedMb: abandMb[k], txLost: txLost[k], retransmissions: retx[k], attempts: att[k],
       generated: gen[k], delivered: deliv[k], dropped: drop[k], stored: stored[k], delayed: delayed[k], remaining: remaining[k],
       suppressed: sup[k], suppressedMb: supMb[k],
       generatedMb: genMb[k], deliveredMb: delivMb[k], droppedMb: dropMb[k],
@@ -410,7 +570,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const sum = (f: (c: ClassStats) => number) => all.reduce((x, c) => x + f(c), 0);
   const allLat = lat.flat().sort((x, y) => x - y);
   const total: ClassStats = {
-    abandoned: sum((c) => c.abandoned), abandonedMb: sum((c) => c.abandonedMb), txLost: sum((c) => c.txLost), retransmissions: sum((c) => c.retransmissions),
+    abandoned: sum((c) => c.abandoned), abandonedMb: sum((c) => c.abandonedMb), txLost: sum((c) => c.txLost), retransmissions: sum((c) => c.retransmissions), attempts: sum((c) => c.attempts),
     generated: sum((c) => c.generated), delivered: sum((c) => c.delivered), dropped: sum((c) => c.dropped),
     stored: sum((c) => c.stored), delayed: sum((c) => c.delayed), remaining: sum((c) => c.remaining),
     suppressed: sum((c) => c.suppressed), suppressedMb: sum((c) => c.suppressedMb),
@@ -424,5 +584,6 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     policy, perClass, total, series,
     peakRelayFill: Object.fromEntries(topo.relays.map((r, i) => [r, peakRelay[i]])),
     peakAssetFill: Object.fromEntries(topo.assets.map((a, i) => [a.id, peakAsset[i]])),
+    maxLossRun, abandonedSurface: abandSurface,
   };
 }
