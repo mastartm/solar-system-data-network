@@ -1,4 +1,4 @@
-// VARSAYIMSAL DEĞERLER — Aşama 2, 3, 4, 5 ve 7'nin tüm uydurma sayıları yalnızca bu dosyadadır.
+// VARSAYIMSAL DEĞERLER — Aşama 2, 3, 4, 5, 7 ve 8'in tüm uydurma sayıları yalnızca bu dosyadadır.
 // Buradaki araç, uydu, yörünge, veri hızı ve eşik değerleri gerçek bir göreve ait DEĞİLDİR;
 // sonuçlar gerçek bir görev sonucu sayılmamalıdır. Gerçek olan tek şey Horizons konumlarıdır.
 // (Cisim yarıçapı ve dönme dönemi gibi fiziksel sabitler src/network/network.ts içinde, gerçek değerlerle.)
@@ -149,6 +149,11 @@ export const HYPOTHETICAL = {
     surfaceLossPct: 1,
     earthLossPct: 5,
     maxAttempts: 4,
+    /**
+     * Aşama 8: yüzey hattında (araç → uydu) kaybolan denemenin yeniden deneneceği en erken gecikme (sn). 0 = aynı adımda (Aşama 5-7: RTT ≈ 0 varsayımı,
+     * sayılar buna göre). > 0: paket tamponda yer tutarak bekler, sonra yeniden denenir. Gerçek bir yüzey hattının yeniden deneme aralığını bilmiyorum.
+     */
+    surfaceRetrySec: 0,
     /** Hata/ARQ kaydırıcısının aralığı (Dünya hattı kaybı, %). */
     earthLossRangePct: { min: 0, max: 40, step: 1 },
     /**
@@ -182,6 +187,47 @@ export const HYPOTHETICAL = {
      */
     assetBufferShare: 1,
     minFactor: 0,
+  },
+
+  /**
+   * Aşama 8: kayan ufuklu akış kontrolü ('rolling' politikası). 'coverage' ile aynı havuz projeksiyonu, ama kesinti işaretine değil bağlantı takvimindeki
+   * HER kapalı hat dönemine (kavuşum, yer istasyonu boşluğu, cisim arkası) uygulanır: her refreshSec'te önümüzdeki rollingDays boyunca ileri izlenir.
+   * Varsayım: bağlantı takvimi ve ortalama hat kaybı önceden bilinir (tahmin hatası ayrıca taranır: forecastScan).
+   */
+  rollingStrategy: {
+    /** Kayan ufuk (gün). Mars kavuşumunun (≈ 17–27 gün) tamamını görmek için ≳ 30 gün gerekir; Ay'da yer istasyonu boşlukları saatlerdir. */
+    rollingDays: 3,
+    /** Seçilebilir ufuklar (gün; arayüz ve ufuk taraması). */
+    rollingDaysOptions: [0.5, 1, 3, 10, 30, 45],
+    margin: 0.9,
+    minFactor: 0,
+    assetBufferShare: 1,
+    /** Çarpanın yeniden hesaplanma aralığı (sn); yalnızca hesap maliyetini düşürür. */
+    refreshSec: 1800,
+  },
+
+  /**
+   * Aşama 8: tahmin hatası taraması. Hatalar belirleyici, sabit sapmalardır (rastgelelik yok). Tarama adımı (sn) ana senaryodan daha kabadır (hesap süresi);
+   * pencere kayması adıma yuvarlanır, bu yüzden değerler adımın katı seçildi.
+   */
+  forecastScan: {
+    stepSec: 600,
+    /** Pencere başı/sonu genişletme (+: iyimser) ya da daraltma (−) ve pencere öteleme, dakika. */
+    edgeShiftMin: [-120, -60, -30, 0, 30, 60, 120],
+    offsetMin: [-120, -60, -30, 0, 30, 60, 120],
+    /** Ortalama kayıp tahmininin gerçeğe göre bağıl sapması (%); −100: kayıp yok sanılır. */
+    lossBiasPct: [-100, -50, 0, 50, 100, 200],
+  },
+
+  /**
+   * Aşama 8: hata modeli duyarlılığı (kümelenmiş model, öncelikli çizelge). Taranan değerler: kötü durum kaybı (%), kötü durumun ortalama süresi (sn),
+   * yüzey hattı yeniden deneme aralığı (sn). Tarama adımı forecastScan.stepSec ile aynıdır (zincir adımı kötü durum süresinden küçük kalsın diye
+   * meanBadSec ≥ adım).
+   */
+  errorScan: {
+    badLossPct: [20, 40, 60, 80, 100],
+    meanBadSec: [600, 1200, 1800, 3600, 7200],
+    surfaceRetrySec: [0, 600, 1800, 3600, 7200],
   },
 
   /**
