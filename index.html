@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Güneş Sistemi Veri Ağı</title>
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Güneş Sistemi Veri Ağı</h1>
+        <span class="note">Konumlar: NASA/JPL Horizons · Ölçek karekökle sıkıştırılmıştır</span>
+      </header>
+      <main>
+        <canvas id="map" aria-label="Güneş sistemi haritası"></canvas>
+        <aside id="info"></aside>
+      </main>
+      <footer id="controls"></footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
