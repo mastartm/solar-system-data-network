@@ -3,15 +3,15 @@ import { HYPOTHETICAL, HYPOTHETICAL_LABEL } from '../config/hypothetical';
 import type { Track } from '../data/types';
 import { dateToJd, jdToDate, trackEndJD } from '../map/ephemeris';
 import type { BlackoutWindow } from '../network/network';
-import { computeNetwork } from '../network/network';
-import { simulate, type ForecastError, type LinkSample, type Policy, type SchedConfig, type SchedTopology, type SimResult } from '../network/scheduler';
-import { ALL_POLICIES, POLICIES, hasBlackout, metricsOf, runPolicy, sweepValues, type Metrics, type PartialPolicyMetrics, type SweepKey } from '../network/sweep';
-import { LINK_MODE_LABEL, MARS_RELAY, MOON_RELAY, buildLinkTimeline, defaultParams, lightDelaySeries, restrictToRelay, rollingConfig, schedConfig, schedTopology, withParams, type LinkMode, type SweepParams } from '../network/timeline';
+import { ComputePool, createPool } from '../network/computeClient';
+import type { CoverageRow, SimOut, TlInfo, TlSpec } from '../network/compute';
+import type { ForecastError, Policy, SchedConfig, SimResult } from '../network/scheduler';
+import { ALL_POLICIES, POLICIES, sweepValues, type Metrics, type PartialPolicyMetrics, type SweepKey } from '../network/sweep';
+import { LINK_MODE_LABEL, MARS_RELAY, MOON_RELAY, defaultParams, lightDelaySeries, rollingConfig, schedConfig, withParams, type LinkMode, type SweepParams } from '../network/timeline';
 
 const fmt = (n: number, d = 0) => n.toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const day = (jd: number) => jdToDate(jd).toISOString().slice(0, 10);
 const year = (jd: number) => 1970 + (jd - 2440587.5) / 365.2425;
-const tick = () => new Promise<void>((r) => setTimeout(r, 0)); // tarayıcıya nefes aldır: uzun hesap parçalara bölünür
 
 // Seriler: FIFO = mavi, öncelikli = turuncu, strateji = yeşil, kapsama bilen strateji = mor (koyu yüzeyde ayırt edilen kategorik renkler). Metin rengi seri rengi değildir.
 const C = { fifo: '#3987e5', prio: '#d95926', strat: '#3fb68b', stratLoss: '#9be3c6', cov: '#b88cf2', covLoss: '#dcc5fa', roll: '#e8c13d', rollLoss: '#f5e2a0', moon: '#cfcfcf', mars: '#d9593a', text: '#8a96b2', grid: '#1e2740', ink: '#e6ebf5' };
@@ -74,6 +74,11 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
   let ChartCtor: typeof import('chart.js').Chart | null = null;
   let built = false;
   let token = 0; // her yeni hesaplama bir öncekini geçersiz kılar (iptal)
+  // Uzun hesaplar Web Worker havuzunda çalışır (ana iş parçacığı yalnızca çizer); havuz ilk kullanımda kurulur ve izleri alır.
+  let pool: ComputePool | null = null;
+  const getPool = () => { if (!pool) { pool = createPool(); void pool.init(tracks); } return pool; };
+  /** Süren hesabı iptal eder: belirteç değişir, bekleyen işler başlamaz, sürenlerin sonucu atılır (atılan işlerin sözleri sonuçlanmaz). */
+  const bump = () => { token++; pool?.cancel(); return token; };
   let stationCount = HYPOTHETICAL.groundStations.stations.length;
   let linkMode: LinkMode = 'arq';
   let kind: ScenKind = 'mars';
@@ -289,19 +294,9 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     const relays = HYPOTHETICAL.relays;
     const rows: string[] = [];
     let surface: Record<string, number> = {};
-    for (const n of counts) {
-      await tick();
-      if (my !== token) return;
-      const see: Record<string, number> = {}, up: Record<string, number> = {}, surf: Record<string, number> = {};
-      let t = 0;
-      for (let jd = s.startJD; jd < s.endJD; jd += 1 / 48) {
-        t++;
-        for (const st of computeNetwork(tracks, jd, n).statuses) {
-          see[st.relay.id] = (see[st.relay.id] ?? 0) + (n === 0 || st.station ? 1 : 0);
-          up[st.relay.id] = (up[st.relay.id] ?? 0) + (st.earthLink === 'up' ? 1 : 0);
-          surf[st.asset.id] = (surf[st.asset.id] ?? 0) + (st.surfaceLink === 'up' ? 1 : 0);
-        }
-      }
+    const covRows = await Promise.all(counts.map((n) => getPool().call<CoverageRow>({ op: 'coverage', startJD: s.startJD, endJD: s.endJD, n })));
+    if (my !== token) return;
+    for (const { n, steps: t, see, up, surf } of covRows) {
       const perRelay = (r: string) => HYPOTHETICAL.assets.filter((a) => a.relay === r).length;
       if (n === 0) surface = Object.fromEntries(Object.entries(surf).map(([k, v]) => [k, (100 * v) / t]));
       rows.push(`<tr${n === stationCount ? ' class="cur"' : ''}><td>${n === 0 ? 'Yok (ideal)' : n}</td>${relays.map((r) => `<td>${n === 0 ? '—' : fmt((100 * see[r.id]) / t / perRelay(r.id), 1)}</td><td>${fmt((100 * up[r.id]) / t / perRelay(r.id), 1)}</td>`).join('')}</tr>`);
@@ -313,25 +308,22 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     $('#st-hint').innerHTML = hint;
   }
 
-  // ---- Zaman çizelgesi önbelleği (yalnızca senaryodaki hat); kaydırıcılar bağlantıları değiştirmez, bu yüzden yeniden kullanılır ----
-  const tlCache = new Map<string, { topo: SchedTopology; samples: LinkSample[] }>();
-  function timeline(s: Scen, stepSec: number, n: number = stationCount) {
+  // ---- Bağlantı çizelgesi: Worker'larda üretilir ve önbelleklenir; ana iş parçacığı yalnızca tanımı ve özeti tutar ----
+  const tlSpec = (s: Scen, stepSec: number, n: number = stationCount): TlSpec => ({ startJD: s.startJD, endJD: s.endJD, stepSec, stations: n, relayId: s.relayId });
+  // Yalnızca tamamlanmış özetler önbelleklenir (iptal edilen işin sözü hiç sonuçlanmaz; bekleyen söz önbelleğe alınmaz).
+  const infoCache = new Map<string, TlInfo>();
+  async function tlInfo(s: Scen, stepSec: number, n: number = stationCount): Promise<TlInfo> {
     const key = `${s.key}|${stepSec}|${n}`;
-    let t = tlCache.get(key);
-    if (!t) {
-      const full = buildLinkTimeline(tracks, s.startJD, s.endJD, stepSec, schedTopology(), n);
-      if (!full.length) throw new Error('Bağlantı çizelgesi boş: tarih aralığı veri dışında.');
-      if (full.some((x) => [...x.surfaceDelaySec, ...x.earthDelaySec].some((v) => !Number.isFinite(v)))) throw new Error('Işık gecikmesi sayısal değil: konum verisi bozuk görünüyor.');
-      t = restrictToRelay(schedTopology(), full, s.relayId);
-      tlCache.set(key, t);
-      if (tlCache.size > 16) tlCache.delete(tlCache.keys().next().value as string);
-    }
-    return t;
+    const hit = infoCache.get(key);
+    if (hit) return hit;
+    const info = await getPool().call<TlInfo>({ op: 'tlInfo', tl: tlSpec(s, stepSec, n) });
+    infoCache.set(key, info);
+    if (infoCache.size > 16) infoCache.delete(infoCache.keys().next().value as string);
+    return info;
   }
-
-  /** Politika için sonucu hesaplar; kesinti yoksa stratejiler öncelikliyle birebir aynıdır (testli), yeniden hesaplanmaz. */
-  const simPolicy = (topo: SchedTopology, samples: LinkSample[], p: Policy, cfg: SchedConfig, prior?: SimResult): SimResult =>
-    prior && !hasBlackout(samples) && (p === 'strategy' || p === 'coverage') ? { ...prior, policy: p } : simulate(topo, samples, p, cfg);
+  /** Bir çizelgeleyici çalıştırması (Worker); metrikler her zaman, tam sonuç (seriler, sayaçlar) yalnızca full ile döner. */
+  const sim = (s: Scen, stepSec: number, n: number, policy: Policy, cfg: SchedConfig, full = false) =>
+    getPool().call<SimOut>({ op: 'sim', tl: tlSpec(s, stepSec, n), policy, cfg, full });
   const schedCfg = (s: Scen, mode: LinkMode = linkMode, over: Partial<SweepParams> = {}): SchedConfig => ({ ...withParams(schedConfig(mode), { ...params(), ...over }, s.relayId), rolling: rollingConfig(rollingDays) });
 
   function tableHtml(res: Partial<Record<Policy, SimResult>>, policies: Policy[]) {
@@ -353,19 +345,13 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
   }
 
   /** Kapalı Dünya hattı aralıkları (gün, senaryo başından): Mars'ta kavuşum penceresi, Ay'da istasyon/cisim arkası boşlukları. */
-  function shadeIntervals(s: Scen, samples: LinkSample[]): [number, number][] {
+  function shadeIntervals(s: Scen, info: TlInfo): [number, number][] {
     if (s.blackout) return [[s.blackout.startJD - s.startJD, s.blackout.endJD - s.startJD]];
-    const out: [number, number][] = [];
-    const dt = sc.stepSec / 86400;
-    let from = -1;
-    samples.forEach((x, i) => {
-      if (!x.earthUp[0]) { if (from < 0) from = i; } else if (from >= 0) { out.push([from * dt, i * dt]); from = -1; }
-    });
-    if (from >= 0) out.push([from * dt, samples.length * dt]);
-    return out;
+    return info.closed;
   }
 
-  function drawScenario(s: Scen, topo: SchedTopology, samples: LinkSample[], res: Partial<Record<Policy, SimResult>>) {
+    function drawScenario(s: Scen, info: TlInfo, res: Partial<Record<Policy, SimResult>>) {
+    const topo = info.topo;
     for (const c of scenarioCharts.splice(2)) c.destroy(); // ilk ikisi (a) grafikleridir, kalsın
     const pols = s.policies;
     const R = (p: Policy) => res[p]!;
@@ -412,7 +398,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
 
     // (c) aktarma uydusu tampon doluluğu
     const toPts = (r: SimResult) => r.series.map((x) => ({ x: x.tSec / 86400, y: x.relayFill[0] * 100 }));
-    const intervals = shadeIntervals(s, samples);
+    const intervals = shadeIntervals(s, info);
     const shade: Plugin = {
       id: 'blackout',
       beforeDatasetsDraw(chart) {
@@ -448,19 +434,14 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       $('#cmp-table').textContent = 'Hesaplanıyor…';
       rows = [];
       const cfg = schedCfg(s);
-      for (const n of COMPARE_STATIONS) {
-        const { topo, samples } = timeline(s, sc.stepSec, n);
+      // istasyon sayısı × çizelgeleyici işleri Worker havuzuna birlikte verilir
+      rows = await Promise.all(COMPARE_STATIONS.map(async (n) => {
+        const [info, outs] = await Promise.all([tlInfo(s, sc.stepSec, n), Promise.all(s.policies.map((p) => sim(s, sc.stepSec, n, p, cfg)))]);
         const m = {} as Record<Policy, Metrics>;
-        let prior: SimResult | undefined;
-        for (const p of s.policies) {
-          await tick();
-          if (my !== token) return;
-          const r = simPolicy(topo, samples, p, cfg, prior);
-          if (p === 'priority') prior = r;
-          m[p] = metricsOf(r, cfg);
-        }
-        rows.push({ n, open: samples.filter((x) => x.earthUp[0]).length / samples.length, m });
-      }
+        s.policies.forEach((p, i) => { m[p] = outs[i].metrics; });
+        return { n, open: info.openFrac, m };
+      }));
+      if (my !== token) return;
       cmpCache.set(deps, rows);
       if (cmpCache.size > 12) cmpCache.delete(cmpCache.keys().next().value as string);
     }
@@ -491,14 +472,10 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     $('#err-sub').textContent = `${s.relayName} hattı, ${stationCount === 0 ? 'istasyon modeli kapalı' : `${stationCount} istasyon`}`;
     if (!rows) {
       $('#err-table').textContent = 'Hesaplanıyor…';
-      const { topo, samples } = timeline(s, sc.stepSec);
-      rows = [];
-      for (const mode of ['loss', 'arq', 'burst'] as LinkMode[]) {
-        await tick();
-        if (my !== token) return;
-        const cfg = schedCfg(s, mode);
-        rows.push({ mode, m: metricsOf(simulate(topo, samples, 'priority', cfg), cfg) });
-      }
+      const modes = ['loss', 'arq', 'burst'] as LinkMode[];
+      const outs = await Promise.all(modes.map((mode) => sim(s, sc.stepSec, stationCount, 'priority', schedCfg(s, mode))));
+      if (my !== token) return;
+      rows = modes.map((mode, i) => ({ mode, m: outs[i].metrics }));
       errCache.set(deps, rows);
       if (errCache.size > 12) errCache.delete(errCache.keys().next().value as string);
     }
@@ -600,28 +577,37 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
   async function runSweeps(my: number, s: Scen) {
     const se = HYPOTHETICAL.sensitivity;
     const cfg = { ...schedConfig(linkMode), rolling: rollingConfig(rollingDays), stepSec: se.sweepStepSec };
-    const { topo, samples } = timeline(s, se.sweepStepSec);
+    const tl = tlSpec(s, se.sweepStepSec);
     const status = $('#sw-status');
     const p0 = params(), d0 = def();
-    for (const d of sliderDefs(d0, kind)) {
+    // Tüm taramalar (parametre × nokta × çizelgeleyici) işçi havuzuna birlikte verilir; her grafik kendi noktaları bitince çizilir.
+    const todo = sliderDefs(d0, kind).filter((d) => {
       const others = SWEEP_KEYS.filter((k) => k !== d.key).map((k) => p0[k]);
       const deps = JSON.stringify([s.key, d.key, others, stationCount, linkMode, rollingDays]);
-      if (sweeps[d.key]?.deps === deps) { drawSweep(d.key, s); continue; }
-      const values = sweepValues(d.min, d.max, se.sweepPoints, d0[d.key]);
-      const rows: PartialPolicyMetrics[] = [];
-      for (let i = 0; i < values.length; i++) {
-        status.textContent = `Tarama: ${sweepMeta(d.key, s.relayName).title} ${i + 1}/${values.length}…`;
+      if (sweeps[d.key]?.deps === deps) { drawSweep(d.key, s); return false; }
+      return true;
+    });
+    const per = todo.map((d) => ({ d, values: sweepValues(d.min, d.max, se.sweepPoints, d0[d.key]) }));
+    const total = per.reduce((n, x) => n + x.values.length * s.sweepPolicies.length, 0);
+    let done = 0;
+    const tick = () => { status.textContent = `Tarama: ${done}/${total}…`; };
+    tick();
+    await Promise.all(per.map(async ({ d, values }) => {
+      const others = SWEEP_KEYS.filter((k) => k !== d.key).map((k) => p0[k]);
+      const deps = JSON.stringify([s.key, d.key, others, stationCount, linkMode, rollingDays]);
+      const rows = await Promise.all(values.map(async (v) => {
         const row: PartialPolicyMetrics = {};
-        for (const p of s.sweepPolicies) {
-          await tick(); // her çizelgeleyici ayrı parça: tarayıcı arada çizim/girdi işleyebilir
-          if (my !== token) return;
-          row[p] = runPolicy(topo, samples, cfg, p0, p, { [d.key]: values[i] }, s.relayId); // Ay'da Aşama 4/7 stratejileri gösterilmez (kesinti yok)
-        }
-        rows.push(row);
-      }
+        await Promise.all(s.sweepPolicies.map(async (p) => {
+          row[p] = await getPool().call<Metrics>({ op: 'policy', tl, cfg, params: p0, policy: p, override: { [d.key]: v } }); // Ay'da Aşama 4/7 stratejileri gösterilmez (kesinti yok)
+          done++; tick();
+        }));
+        return row;
+      }));
+      if (my !== token) return;
       sweeps[d.key] = { deps, values, rows };
       drawSweep(d.key, s);
-    }
+    }));
+    if (my !== token) return;
     status.textContent = `Tarama tamam (${fmt(se.sweepStepSec)} sn adım).`;
   }
 
@@ -629,7 +615,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
   const scanCharts: Chart[] = [];
   let fcToken = 0, emToken = 0;
   const resetScans = () => {
-    fcToken++; emToken++;
+    fcToken++; emToken++; pool?.cancel(); // süren taramalar bırakılır
     for (const c of scanCharts.splice(0)) c.destroy();
     $('#fc-body').innerHTML = ''; $('#em-body').innerHTML = '';
     $('#fc-status').textContent = ''; $('#em-status').textContent = '';
@@ -666,9 +652,9 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     for (const c of scanCharts.splice(0)) c.destroy();
     body.innerHTML = '';
     const step = HYPOTHETICAL.forecastScan.stepSec;
-    const { topo, samples } = timeline(s, step);
+    const info = await tlInfo(s, step);
     const cfg0: SchedConfig = { ...schedCfg(s), stepSec: step };
-    const blackout = hasBlackout(samples);
+    const blackout = info.blackout;
     // Kesinti yoksa (Ay) Aşama 4/7 stratejileri hiç kısmaz: sonuç öncelikliyle aynı, hesaplanmaz.
     const pols: Policy[] = blackout ? ['strategy', 'coverage', 'rolling'] : ['rolling'];
     const kinds = FC_KINDS();
@@ -676,27 +662,25 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     let done = 0;
     const prog = () => { st.textContent = `Hesaplanıyor… ${done}/${total}`; };
     prog();
-    await tick();
-    const prio = metricsOf(simulate(topo, samples, 'priority', cfg0), cfg0);
-    done++;
-    const res: Record<string, Partial<Record<Policy, Metrics>>[]> = {};
+    const run = async (cfg: SchedConfig, p: Policy) => { const o = await sim(s, step, stationCount, p, cfg); done++; prog(); return o.metrics; };
+    const prioP = run(cfg0, 'priority');
+    const resP: Record<string, Promise<Partial<Record<Policy, Metrics>>>[]> = {};
     for (const k of kinds) {
-      res[k.id] = [];
-      for (const v of k.values) {
+      const arr: Promise<Partial<Record<Policy, Metrics>>>[] = [];
+      resP[k.id] = arr;
+      k.values.forEach((v, vi) => arr.push((async () => {
         const row: Partial<Record<Policy, Metrics>> = {};
-        for (const p of pols) {
-          await tick();
-          if (my !== fcToken) return;
-          const cfg = { ...cfg0, forecast: k.make(v) };
-          // Aşama 4 stratejisi ortalama kaybı kullanmaz: kayıp sapması onu değiştirmez (v = 0'daki sonuç kullanılır)
-          const reuse = k.id === 'loss' && p === 'strategy' && res[k.id].length > 0;
-          row[p] = reuse ? res[k.id][0].strategy! : metricsOf(simulate(topo, samples, p, cfg), cfg);
-          done++;
-          if (done % 3 === 0) prog();
-        }
-        res[k.id].push(row);
-      }
+        await Promise.all(pols.map(async (p) => {
+          // Aşama 4 stratejisi ortalama kaybı kullanmaz: kayıp sapması onu değiştirmez (ilk noktanın sonucu kullanılır)
+          if (k.id === 'loss' && p === 'strategy' && vi > 0) { row[p] = (await arr[0]).strategy!; done++; return; }
+          row[p] = await run({ ...cfg0, forecast: k.make(v) }, p);
+        }));
+        return row;
+      })()));
     }
+    const prio = await prioP;
+    const res: Record<string, Partial<Record<Policy, Metrics>>[]> = {};
+    for (const k of kinds) res[k.id] = await Promise.all(resP[k.id]);
     if (my !== fcToken) return;
     st.textContent = `Tamam (${fmt(step)} sn adım, ${s.relayName} hattı, ${stationCount === 0 ? 'istasyon modeli kapalı' : `${stationCount} istasyon`}, kayan ufuk ${fmt(rollingDays, rollingDays < 1 ? 1 : 0)} gün).`;
 
@@ -758,27 +742,18 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     for (const c of scanCharts.splice(0)) c.destroy();
     body.innerHTML = '';
     const step = HYPOTHETICAL.forecastScan.stepSec;
-    const { topo, samples } = timeline(s, step);
     const base: SchedConfig = { ...schedCfg(s, 'burst'), stepSec: step };
     const kinds = EM_KINDS();
     const total = kinds.reduce((n, k) => n + k.values.length, 1);
     let done = 0;
     st.textContent = `Hesaplanıyor… 0/${total}`;
-    await tick();
+    const run = async (cfg: SchedConfig) => { const o = await sim(s, step, stationCount, 'priority', cfg); st.textContent = `Hesaplanıyor… ${++done}/${total}`; return o.metrics; };
     const perCfg = { ...base, arq: { ...base.arq!, burst: undefined } } as SchedConfig; // periyodik referans (aynı ortalama kayıp)
-    const periodic = metricsOf(simulate(topo, samples, 'priority', perCfg), perCfg);
-    done++;
+    const periodicP = run(perCfg);
+    const resP = kinds.map((k) => Promise.all(k.values.map((v) => run(k.cfg(base, v)))));
+    const periodic = await periodicP;
     const res: Record<string, Metrics[]> = {};
-    for (const k of kinds) {
-      res[k.id] = [];
-      for (const v of k.values) {
-        await tick();
-        if (my !== emToken) return;
-        const cfg = k.cfg(base, v);
-        res[k.id].push(metricsOf(simulate(topo, samples, 'priority', cfg), cfg));
-        st.textContent = `Hesaplanıyor… ${++done}/${total}`;
-      }
-    }
+    for (let i = 0; i < kinds.length; i++) res[kinds[i].id] = await resP[i];
     if (my !== emToken) return;
     st.textContent = `Tamam (${fmt(step)} sn adım, ${s.relayName} hattı, ${stationCount === 0 ? 'istasyon modeli kapalı' : `${stationCount} istasyon`}).`;
     body.innerHTML = kinds.map((k) => `<h4>${k.title}</h4><div class="charts two"><div class="chart"><canvas id="em-${k.id}-n" aria-label="${k.title}: hatta kayıp paket"></canvas></div><div class="chart"><canvas id="em-${k.id}-t" aria-label="${k.title}: düşen ve teslim"></canvas></div></div><div id="em-${k.id}-tab"></div>`).join('')
@@ -821,42 +796,37 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     const s = scenario();
     if (!s) { status.textContent = kind === 'mars' ? 'Veri aralığında uygun kavuşum penceresi yok.' : 'Geçerli bir başlangıç tarihi seçin (veri aralığı içinde).'; return; }
     active = s;
-    const my = ++token;
+    const my = bump();
     resetScans();
     status.textContent = 'Hesaplanıyor…';
     $('#sw-status').textContent = '';
     applyTexts(s);
-    await tick();
     const perf: Record<string, number> = {};
     try {
       const t0 = performance.now();
-      const { topo, samples } = timeline(s, sc.stepSec);
       const cfg = schedCfg(s);
+      // Senaryo: tüm çizelgeleyiciler işçi havuzunda birlikte çalışır; ana iş parçacığı yalnızca sonucu çizer.
+      const [info, outs] = await Promise.all([tlInfo(s, sc.stepSec), Promise.all(s.policies.map((p) => sim(s, sc.stepSec, stationCount, p, cfg, true)))]);
+      if (my !== token) return;
       const res: Partial<Record<Policy, SimResult>> = {};
-      for (const p of s.policies) {
-        res[p] = simPolicy(topo, samples, p, cfg, res.priority);
-        await tick();
-        if (my !== token) return;
-      }
-      drawScenario(s, topo, samples, res);
+      const met: Partial<Record<Policy, Metrics>> = {};
+      s.policies.forEach((p, i) => { res[p] = outs[i].result!; met[p] = outs[i].metrics; });
+      drawScenario(s, info, res);
       perf.senaryoMs = Math.round(performance.now() - t0);
-      const m = metricsOf(res[s.policies[s.policies.length - 1]]!, cfg);
+      const m = met[s.policies[s.policies.length - 1]]!;
+      const sp = (100 * m.suppressedMb) / (m.demandMb || 1);
       status.textContent = s.kind === 'mars'
-        ? `${fmt(samples.length)} adım × ${s.policies.length} çizelgeleyici, ${fmt(perf.senaryoMs)} ms (Mars hattı) · kayan ufuklu strateji: düşen %${fmt(m.dropPct, 1)}, üretilmeyen %${fmt((100 * m.suppressedMb) / (m.demandMb || 1), 1)}`
-        : `${fmt(samples.length)} adım × ${s.policies.length} çizelgeleyici, ${fmt(perf.senaryoMs)} ms (Ay hattı) · öncelikli: teslim %${fmt(metricsOf(res.priority!, cfg).deliveredPct, 1)}, düşen %${fmt(metricsOf(res.priority!, cfg).dropPct, 1)} · kayan ufuklu: düşen %${fmt(m.dropPct, 1)}, üretilmeyen %${fmt((100 * m.suppressedMb) / (m.demandMb || 1), 1)}, teslim %${fmt(m.deliveredPct, 1)}`;
-      let t1 = performance.now();
-      await renderCoverage(my, s);
+        ? `${fmt(info.n)} adım × ${s.policies.length} çizelgeleyici, ${fmt(perf.senaryoMs)} ms (Mars hattı, Web Worker) · kayan ufuklu strateji: düşen %${fmt(m.dropPct, 1)}, üretilmeyen %${fmt(sp, 1)}`
+        : `${fmt(info.n)} adım × ${s.policies.length} çizelgeleyici, ${fmt(perf.senaryoMs)} ms (Ay hattı, Web Worker) · öncelikli: teslim %${fmt(met.priority!.deliveredPct, 1)}, düşen %${fmt(met.priority!.dropPct, 1)} · kayan ufuklu: düşen %${fmt(m.dropPct, 1)}, üretilmeyen %${fmt(sp, 1)}, teslim %${fmt(m.deliveredPct, 1)}`;
+      // Kalan bölümler birbirinden bağımsızdır: işçi havuzunda birlikte hesaplanır, her biri bitince çizilir (süreler tamamlanma zamanıdır, toplamı vermez).
+      const timed = async (key: string, f: Promise<void>) => { await f; perf[key] = Math.round(performance.now() - t0); };
+      await Promise.all([
+        timed('kapsamaMs', renderCoverage(my, s)),
+        timed('istasyonKarsilastirmaMs', renderCompare(my, s)),
+        timed('hataModeliMs', renderErrors(my, s)),
+        timed('taramaMs', runSweeps(my, s)),
+      ]);
       if (my !== token) return;
-      perf.kapsamaMs = Math.round(performance.now() - t1); t1 = performance.now();
-      await renderCompare(my, s);
-      if (my !== token) return;
-      perf.istasyonKarsilastirmaMs = Math.round(performance.now() - t1); t1 = performance.now();
-      await renderErrors(my, s);
-      if (my !== token) return;
-      perf.hataModeliMs = Math.round(performance.now() - t1); t1 = performance.now();
-      await runSweeps(my, s);
-      if (my !== token) return;
-      perf.taramaMs = Math.round(performance.now() - t1);
       perf.toplamMs = Math.round(performance.now() - t0);
       root.dataset.perf = JSON.stringify({ senaryo: s.key, ...perf });
     } catch (e) {
@@ -887,7 +857,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       input.addEventListener('input', () => {
         p[d.key] = Number(input.value);
         out.textContent = fmtSlider(d, p[d.key]);
-        token++; // süren hesabı iptal et
+        bump(); // süren hesabı iptal et (bekleyen işler başlamaz)
         markCurrent();
         $('#sc-status').textContent = 'Değişiklik bekleniyor…';
         schedule(450);
@@ -915,13 +885,13 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     for (const key of SWEEP_KEYS) delete sweeps[key];
     renderSliders();
   }
-  $<HTMLSelectElement>('#sel-scen').addEventListener('change', (e) => { setKind((e.target as HTMLSelectElement).value as ScenKind); token++; schedule(0); });
+  $<HTMLSelectElement>('#sel-scen').addEventListener('change', (e) => { setKind((e.target as HTMLSelectElement).value as ScenKind); bump(); schedule(0); });
   $('#sc-window').addEventListener('change', () => schedule(0));
   $('#moon-start').addEventListener('change', () => schedule(0));
   $('#moon-days').addEventListener('change', () => schedule(0));
-  $<HTMLSelectElement>('#sel-stations').addEventListener('change', (e) => { stationCount = Number((e.target as HTMLSelectElement).value); token++; schedule(0); });
-  $<HTMLSelectElement>('#sel-rolling').addEventListener('change', (e) => { rollingDays = Number((e.target as HTMLSelectElement).value); token++; schedule(0); });
-  $<HTMLSelectElement>('#sel-mode').addEventListener('change', (e) => { linkMode = (e.target as HTMLSelectElement).value as LinkMode; syncLossEnabled(); token++; schedule(0); });
+  $<HTMLSelectElement>('#sel-stations').addEventListener('change', (e) => { stationCount = Number((e.target as HTMLSelectElement).value); bump(); schedule(0); });
+  $<HTMLSelectElement>('#sel-rolling').addEventListener('change', (e) => { rollingDays = Number((e.target as HTMLSelectElement).value); bump(); schedule(0); });
+  $<HTMLSelectElement>('#sel-mode').addEventListener('change', (e) => { linkMode = (e.target as HTMLSelectElement).value as LinkMode; syncLossEnabled(); bump(); schedule(0); });
   for (const id of ['#sw-loss-metric', '#sw-time-metric']) $(id).addEventListener('change', drawSweeps);
   $('#lb-window').hidden = false;
 
