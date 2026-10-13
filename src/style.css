@@ -8,7 +8,8 @@ h1 { font-size:18px; margin:0; }
 main { position:relative; flex:1; display:flex; min-height:0; }
 #map { flex:1; width:100%; min-width:0; cursor:grab; touch-action:none; background:radial-gradient(circle at 50% 50%, #0b1226, var(--bg)); }
 #date-label { position:absolute; left:16px; bottom:12px; font-size:22px; font-variant-numeric:tabular-nums; color:var(--muted); pointer-events:none; }
-#info { width:280px; padding:16px; background:var(--panel); border-left:1px solid var(--line); overflow:auto; }
+#side { width:320px; background:var(--panel); border-left:1px solid var(--line); overflow:auto; }
+#info { padding:16px; }
 #info h2 { font-size:18px; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
 .dot { width:12px; height:12px; border-radius:50%; display:inline-block; }
 dl { margin:0; } dt { color:var(--muted); font-size:12px; margin-top:12px; } dd { margin:2px 0 0; font-size:18px; font-variant-numeric:tabular-nums; }
@@ -20,7 +21,7 @@ button, select, input[type=date] { background:#16203a; color:var(--fg); border:1
 button { cursor:pointer; } button:hover { border-color:var(--accent); }
 label { color:var(--muted); font-size:13px; display:flex; align-items:center; gap:6px; }
 .zoom { display:flex; gap:4px; }
-@media (max-width:700px) { main { flex-direction:column; } #info { width:auto; border-left:0; border-top:1px solid var(--line); max-height:35%; } }
+@media (max-width:700px) { main { flex-direction:column; } #side { width:auto; border-left:0; border-top:1px solid var(--line); max-height:45%; } }
 
 /* --- alt çubuk, tutulma işaretleri, 2B/3B düğmesi --- */
 footer { flex-direction:column; align-items:stretch; position:relative; }
@@ -44,3 +45,12 @@ footer .row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
 .eitem:hover { background:#16203a; } .eitem b { font-weight:500; color:var(--muted); font-size:12px; }
 .eclipse-badge { font-size:13px; color:#ffc83d; margin-top:2px; }
 #date-label { pointer-events:none; }
+
+/* --- Aşama 2: veri ağı --- */
+#net { padding:0 16px 16px; border-top:1px solid var(--line); font-size:13px; }
+#net h3 { font-size:15px; margin:14px 0 4px; display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.badge-hyp { font-size:11px; font-weight:500; color:#ffc83d; border:1px solid #ffc83d; border-radius:10px; padding:1px 8px; }
+#net dd { font-size:16px; }
+.asset { margin-top:10px; } .asset small { display:block; color:var(--muted); margin-top:2px; line-height:1.4; }
+.ok { color:#6fe0a0; font-weight:500; } .bad { color:#ff6b6b; font-weight:500; }
+.net-row { display:flex; gap:10px; align-items:center; }

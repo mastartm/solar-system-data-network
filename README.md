@@ -2,7 +2,7 @@
 
 Gerçek gezegen konumlarını gösteren etkileşimli bir güneş sistemi haritası. İlerleyen aşamalarda Ay ve Mars yüzeyindeki araçların aktarma uyduları üzerinden Dünya'ya veri gönderdiği bir haberleşme ağı simülasyonu eklenecek.
 
-> **Durum: Aşama 1 (etkileşimli harita, 2B/3B görünüm, tutulmalar).** Ağ modeli ve çizelgeleyici henüz yok.
+> **Durum: Aşama 2 (yüzey araçları, aktarma uyduları, ışık gecikmesi, Mars kavuşum kesintisi, veri akışı animasyonu).** Çizelgeleyici henüz yok. Ağdaki araç/uydu/veri hızı değerleri **varsayımsaldır**.
 
 **Canlı site:** GitHub Pages açıldıktan sonra `https://mastartm.github.io/solar-system-data-network/` (Settings → Pages → Source: *GitHub Actions*).
 
@@ -30,6 +30,16 @@ Diğer komutlar: `npm run build` (yayın derlemesi), `npm test` (birim testler),
 - **3B** düğmesi eğik görünüme geçer: sürükleyerek döndürün (Shift+sürükleme kaydırır). 3B'de gezegenlerin ekliptik düzlemden sapması 3 kat abartılır (görünsün diye).
 - **Tutulmalar:** kaydırıcının üstündeki noktalar tutulmaları gösterir (sarı: güneş, mavi: Ay; dolu: tam/halkalı, boş: kısmi/yarıgölge). Noktaya veya "Tutulmalar" listesine tıklayınca o tarihe gider; ◀ ▶ düğmeleri önceki/sonraki tutulmaya atlar.
 
+## Aşama 2: veri ağı (varsayımsal)
+
+- **Varsayımsal değerler tek dosyada:** `src/config/hypothetical.ts` (araçlar, aktarma uyduları, yörünge yükseklikleri, veri hızları, kesinti eşiği, animasyon). Ekranda başlıkta ve ağ panelinde, haritada ise "Varsayımsal değerler" yazar. Gerçek bir görev değildir.
+- **Varlıklar:** Ay'da 2, Mars'ta 2 yüzey aracı; Ay ve Mars için birer aktarma uydusu (dairesel, ekvatoral yörünge).
+- **Işık gecikmesi:** uydu→Dünya mesafesi Horizons konumlarından (cisim merkezli vektör − uydu konumu), araç→uydu mesafesi yüzey-yörünge geometrisinden hesaplanır; tek yönlü gecikme = toplam mesafe / c. Dünya'nın merkezine ölçülür (yer istasyonu yok).
+- **Mars kavuşumu:** Dünya'dan bakınca Güneş–Mars açısı eşiğin (varsayılan 3°) altına inince Mars bağlantıları kesilir; paketler aktarma uydusunda bekler. Alttaki "Mars kavuşumu" düğmeleri kesinti penceresinin başına atlar; pencereler veri aralığı taranarak bulunur.
+- **Görüş koşulları:** araç, uydu ufkun altındayken bağlanamaz; uydu Dünya'dan cismin arkasında kalırsa ("occulted") bağlantı kesilir.
+- **Animasyon:** araç → uydu → Dünya paketleri; hızı üsluptur (ölçekli değil), gecikme panelde sayı olarak verilir. Bağlantı yoksa beyaz noktalar olarak birikir.
+- **Basitleştirmeler:** cisim eksenleri ekliptiğe paralel varsayıldı (gerçek kutup yönleri yok); Ay'ın çizim mesafesi abartılı olduğu için Ay çevresindeki yerleşim şematiktir; yer istasyonu, bant genişliği/batarya modeli ve Güneş koronası etkisi yok. Bu aşamada Horizons verisine erişemeyen bir ortamdaydım: ağ modeli birim testlerle (sentetik geometri) doğrulandı, ekranda gerçek veriyle **görsel olarak denenmedi**.
+
 ## Veri kaynağı ve kararlar
 
 - **Kaynak:** NASA/JPL Horizons API (`ssd.jpl.nasa.gov/api/horizons.api`), anahtar gerektirmez. Güneş merkezli, ekliptik düzlemde konum ve hız vektörleri (gezegenler 2 günde bir, Ay Dünya merkezli günde bir).
@@ -47,7 +57,9 @@ Diğer komutlar: `npm run build` (yayın derlemesi), `npm test` (birim testler),
 ```
 src/data/    veri okuma ve tipler
 src/map/     interpolasyon (ephemeris) ve Canvas çizimi
-src/ui/      kontroller ve bilgi paneli
+src/ui/      kontroller, bilgi paneli, ağ paneli
+src/network/ ağ modeli (gecikme, bağlantı durumu, kavuşum)
+src/config/  varsayımsal değerler (tek dosya)
 scripts/     Horizons veri çekme betiği
 public/data/ üretilen JSON dosyaları
 .github/workflows/  GitHub Pages yayını
@@ -70,4 +82,4 @@ public/data/ üretilen JSON dosyaları
 
 ## Sonraki aşamalar
 
-Aşama 2: Ay/Mars yüzey araçları, aktarma uyduları, ışık gecikmesi ve Mars kavuşumunda iletişim kesintisi, veri akışı animasyonu. Bu aşamadaki araç sayısı, batarya, bant genişliği gibi değerler **varsayımsaldır** ve tek bir config dosyasında tutulacak; sonuçlar gerçek bir görev sonucu değildir.
+Aşama 3: çizelgeleyici ve karşılaştırma grafikleri. Araç sayısı, bant genişliği gibi değerler **varsayımsaldır** ve `src/config/hypothetical.ts` içinde kalır; sonuçlar gerçek bir görev sonucu değildir.

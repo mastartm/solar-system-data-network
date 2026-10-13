@@ -38,6 +38,8 @@ export class MapView {
   selected: BodyId = 'earth';
   onSelect: (id: BodyId) => void = () => {};
   dirty = true;
+  /** Cisimler çizildikten sonra çağrılır; ekran konumları (x, y, tıklama yarıçapı) verilir. */
+  overlay: ((ctx: CanvasRenderingContext2D, screen: Map<BodyId, [number, number, number]>) => void) | null = null;
 
   constructor(private canvas: HTMLCanvasElement, private tracks: Record<string, Track>) {
     this.ctx = canvas.getContext('2d')!;
@@ -250,6 +252,7 @@ export class MapView {
 
     items.sort((a, b) => a.depth - b.depth);
     for (const it of items) this.drawBody(it, sunItem);
+    this.overlay?.(ctx, this.positions);
   }
 
   private drawStars() {
