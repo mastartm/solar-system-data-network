@@ -1,0 +1,23 @@
+:root { color-scheme: dark; --bg:#05070f; --panel:#0e1424; --line:#1e2740; --fg:#e6ebf5; --muted:#8a96b2; --accent:#4a90e2; }
+* { box-sizing: border-box; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+#app { display:flex; flex-direction:column; height:100%; }
+header { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 16px; padding:10px 16px; border-bottom:1px solid var(--line); }
+h1 { font-size:18px; margin:0; }
+.note { color:var(--muted); font-size:12px; }
+main { position:relative; flex:1; display:flex; min-height:0; }
+#map { flex:1; width:100%; min-width:0; cursor:grab; touch-action:none; background:radial-gradient(circle at 50% 50%, #0b1226, var(--bg)); }
+#date-label { position:absolute; left:16px; bottom:12px; font-size:22px; font-variant-numeric:tabular-nums; color:var(--muted); pointer-events:none; }
+#info { width:280px; padding:16px; background:var(--panel); border-left:1px solid var(--line); overflow:auto; }
+#info h2 { font-size:18px; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
+.dot { width:12px; height:12px; border-radius:50%; display:inline-block; }
+dl { margin:0; } dt { color:var(--muted); font-size:12px; margin-top:12px; } dd { margin:2px 0 0; font-size:18px; font-variant-numeric:tabular-nums; }
+.hint { color:var(--muted); font-size:12px; margin-top:20px; }
+code { background:#000; padding:2px 6px; border-radius:4px; }
+footer { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:10px 16px; border-top:1px solid var(--line); background:var(--panel); }
+footer input[type=range] { flex:1; min-width:160px; accent-color:var(--accent); }
+button, select, input[type=date] { background:#16203a; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font:inherit; }
+button { cursor:pointer; } button:hover { border-color:var(--accent); }
+label { color:var(--muted); font-size:13px; display:flex; align-items:center; gap:6px; }
+.zoom { display:flex; gap:4px; }
+@media (max-width:700px) { main { flex-direction:column; } #info { width:auto; border-left:0; border-top:1px solid var(--line); max-height:35%; } }
