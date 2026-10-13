@@ -126,7 +126,7 @@ export function mountExtras(ctx: ExtrasCtx) {
     const prog = () => { st.textContent = `Hesaplanıyor… ${done}/${total}`; };
     prog();
     const step = HYPOTHETICAL.scheduler.stepSec;
-    const run = async (n: number, p: Policy, projection: ProjectionOptions) => { const m = await sim(spec(s, step, n, s.net), p, ctx.cfgFor(s.relayId, s.net, { projection, step })); done++; prog(); return m; };
+    const run = async (n: number, p: Policy, projection: ProjectionOptions) => { const m = await sim(spec(s, step, n, s.net), p, { ...ctx.cfgFor(s.relayId, s.net, { projection, step }), valueHalfLivesSec: [] }); done++; prog(); return m; };
     const res = await Promise.all(stationsList.map(async (n) => ({
       n,
       prio: await run(n, 'priority', {}),
@@ -187,7 +187,7 @@ export function mountExtras(ctx: ExtrasCtx) {
     const out = await Promise.all(stationsList.map(async (n) => Promise.all(cfgs.map(async (oc) => {
       const net = oc.net;
       const cov = oc.control ? null : await ctx.call<CoverageRow>({ op: 'coverage', startJD: s.startJD, endJD: s.endJD, n, net }); done++; prog();
-      const cfg = ctx.cfgFor(s.relayId, net, { step, ...(oc.control ? { params: { relayBufferMb: 2 * p0, relayDownlinkKbps: 2 * dl0 } } : {}) });
+      const cfg = { ...ctx.cfgFor(s.relayId, net, { step, ...(oc.control ? { params: { relayBufferMb: 2 * p0, relayDownlinkKbps: 2 * dl0 } } : {}) }), valueHalfLivesSec: [] };
       const ms = await Promise.all(pols.map(async (p) => { const m = await sim(spec(s, step, n, net), p, cfg); done++; prog(); return m; }));
       return { oc, cov, ms };
     }))));

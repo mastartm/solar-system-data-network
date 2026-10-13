@@ -178,7 +178,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       <section>
         <h3>(f) Duyarlılık analizi <small>(her grafikte yalnızca o parametre değişir, diğerleri kaydırıcı değerinde)</small></h3>
         <div class="row">
-          <label>Kayıp ölçütü <select id="sw-loss-metric"><option value="total">Toplam (hacim %)</option><option value="top">Telemetri (hacim %)</option><option value="deliv">Teslim edilen (talebin %'si)</option><option value="value">Değer (bölüm i: teslim edilen değer %)</option><option value="abandoned">Hatta kayıp (hacim %)</option><option value="retx">Yeniden gönderilen (paket)</option></select></label>
+          <label>Kayıp ölçütü <select id="sw-loss-metric"><option value="total">Toplam (hacim %)</option><option value="top">Telemetri (hacim %)</option><option value="deliv">Teslim edilen (talebin %'si)</option><option value="value">Değer (bölüm i ağırlıkları, sabit değer; teslim edilen değer %)</option><option value="abandoned">Hatta kayıp (hacim %)</option><option value="retx">Yeniden gönderilen (paket)</option></select></label>
           <label>Süre ölçütü <select id="sw-time-metric"><option value="topP95">Telemetri, %95</option><option value="lowP95">Bilim verisi, %95</option><option value="topMean">Telemetri, ortalama</option><option value="lowMean">Bilim verisi, ortalama</option></select></label>
           <span class="legend" id="sw-status" role="status"></span>
         </div>
@@ -605,8 +605,8 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       lossSets = perPolicy((m) => m.retransmissions);
       lossY = 'Yeniden gönderilen paket'; lossTitle = `${meta.title}: yeniden iletim`;
     } else if (lossMode === 'value') {
-      lossSets = perPolicy((m) => valuePct(m, valueOpts()));
-      lossY = 'Teslim edilen değer / talep edilen değer (%)'; lossTitle = `${meta.title}: değer`;
+      lossSets = perPolicy((m) => valuePct(m, { weightOf: valueOpts().weightOf })); // taramalar azalan değer toplamı içermez
+      lossY = 'Teslim edilen değer / talep edilen değer (%)'; lossTitle = `${meta.title}: değer (sabit)`;
     } else if (lossMode === 'deliv') {
       lossSets = perPolicy((m) => m.deliveredPct);
       lossY = 'Teslim edilen / talep (%)'; lossTitle = `${meta.title}: teslim edilen`;
@@ -656,7 +656,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
 
   async function runSweeps(my: number, s: Scen) {
     const se = HYPOTHETICAL.sensitivity;
-    const cfg = { ...schedConfig(linkMode), rolling: rollingConfig(rollingDays), projection: { ...projection }, stepSec: se.sweepStepSec };
+    const cfg = { ...schedConfig(linkMode), rolling: rollingConfig(rollingDays), projection: { ...projection }, valueHalfLivesSec: [], stepSec: se.sweepStepSec }; // taramalar azalan değer toplamı hesaplamaz (yalnızca sabit değer ölçütü)
     const tl = tlSpec(s, se.sweepStepSec);
     const status = $('#sw-status');
     const p0 = params(), d0 = def();
@@ -733,7 +733,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     body.innerHTML = '';
     const step = HYPOTHETICAL.forecastScan.stepSec;
     const info = await tlInfo(s, step);
-    const cfg0: SchedConfig = { ...schedCfg(s), stepSec: step };
+    const cfg0: SchedConfig = { ...schedCfg(s), valueHalfLivesSec: [], stepSec: step };
     const blackout = info.blackout;
     // Kesinti yoksa (Ay) Aşama 4/7 stratejileri hiç kısmaz: sonuç öncelikliyle aynı, hesaplanmaz.
     const pols: Policy[] = blackout ? ['strategy', 'coverage', 'rolling'] : ['rolling'];
@@ -822,7 +822,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     for (const c of scanCharts.splice(0)) c.destroy();
     body.innerHTML = '';
     const step = HYPOTHETICAL.forecastScan.stepSec;
-    const base: SchedConfig = { ...schedCfg(s, 'burst'), stepSec: step };
+    const base: SchedConfig = { ...schedCfg(s, 'burst'), valueHalfLivesSec: [], stepSec: step };
     const kinds = EM_KINDS();
     const total = kinds.reduce((n, k) => n + k.values.length, 1);
     let done = 0;

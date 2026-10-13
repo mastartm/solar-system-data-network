@@ -73,7 +73,7 @@ export function valuePct(m: Pick<Metrics, 'valueParts'>, o: ValueOpts = {}): num
   let num = 0, den = 0;
   for (const p of m.valueParts) {
     const w = o.weightOf ? o.weightOf(p) : p.weight;
-    num += w * (p.decays && o.halfLifeIdx !== undefined && o.halfLifeIdx >= 0 ? p.decayMb[o.halfLifeIdx] : p.deliveredMb);
+    num += w * (p.decays && o.halfLifeIdx !== undefined && o.halfLifeIdx >= 0 && o.halfLifeIdx < p.decayMb.length ? p.decayMb[o.halfLifeIdx] : p.deliveredMb);
     den += w * p.demandMb;
   }
   return den > 0 ? (100 * num) / den : 0;
