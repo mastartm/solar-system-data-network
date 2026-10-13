@@ -2,7 +2,7 @@ import { HYPOTHETICAL } from '../config/hypothetical';
 import type { Track } from '../data/types';
 import { C_KM_S, dist, sample, trackEndJD } from '../map/ephemeris';
 import { computeNetwork } from './network';
-import type { ArqConfig, CoverageConfig, LinkSample, SchedConfig, SchedTopology, StrategyConfig } from './scheduler';
+import type { ArqConfig, CoverageConfig, LinkSample, RollingConfig, SchedConfig, SchedTopology, StrategyConfig } from './scheduler';
 
 export const schedTopology = (): SchedTopology => ({
   assets: HYPOTHETICAL.assets.map((a) => ({ id: a.id, body: a.body, relay: a.relay, dataRateKbps: a.dataRateKbps })),
@@ -19,6 +19,11 @@ export const coverageConfig = (): CoverageConfig => {
   return { ...rest, lookaheadSec: lookaheadDays * 86400, recoverySec: recoveryDays * 86400 };
 };
 
+export const rollingConfig = (rollingDays: number = HYPOTHETICAL.rollingStrategy.rollingDays): RollingConfig => {
+  const { rollingDays: _d, rollingDaysOptions: _o, ...rest } = HYPOTHETICAL.rollingStrategy;
+  return { ...rest, rollingSec: rollingDays * 86400 };
+};
+
 /**
  * Hat modu: 'ideal' = kayıpsız hat (Aşama 3-4); 'loss' = hatalı hat, yeniden iletimsiz (maxAttempts 1); 'arq' = hatalı hat (periyodik kayıp)
  * + yeniden iletim; 'burst' (Aşama 7) = aynı ortalama kayıp, kümelenmiş (iki durumlu) dağılım + yeniden iletim.
@@ -28,14 +33,15 @@ export const LINK_MODE_LABEL: Record<LinkMode, string> = {
   ideal: 'Kayıpsız hat', loss: 'Hatalı hat, yeniden iletimsiz', arq: 'Hatalı hat + yeniden iletim', burst: 'Kümelenmiş hata + yeniden iletim',
 };
 
-export const arqConfig = (mode: LinkMode, earthLossPct = HYPOTHETICAL.arq.earthLossPct): ArqConfig | undefined =>
+export const arqConfig = (mode: LinkMode, earthLossPct = HYPOTHETICAL.arq.earthLossPct, surfaceRetrySec = HYPOTHETICAL.arq.surfaceRetrySec): ArqConfig | undefined =>
   mode === 'ideal' ? undefined : {
     surfaceLossPct: HYPOTHETICAL.arq.surfaceLossPct, earthLossPct,
     maxAttempts: mode === 'loss' ? 1 : HYPOTHETICAL.arq.maxAttempts,
+    ...(surfaceRetrySec > 0 ? { surfaceRetrySec } : {}),
     ...(mode === 'burst' ? { burst: { ...HYPOTHETICAL.arq.burst } } : {}),
   };
 
-export const schedConfig = (mode: LinkMode = 'ideal'): SchedConfig => ({ ...HYPOTHETICAL.scheduler, strategy: strategyConfig(), coverage: coverageConfig(), arq: arqConfig(mode) });
+export const schedConfig = (mode: LinkMode = 'ideal'): SchedConfig => ({ ...HYPOTHETICAL.scheduler, strategy: strategyConfig(), coverage: coverageConfig(), rolling: rollingConfig(), arq: arqConfig(mode) });
 
 export const MARS_RELAY = 'mars-aktarma';
 export const MOON_RELAY = 'ay-aktarma';

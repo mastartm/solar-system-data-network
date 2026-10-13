@@ -5,7 +5,9 @@ import { simulate, type LinkSample, type Policy, type SchedConfig, type SchedTop
 import { MARS_RELAY, withParams, type SweepParams } from './timeline';
 
 export const POLICIES: Policy[] = ['fifo', 'priority', 'strategy', 'coverage'];
-/** Kavuşum kesintisi (earthBlackout) yoksa 'strategy' ve 'coverage' kısma yapmaz: sonuç öncelikliyle birebir aynıdır (testle doğrulanır). */
+/** Aşama 8: dört eski politika + kayan ufuklu strateji. `POLICIES` (Aşama 7 tarama/kısayol) değişmedi; 'rolling' ayrı istenir. */
+export const ALL_POLICIES: Policy[] = [...POLICIES, 'rolling'];
+/** Kavuşum kesintisi (earthBlackout) yoksa 'strategy' ve 'coverage' kısma yapmaz: sonuç öncelikliyle birebir aynıdır (testle doğrulanır). 'rolling' kesinti işaretine bağlı değildir, bu kısayol ona uygulanmaz. */
 export const hasBlackout = (samples: LinkSample[]) => samples.some((s) => s.earthBlackout?.some(Boolean));
 export type SweepKey = keyof SweepParams;
 
@@ -60,6 +62,9 @@ export function metricsOf(r: SimResult, cfg: SchedConfig): Metrics {
 
 export type PolicyMetrics = Record<Policy, Metrics>;
 
+/** Hesaplanan politikalar için (bazıları yoksa) kısmi sonuç. Aşama 8: 'rolling' yalnızca istenirse bulunur. */
+export type PartialPolicyMetrics = Partial<Record<Policy, Metrics>>;
+
 /** Tek bir çizelgeleyiciyi parametrelerle çalıştırır (arayüz, uzun hesabı politika politika bölmek için kullanır). */
 export function runPolicy(topo: SchedTopology, samples: LinkSample[], cfg: SchedConfig, params: SweepParams, policy: Policy, override: Partial<SweepParams> = {}, relayId: string = MARS_RELAY): Metrics {
   const c = withParams(cfg, { ...params, ...override }, relayId);
@@ -67,14 +72,14 @@ export function runPolicy(topo: SchedTopology, samples: LinkSample[], cfg: Sched
 }
 
 /** Verilen parametrelerle üç çizelgeleyiciyi aynı bağlantı çizelgesi üzerinde çalıştırır. */
-export function runPolicies(topo: SchedTopology, samples: LinkSample[], cfg: SchedConfig, params: SweepParams, override: Partial<SweepParams> = {}, relayId: string = MARS_RELAY): { results: Record<Policy, SimResult>; metrics: PolicyMetrics } {
+export function runPolicies(topo: SchedTopology, samples: LinkSample[], cfg: SchedConfig, params: SweepParams, override: Partial<SweepParams> = {}, relayId: string = MARS_RELAY, policies: Policy[] = POLICIES): { results: Record<Policy, SimResult>; metrics: PolicyMetrics } {
   const c = withParams(cfg, { ...params, ...override }, relayId);
   const results = {} as Record<Policy, SimResult>;
   const metrics = {} as PolicyMetrics;
   const blackout = hasBlackout(samples);
-  for (const p of POLICIES) {
+  for (const p of policies) {
     // kesinti yoksa strateji politikaları öncelikliyle aynıdır: yeniden hesaplamaya gerek yok
-    results[p] = !blackout && (p === 'strategy' || p === 'coverage') ? { ...results.priority, policy: p } : simulate(topo, samples, p, c);
+    results[p] = !blackout && (p === 'strategy' || p === 'coverage') && results.priority ? { ...results.priority, policy: p } : simulate(topo, samples, p, c);
     metrics[p] = metricsOf(results[p], c);
   }
   return { results, metrics };
