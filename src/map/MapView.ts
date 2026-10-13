@@ -3,6 +3,14 @@ import { AU_KM, sample } from './ephemeris';
 
 export type ViewMode = '2d' | '3d';
 
+/** Yakınlaştıkça yerel sistemler (Dünya–Ay, Mars çevresi) büyür: ayrıntı görünsün diye. */
+export const detailOf = (zoom: number) => Math.min(Math.max(zoom, 1) ** 0.8, 25);
+/** Dünya, Ay ve Mars yakınlaştıkça biraz büyür (en çok 4 kat). */
+export const localBodyScale = (id: BodyId, zoom: number) =>
+  id === 'earth' || id === 'moon' || id === 'mars' ? Math.min(1 + (detailOf(zoom) - 1) * 0.35, 4) : 1;
+
+const MIN_ZOOM = 0.8; // daha fazla uzaklaşınca galaksi/boşluk görünür, bu yüzden sınırlı
+const PAN_LIMIT = 0.7; // sahne yarıçapının bu kadarı kadar kaydırılabilir
 const MOON_DRAW_PX = 20; // Ay'ın Dünya çevresindeki ÇİZİM yarıçapı (abartılı, gerçek ölçek değil)
 const Z_EXAGGERATION = 3; // 3B'de gezegenlerin ekliptik düzlemden sapması 3 kat abartılır (görünsün diye)
 const DEFAULT_YAW = -0.55;
@@ -39,7 +47,8 @@ export class MapView {
   onSelect: (id: BodyId) => void = () => {};
   dirty = true;
   /** Cisimler çizildikten sonra çağrılır; ekran konumları (x, y, tıklama yarıçapı) verilir. */
-  overlay: ((ctx: CanvasRenderingContext2D, screen: Map<BodyId, [number, number, number]>) => void) | null = null;
+  overlay: ((ctx: CanvasRenderingContext2D, screen: Map<BodyId, [number, number, number]>, radii: Map<BodyId, number>, zoom: number) => void) | null = null;
+  private radii = new Map<BodyId, number>();
 
   constructor(private canvas: HTMLCanvasElement, private tracks: Record<string, Track>) {
     this.ctx = canvas.getContext('2d')!;
@@ -71,8 +80,14 @@ export class MapView {
     this.dirty = true;
   }
 
-  zoomBy(f: number) {
-    this.zoom = Math.min(Math.max(this.zoom * f, 0.5), 40);
+  /** Yakınlaştırır; (ax, ay) noktası (varsayılan: görünüm merkezi) ekranda yerinde kalır. */
+  zoomBy(f: number, ax = this.w / 2, ay = this.h / 2) {
+    const next = Math.min(Math.max(this.zoom * f, MIN_ZOOM), 40);
+    const ratio = next / this.zoom;
+    const cx = this.w / 2, cy = this.h / 2;
+    this.panX = ax - cx - (ax - cx - this.panX) * ratio;
+    this.panY = ay - cy - (ay - cy - this.panY) * ratio;
+    this.zoom = next;
     this.dirty = true;
   }
   resetView() {
@@ -95,6 +110,14 @@ export class MapView {
       this.yaw = ty;
       this.tilt = tt;
     }
+  }
+
+  /** Sahneyi görünümün dışına kaçıramayız: kaydırma sahne yarıçapıyla sınırlı. */
+  private clampPan() {
+    const R = this.unit * Math.sqrt(30.5);
+    const lim = R * PAN_LIMIT;
+    this.panX = Math.min(Math.max(this.panX, -lim), lim);
+    this.panY = Math.min(Math.max(this.panY, -lim), lim);
   }
 
   private get unit() {
@@ -165,7 +188,8 @@ export class MapView {
       'wheel',
       (e) => {
         e.preventDefault();
-        this.zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15);
+        const r = c.getBoundingClientRect();
+        this.zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top);
       },
       { passive: false },
     );
@@ -189,8 +213,10 @@ export class MapView {
   render(jd: number) {
     const { ctx } = this;
     this.stepCamera();
+    this.clampPan();
     ctx.clearRect(0, 0, this.w, this.h);
     this.positions.clear();
+    this.radii.clear();
     this.drawStars();
 
     // 3B'de ekliptik düzlemde başvuru halkaları (2B'ye geçerken solar)
@@ -242,8 +268,8 @@ export class MapView {
     const [mx, my, mdep] = this.rotate([m[0] / mr, m[1] / mr, m[2] / mr].map((v) => v * AU_KM) as Vec3, 1, false);
     const moonItem: Item = {
       id: 'moon',
-      x: earth.x + mx * MOON_DRAW_PX * earth.k,
-      y: earth.y - my * MOON_DRAW_PX * earth.k,
+      x: earth.x + mx * MOON_DRAW_PX * detailOf(this.zoom) * earth.k,
+      y: earth.y - my * MOON_DRAW_PX * detailOf(this.zoom) * earth.k,
       depth: earth.depth + mdep * 0.02,
       k: earth.k,
     };
@@ -252,7 +278,7 @@ export class MapView {
 
     items.sort((a, b) => a.depth - b.depth);
     for (const it of items) this.drawBody(it, sunItem);
-    this.overlay?.(ctx, this.positions);
+    this.overlay?.(ctx, this.positions, this.radii, this.zoom);
   }
 
   private drawStars() {
@@ -273,8 +299,8 @@ export class MapView {
     for (let i = 0; i <= 48; i++) {
       const t = (i / 48) * Math.PI * 2;
       const [x, y] = this.rotate([Math.cos(t) * AU_KM, Math.sin(t) * AU_KM, 0], 1, false);
-      const px = earth.x + x * MOON_DRAW_PX * earth.k;
-      const py = earth.y - y * MOON_DRAW_PX * earth.k;
+      const px = earth.x + x * MOON_DRAW_PX * detailOf(this.zoom) * earth.k;
+      const py = earth.y - y * MOON_DRAW_PX * detailOf(this.zoom) * earth.k;
       i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
     }
     ctx.stroke();
@@ -283,7 +309,8 @@ export class MapView {
   private drawBody(it: Item, sun: Item) {
     const { ctx } = this;
     const b = BODIES.find((q) => q.id === it.id)!;
-    const r = b.radiusPx * (this.tilt > 0.05 ? it.k : 1);
+    const r = b.radiusPx * localBodyScale(it.id, this.zoom) * (this.tilt > 0.05 ? it.k : 1);
+    this.radii.set(it.id, r);
     this.positions.set(it.id, [it.x, it.y, Math.max(16, r + 8)]);
 
     if (it.id === 'sun') {

@@ -47,7 +47,7 @@ async function start() {
   const windows = findBlackoutWindows(tracks);
   const netEl = document.getElementById('net')!;
   let net = computeNetwork(tracks, jd);
-  map.overlay = (ctx, screen) => layer.draw(ctx, screen, net);
+  map.overlay = (ctx, screen, radii, zoom) => layer.draw(ctx, screen, radii, zoom, net);
   const jumpRow = document.createElement('div');
   jumpRow.className = 'row';
   jumpRow.innerHTML = '<button id="cprev" type="button">◀ Önceki Mars kavuşumu</button><button id="cnext" type="button">Sonraki Mars kavuşumu ▶</button><span class="legend">Kesinti penceresinin başına gider (Güneş–Mars açısı eşiğin altında).</span>';
