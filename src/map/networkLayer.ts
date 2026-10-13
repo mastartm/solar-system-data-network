@@ -1,13 +1,13 @@
 import { HYPOTHETICAL } from '../config/hypothetical';
 import type { BodyId } from '../data/types';
+import { detailOf } from './MapView';
 import type { LinkState, NetworkState } from '../network/network';
 
 type Screen = Map<BodyId, [number, number, number]>;
 interface Packet { assetId: string; leg: 0 | 1; t: number }
 interface Pt { x: number; y: number }
 
-const SURFACE_R = { moon: 6, mars: 9 };
-const RELAY_R = { moon: 13, mars: 15 };
+const RELAY_RADIUS_FACTOR = 3.2; // aktarma uydusu halkası = cisim yarıçapı × bu
 
 /** Araç → aktarma uydusu → Dünya veri akışı katmanı. Paket hareketi üsluptur (ölçekli değil). */
 export class NetworkLayer {
@@ -50,7 +50,9 @@ export class NetworkLayer {
     return { atAsset: mine.filter((p) => p.leg === 0).length, atRelay: mine.filter((p) => p.leg === 1).length };
   }
 
-  draw(ctx: CanvasRenderingContext2D, scr: Screen, net: NetworkState) {
+  draw(ctx: CanvasRenderingContext2D, scr: Screen, radii: Map<BodyId, number>, zoom: number, net: NetworkState) {
+    const detail = detailOf(zoom);
+    const rb = (id: 'moon' | 'mars') => radii.get(id) ?? 3;
     const earth = scr.get('earth');
     if (!earth) return;
     const e: Pt = { x: earth[0], y: earth[1] };
@@ -61,10 +63,10 @@ export class NetworkLayer {
       const b = scr.get(r.body);
       if (!b) continue;
       const ph = net.relayPhase[r.id];
-      relay.set(r.id, { x: b[0] + Math.cos(ph) * RELAY_R[r.body], y: b[1] - Math.sin(ph) * RELAY_R[r.body] });
+      relay.set(r.id, { x: b[0] + Math.cos(ph) * rb(r.body) * RELAY_RADIUS_FACTOR, y: b[1] - Math.sin(ph) * rb(r.body) * RELAY_RADIUS_FACTOR });
       ctx.strokeStyle = 'rgba(180,200,255,0.25)';
       ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(b[0], b[1], RELAY_R[r.body], 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(b[0], b[1], rb(r.body) * RELAY_RADIUS_FACTOR, 0, Math.PI * 2); ctx.stroke();
     }
     HYPOTHETICAL.assets.forEach((a, i) => {
       const b = scr.get(a.body);
@@ -72,7 +74,7 @@ export class NetworkLayer {
       const n = HYPOTHETICAL.assets.filter((q) => q.body === a.body);
       const k = n.indexOf(a);
       const ang = -Math.PI / 2 + (k / n.length) * Math.PI * 2 + i * 0.01;
-      asset.set(a.id, { x: b[0] + Math.cos(ang) * SURFACE_R[a.body], y: b[1] + Math.sin(ang) * SURFACE_R[a.body] });
+      asset.set(a.id, { x: b[0] + Math.cos(ang) * rb(a.body), y: b[1] + Math.sin(ang) * rb(a.body) });
     });
 
     const lineColor = (s: LinkState) => (s === 'up' ? 'rgba(90,220,255,0.75)' : s === 'blackout' ? 'rgba(255,70,70,0.9)' : s === 'occulted' ? 'rgba(255,190,60,0.8)' : 'rgba(150,150,150,0.6)');
@@ -131,6 +133,32 @@ export class NetworkLayer {
       ctx.beginPath();
       ctx.moveTo(p.x, p.y - 4); ctx.lineTo(p.x + 4, p.y); ctx.lineTo(p.x, p.y + 4); ctx.lineTo(p.x - 4, p.y);
       ctx.closePath(); ctx.stroke();
+    }
+
+    // yakınlaşınca ayrıntı: adlar ve tek yön gecikme
+    ctx.font = '11px system-ui, sans-serif';
+    if (detail > 2.5) {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      for (const a of HYPOTHETICAL.assets) {
+        const p = asset.get(a.id);
+        if (p) ctx.fillText(a.name, p.x + 6, p.y - 5);
+      }
+      for (const r of HYPOTHETICAL.relays) {
+        const p = relay.get(r.id);
+        if (p) ctx.fillText(r.name, p.x + 7, p.y + 12);
+      }
+    }
+    if (detail > 1.5) {
+      const done = new Set<string>();
+      for (const s of net.statuses) {
+        const r = relay.get(s.relay.id);
+        if (!r || done.has(s.relay.id)) continue;
+        done.add(s.relay.id);
+        const mx = (r.x + e.x) / 2, my = (r.y + e.y) / 2;
+        const sec = s.earthKm / 299792.458;
+        ctx.fillStyle = 'rgba(160,230,255,0.9)';
+        ctx.fillText(`${sec < 120 ? sec.toFixed(2) + ' sn' : (sec / 60).toFixed(1) + ' dk'}`, mx + 4, my - 4);
+      }
     }
 
     // kavuşum uyarısı
