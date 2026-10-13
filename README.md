@@ -508,6 +508,31 @@ Hatta kayıp paket (yüzey / Dünya hattı); periyodik referans (aynı ortalama 
 ![Ay: hata modeli taraması](docs/asama8-ay-hata-modeli.png)
 ![Mars: hata modeli taraması](docs/asama8-mars-hata-modeli.png)
 
+### 4. Hesabın Web Worker'a taşınması (onayla eklendi)
+
+Aşama 8'in dördüncü maddesi, onay beklediği için ilk PR'da yoktu; onay gelince ayrı PR ile yapıldı. Yeni bağımlılık ve GitHub Actions iş akışı yok (Vite'ın yerleşik Worker desteği; `npm run build` Worker'ı `dist/assets/compute.worker-*.js` olarak üretir, Pages yayını değişmedi).
+
+- **Mimari:** `src/network/compute.ts` (saf işleyici, DOM yok: bağlantı çizelgesi üretimi, çizelgeleyici çalıştırma, tarama noktası, yer istasyonu kapsaması), `compute.worker.ts` (ince Worker girişi), `computeClient.ts` (**Worker havuzu**: en çok 4, `hardwareConcurrency − 1` işçi; her biri izlerin kendi kopyasını ve bağlantı çizelgesi önbelleğini tutur; Worker kurulamazsa aynı işleyici ana iş parçacığında çalışır). Panel (`schedulerPanel.ts`) yalnızca iş verir ve sonucu çizer; kapsama tablosu, senaryo, istasyon karşılaştırması, hata modeli, tarama ve (g)/(h) taramaları **işçi havuzunda birlikte** hesaplanır, her bölüm bitince çizilir. Hesap sonuçları ana iş parçacığındaki hesapla **aynıdır** (testle doğrulanır; tarayıcıda da aynı sayılar: örn. Mars 1 istasyon kayan ufuklu düşen %6,7 / üretilmeyen %40,1).
+- **İptal belirteci:** kaydırıcı, senaryo, istasyon, hat modu ya da kayan ufuk değişince `bump()` hem belirteci hem havuzu iptal eder: bekleyen işler **hiç başlamaz**, sürmekte olanın sonucu atılır (işçi o işi bitirince serbest kalır; tek iş ≤ ~0,3 sn). Atılan işlerin sözleri sonuçlanmaz (reddedilmez de): "yakalanmamış söz reddi" gürültüsü olmasın diye; kimse tutunmadığı için çöp toplanır. Tarama sürerken senaryo değiştirmek de denendi (konsolda hata yok).
+- **Ölçüm** (gerçek veri, `vite preview`, 4 çekirdekli kapta, 3 işçi; `longtask` ile; Aşama 8'in ilk PR'ındaki ana iş parçacığı sürümüyle karşılaştırma):
+
+| | Aşama 7 / ilk Aşama 8 PR'ı (ana iş parçacığı, parçalı `setTimeout`) | Web Worker havuzu |
+|---|---|---|
+| Mars ilk açılış, tüm bölümler | ≈ 14,5–16,5 sn | **≈ 6,1–6,5 sn** (en yavaş bölüm: duyarlılık taraması) |
+| Senaryo (5 çizelgeleyici) ilk çizim | ≈ 0,8–1,0 sn | ≈ 0,75–0,85 sn (ilk açılış), 0,4 sn (sonraki) |
+| `longtask` sayısı / toplamı (açılış) | ≈ 115–120 / ≈ 14–15 sn | **3 / ≈ 0,25 sn** |
+| **En uzun görev (ana iş parçacığı)** | 279–324 ms | **124–138 ms** (Aşama 7: 229–396 ms; hedefin altında) |
+| Mars istasyon/mod değişince (önbellekli bağlantı) | ≈ 10–12 sn | ≈ 4–4,7 sn |
+| Mars (g) tahmin hatası taraması / (h) | ≈ 7 sn / ≈ 2 sn | ≈ 2,8 sn / ≈ 0,9 sn |
+| Ay ilk açılış | ≈ 2,9 sn | ≈ 1,4 sn |
+
+Kalan üç ana iş parçacığı görevi (≈ 80–140 ms) Chart.js'in ilk yüklenmesi ve ilk grafik çizimleridir (hesap değil); bunların altına inmek için çizimin bölünmesi gerekir, yapılmadı. Sayfa hesap sırasında hiç takılmadı (hesap ana iş parçacığında değil). İlk açılışta toplam süre çekirdek sayısına bağlıdır: tek çekirdekte işçiler paylaşır, kazanç yalnızca "sayfa takılmaz" olur (ölçülmedi, bilmiyorum).
+
+- **Beklenmedik (madde 4):** (1) **İptal edilen işin sözünü reddetmek** ilk denemede hem yakalanmamış söz hatalarına hem de önbellekteki bekleyen sözün sonsuza dek asılı kalmasına yol açtı (bağlantı çizelgesi özeti önbelleğe *söz* olarak alınmıştı; iptalden sonra yeniden kullanılınca hesap hiç bitmedi); düzeltme: yalnızca tamamlanmış özetler önbelleğe alınıyor. (2) (g) taramasında bir `async` döngüsünün henüz atanmamış diziye eriştiği hata (yalnızca tarayıcıda, Mars (g)) bulundu ve düzeltildi. (3) Her işçi kendi bağlantı çizelgesi önbelleğini kurar (aynı çizelge işçi sayısı kadar kez üretilebilir; ≈ 0,1–0,5 sn).
+![Worker ile hesaplanan senaryo ve durum satırı](docs/asama8-worker-ayarlar.png)
+
+- **Testler:** `npm test` **114 test** (önce 108). `src/network/compute.test.ts` (**sentetik**: uydurma dairesel yörüngeli konum izleri): işleyici sonucu doğrudan çağrıyla birebir aynı (`sim`, `tlInfo`, `policy`, `coverage`), başlatılmadan hata, bozuk aralıkta hata; havuz (1 ve 3 işçi) sonucu aynı; iptalde bekleyen işlerin hiç başlamadığı ve sonuçların atıldığı; hatadan sonra havuzun çalışmaya devam etmesi.
+
 ### Gerçek veriyle doğrulama (Playwright/Chromium, `vite preview`, `?sentetik=1` yok)
 Denendi: Ay 1/2/3 ve Mars 1/2/3 istasyon (kayan ufuklu strateji, kayan ufuk 30 gün seçimi), (g) ve (h) taramaları (Ay ve Mars), dar ekran (420 px; sayfa yatay taşmıyor, `scrollWidth` 420), harita sekmesi: 10 cisim satırı, kart canvas'ı, katman anahtarları + `localStorage`, zoom/sürükleme, 2B/3B, tutulma ve Mars kavuşumu düğmeleri; dar ekranda ⋯, bilgi paneli, harita 681 px / alt çubuk 43 px (Aşama 7 ile aynı). **Konsolda hata/uyarı yok** (tüm akışlarda).
 
@@ -515,7 +540,7 @@ Denendi: Ay 1/2/3 ve Mars 1/2/3 istasyon (kayan ufuklu strateji, kayan ufuk 30 g
 ![Harita 3B](docs/asama8-harita-3b.png)
 ![420 px](docs/asama8-dar-ekran-kapali.png) ![420 px, ⋯](docs/asama8-dar-ekran-kontroller.png) ![420 px, bilgi](docs/asama8-dar-ekran-bilgi.png) ![420 px, (g)](docs/asama8-dar-ekran-cizelgeleyici.png)
 
-**Hesap süresi** (aynı kapta, aynı betikle, `main` ve bu dal art arda ölçüldü; `longtask` ile): Mars ilk açılış toplam **14,5–16,5 sn** (main: 15,1–16,1; bu dal: 14,5–16,2; tek seferlik 15,8 sn / 537 ms aykırı değer), en uzun tek görev **279–324 ms** (main 287–324, bu dal 279–315). **Aşama 7'nin altına inemedi:** hesap hâlâ ana iş parçacığında, `setTimeout` ile parçalı; tek bir 300 sn'lik çizelgeleyici çalıştırması ≈ 0,25–0,3 sn ve Chart.js'in ilk çizimi bu tabanı belirliyor. Beşinci çizelgeleyici senaryo ve (d) bölümüne ≈ 0,2–0,4 sn ekledi, toplam gürültü içinde kaldı (Mars taramaları (f) beşinci politikayı kapsamıyor). Yeni (g)/(h) taramaları isteğe bağlıdır: Mars (g) ≈ 7 sn, (h) ≈ 2 sn; Ay (g) ≈ 0,9 sn, (h) ≈ 0,6 sn; en uzun görev 61–231 ms. Ay ilk açılış ≈ 2,9 sn (en uzun görev 131 ms). **Hesabı Web Worker'a taşıma (madde 4) onay beklediği için yapılmadı.**
+**Hesap süresi** (aynı kapta, aynı betikle, `main` ve bu dal art arda ölçüldü; `longtask` ile): Mars ilk açılış toplam **14,5–16,5 sn** (main: 15,1–16,1; bu dal: 14,5–16,2; tek seferlik 15,8 sn / 537 ms aykırı değer), en uzun tek görev **279–324 ms** (main 287–324, bu dal 279–315). **Aşama 7'nin altına inemedi:** hesap hâlâ ana iş parçacığında, `setTimeout` ile parçalı; tek bir 300 sn'lik çizelgeleyici çalıştırması ≈ 0,25–0,3 sn ve Chart.js'in ilk çizimi bu tabanı belirliyor. Beşinci çizelgeleyici senaryo ve (d) bölümüne ≈ 0,2–0,4 sn ekledi, toplam gürültü içinde kaldı (Mars taramaları (f) beşinci politikayı kapsamıyor). Yeni (g)/(h) taramaları isteğe bağlıdır: Mars (g) ≈ 7 sn, (h) ≈ 2 sn; Ay (g) ≈ 0,9 sn, (h) ≈ 0,6 sn; en uzun görev 61–231 ms. Ay ilk açılış ≈ 2,9 sn (en uzun görev 131 ms). **Hesabı Web Worker'a taşıma (madde 4) onay beklediği için bu ölçümde yoktu; sonradan onayla yapıldı, bölüm 4.**
 
 ### Testler
 `npm test`: **108 test** (önce 89; yeni 19, `src/network/rolling.test.ts`, hepsi **sentetik**: uydurma tek araçlı topoloji ve uydurma periyodik hat boşlukları): kayan ufuklu strateji (kapalı dönem yokken öncelikliyle birebir aynı; kavuşum işareti olmadan boşluklarda kısar, Aşama 4/7 stratejileri aynı desende hiçbir şey yapmaz; telemetri kısılmaz/düşmez; **korunum ve talep denklemleri**, düşen/üretilmeyen ayrımı; kısma teslim edilen hacmi artırmaz; kavuşumda da çalışır; deterministik, girdiyi değiştirmez; ayar yoksa kısmaz), tahmin hatası (`forecastFlags`; hata yok = kusursuzla birebir; öncelikli etkilenmez; iyimser/kötümser yönler; kayıp sapması; öteleme), yüzey yeniden deneme aralığı (0 = eski davranış birebir; korunum, bekleyen paket "kalan"; uzun aralık yüzey kaybını azaltır; deterministik; küçük tamponla korunum). Mevcut testlere dokunulmadı.
@@ -529,11 +554,11 @@ Denendi: Ay 1/2/3 ve Mars 1/2/3 istasyon (kayan ufuklu strateji, kayan ufuk 30 g
 6. **Tarama 600 sn adımlı**; ±N dk kayması adıma yuvarlanır, 10 dk altı sapma ayırt edilemez. Kümelenmiş zincir 600 sn adımlıdır (meanBadSec ≥ adım seçildi); 10 dk'lık kötü süre adım sınırındadır.
 7. **Kötü durum kaybı ortalama kayıptan küçükse** (örn. Dünya kaybı kaydırıcıyla %40 iken kötü durum %20) ortalama kırpılır; taramada ortalama sabit kalmaz.
 8. **Sonuçlar tek senaryo aralığıdır** (Ay 2028-03-03/60 g, Mars 2028 penceresi); Ay 1 istasyonda başka aralık denenmedi (Aşama 7'de aralığa duyarlılık görülmüştü).
-9. **(g)/(h) isteğe bağlı** (düğmeyle): ilk açılış süresi artmasın diye. Web Worker olsaydı otomatik çalışabilirdi.
-10. **Hesap süresi hedefi tutmadı:** ilk açılış ≈ 15 sn ve en uzun görev ≈ 0,3 sn kaldı (neden yukarıda); iyileşme için Web Worker gerekir ve onay bekleniyor.
+9. **(g)/(h) isteğe bağlı** (düğmeyle): ilk açılış süresi artmasın diye. Web Worker ile (bölüm 4) artık ucuz (Mars ≈ 3 sn / 1 sn); otomatik çalıştırmak bir tasarım kararıdır, yapılmadı.
+10. **Hesap süresi hedefi ilk PR'da tutmadı** (ilk açılış ≈ 15 sn, en uzun görev ≈ 0,3 sn); Web Worker onayıyla bölüm 4'te giderildi (≈ 6 sn, en uzun görev ≈ 0,13 sn).
 
 ### Kararlar
-- Yeni dış bağımlılık, Web Worker ve GitHub Actions iş akışı eklenmedi; yeni politika ayrı ad (`'rolling'`), `strategy`/`coverage` aynen.
+- Yeni dış bağımlılık ve GitHub Actions iş akışı eklenmedi (Web Worker: onay beklediği için ilk PR'da yoktu, sonradan onayla eklendi, bölüm 4); yeni politika ayrı ad (`'rolling'`), `strategy`/`coverage` aynen.
 - Yeni varsayımsal değerler yalnızca `hypothetical.ts`: `rollingStrategy`, `forecastScan`, `errorScan`, `arq.surfaceRetrySec` (varsayılan 0).
 - `scripts/asama8-sonuclar.ts` yalnızca `public/data/` okur (Horizons'a erişmez), `vite-node` ile çalışır.
 - Tahmin hatası yalnızca stratejilerin bildiği takvime uygulanır; gerçek bağlantılar ve kayıplar değişmez.
@@ -556,7 +581,7 @@ Denendi: Ay 1/2/3 ve Mars 1/2/3 istasyon (kayan ufuklu strateji, kayan ufuk 30 g
 src/data/    veri okuma, tipler, genel fiziksel bilgiler (bodyFacts)
 src/map/     interpolasyon (ephemeris), Canvas çizimi, etiket yerleştirici (labels), gezegen dokuları ve küre kartı hesabı
 src/ui/      kontroller, bilgi paneli + küre kartı, sol panel (Cisimler, katmanlar), ağ paneli
-src/network/ ağ modeli (gecikme, bağlantı durumu, kavuşum), çizelgeleyici + stratejiler + hata modeli, tarama, zaman çizelgesi
+src/network/ ağ modeli (gecikme, bağlantı durumu, kavuşum), çizelgeleyici + stratejiler + hata modeli, tarama, zaman çizelgesi; compute.ts / compute.worker.ts / computeClient.ts (uzun hesabı Web Worker havuzunda çalıştıran işleyici ve istemci)
 src/config/  varsayımsal değerler (tek dosya)
 scripts/     Horizons veri çekme betiği; asama7-sonuclar.ts, asama8-sonuclar.ts (README sayılarını gerçek veriyle üreten betikler, Horizons'a erişmez)
 public/data/ Horizons JSON dosyaları (gerçek veri, depoda)
@@ -595,7 +620,7 @@ docs/        gerçek veriyle alınmış ekran görüntüleri
 ## Sonraki aşamalar
 
 Aşama 9 adayları (değerler **varsayımsal** kalır; sonuçlar gerçek bir görev sonucu değildir):
-- **Uzun hesabı Web Worker'a taşımak** (Aşama 8 madde 4; onay bekliyor): ilk açılış ≈ 15 sn, en uzun görev ≈ 0,3 sn; (g)/(h) otomatik çalışabilir. Yeni bağımlılık/iş akışı gerekmez ama Worker için ayrıca onay istendi.
+- **Kalan ana iş parçacığı görevleri** (Chart.js yüklemesi ve ilk çizimler ≈ 0,1 sn) ve (g)/(h) taramalarının açılışta otomatik çalıştırılması (Worker ile artık ucuz).
 - **Toplam kaybı gerçekten azaltan strateji:** kısma yalnızca kaybı "üretilmeyen"e çeviriyor; telemetriyi de ele alan (daha sık/küçük paket, telemetri kısma) ya da bilim verisi değerine göre kısan strateji; ufuk seçimini (kısa/uzun) uyarlamalı yapmak.
 - **Yüzey hattı kapalılığını havuz projeksiyonuna katmak** ve ARQ kopyalarının tampon payını hesaba katmak.
 - **Ay'da kutup bölgesi ve eğimli/eliptik yörünge**, Mars aktarma uydusu gölgesi ve güç modeli.
