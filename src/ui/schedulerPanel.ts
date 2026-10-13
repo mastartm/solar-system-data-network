@@ -14,10 +14,10 @@ const day = (jd: number) => jdToDate(jd).toISOString().slice(0, 10);
 const year = (jd: number) => 1970 + (jd - 2440587.5) / 365.2425;
 
 // Seriler: FIFO = mavi, öncelikli = turuncu, strateji = yeşil, kapsama bilen strateji = mor (koyu yüzeyde ayırt edilen kategorik renkler). Metin rengi seri rengi değildir.
-const C = { fifo: '#3987e5', prio: '#d95926', strat: '#3fb68b', stratLoss: '#9be3c6', cov: '#b88cf2', covLoss: '#dcc5fa', roll: '#e8c13d', rollLoss: '#f5e2a0', moon: '#cfcfcf', mars: '#d9593a', text: '#8a96b2', grid: '#1e2740', ink: '#e6ebf5' };
-const NAME: Record<Policy, string> = { fifo: 'FIFO', priority: 'Öncelikli', strategy: 'Strateji', coverage: 'Kapsama bilen strateji', rolling: 'Kayan ufuklu strateji' };
-const COLOR: Record<Policy, string> = { fifo: C.fifo, priority: C.prio, strategy: C.strat, coverage: C.cov, rolling: C.roll };
-const DASH: Record<Policy, number[] | undefined> = { fifo: undefined, priority: [6, 3], strategy: [2, 2], coverage: [10, 3, 2, 3], rolling: [2, 4] };
+const C = { fifo: '#3987e5', prio: '#d95926', strat: '#3fb68b', stratLoss: '#9be3c6', cov: '#b88cf2', covLoss: '#dcc5fa', roll: '#e8c13d', rollLoss: '#f5e2a0', adapt: '#2fd4e0', adaptLoss: '#a8eef2', moon: '#cfcfcf', mars: '#d9593a', text: '#8a96b2', grid: '#1e2740', ink: '#e6ebf5' };
+const NAME: Record<Policy, string> = { fifo: 'FIFO', priority: 'Öncelikli', strategy: 'Strateji', coverage: 'Kapsama bilen strateji', rolling: 'Kayan ufuklu strateji', adaptive: 'Uyarlamalı ufuk' };
+const COLOR: Record<Policy, string> = { fifo: C.fifo, priority: C.prio, strategy: C.strat, coverage: C.cov, rolling: C.roll, adaptive: C.adapt };
+const DASH: Record<Policy, number[] | undefined> = { fifo: undefined, priority: [6, 3], strategy: [2, 2], coverage: [10, 3, 2, 3], rolling: [2, 4], adaptive: [8, 3, 1, 3] };
 const MOON_POLICIES: Policy[] = ['fifo', 'priority', 'rolling'];
 const COMPARE_STATIONS = [1, 2, 3];
 

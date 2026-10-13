@@ -1,4 +1,4 @@
-// VARSAYIMSAL DEĞERLER — Aşama 2, 3, 4, 5, 7 ve 8'in tüm uydurma sayıları yalnızca bu dosyadadır.
+// VARSAYIMSAL DEĞERLER — Aşama 2, 3, 4, 5, 7, 8 ve 9'un tüm uydurma sayıları yalnızca bu dosyadadır.
 // Buradaki araç, uydu, yörünge, veri hızı ve eşik değerleri gerçek bir göreve ait DEĞİLDİR;
 // sonuçlar gerçek bir görev sonucu sayılmamalıdır. Gerçek olan tek şey Horizons konumlarıdır.
 // (Cisim yarıçapı ve dönme dönemi gibi fiziksel sabitler src/network/network.ts içinde, gerçek değerlerle.)
@@ -19,12 +19,29 @@ export interface AssetConfig {
   color: string;
 }
 
+/**
+ * Aşama 9: Kepler yörünge elemanları (cisim merkezli, ekliptiğe paralel çerçeve; VARSAYIMSAL, gerçek bir görev yörüngesi değildir).
+ * Düzlem eylemsiz sabit kabul edilir (J2 vb. presesyon yok).
+ */
+export interface OrbitElements {
+  /** Yarı büyük eksen (km, cisim merkezinden). */
+  semiMajorKm: number;
+  ecc: number;
+  incDeg: number;
+  raanDeg: number;
+  argPeriDeg: number;
+  /** J2000'deki ortalama anomali (derece). */
+  meanAnomalyDeg: number;
+}
+
 export interface RelayConfig {
   id: string;
   name: string;
   body: 'moon' | 'mars';
-  /** Dairesel, ekvator düzleminde yörünge yüksekliği (km). */
+  /** Dairesel, ekvator düzleminde yörünge yüksekliği (km). `orbit` verilirse yok sayılır. */
   altitudeKm: number;
+  /** Aşama 9: verilirse Kepler yörüngesi (eğimli/eliptik). Yoksa Aşama 2'nin dairesel ekvatoral yörüngesi. */
+  orbit?: OrbitElements;
 }
 
 export interface GroundStationConfig {
@@ -45,6 +62,8 @@ export interface TrafficClass {
   /** Paket boyutu (megabit). Paket "toplu" veri parçasıdır; gerçek bir protokol paketi değildir. */
   packetMb: number;
   color: string;
+  /** Aşama 9: varsayımsal "bilimsel değer" ağırlığı (birim değer / Mb). Uydurma; bkz. HYPOTHETICAL.value. */
+  valuePerMb: number;
 }
 
 type BodyKey = 'moon' | 'mars';
@@ -75,18 +94,18 @@ export const HYPOTHETICAL = {
   /** Aşama 3: çizelgeleyici. Birimler: megabit (Mb), kbit/sn. Hepsi uydurmadır. */
   scheduler: {
     classes: [
-      { id: 'telemetri', name: 'Telemetri', priority: 0, share: 0.15, packetMb: 0.8, color: '#e6ebf5' },
-      { id: 'bilim', name: 'Bilim verisi', priority: 1, share: 0.85, packetMb: 24, color: '#8a96b2' },
+      { id: 'telemetri', name: 'Telemetri', priority: 0, share: 0.15, packetMb: 0.8, color: '#e6ebf5', valuePerMb: 4 },
+      { id: 'bilim', name: 'Bilim verisi', priority: 1, share: 0.85, packetMb: 24, color: '#8a96b2', valuePerMb: 1 },
     ] as TrafficClass[],
     /** Araçların ürettiği veri, "veri hızı" alanının bu kadarıdır (ortalama görev döngüsü). */
     dutyCycle: 0.05,
     /** Araç → aktarma uydusu bağlantı hızı (her araç için ayrı). */
     surfaceLinkKbps: { moon: 1000, mars: 600 } as Record<BodyKey, number>,
     /** Aktarma uydusu → Dünya hızı (uydudaki tüm araçlar paylaşır). */
-    relayDownlinkKbps: { 'ay-aktarma': 40, 'mars-aktarma': 250 } as Record<string, number>,
+    relayDownlinkKbps: { 'ay-aktarma': 40, 'ay-aktarma-2': 40, 'mars-aktarma': 250 } as Record<string, number>,
     /** Tampon (depolama) kapasiteleri. */
     assetBufferMb: { moon: 1000, mars: 8000 } as Record<BodyKey, number>,
-    relayBufferMb: { 'ay-aktarma': 2000, 'mars-aktarma': 64000 } as Record<string, number>,
+    relayBufferMb: { 'ay-aktarma': 2000, 'ay-aktarma-2': 2000, 'mars-aktarma': 64000 } as Record<string, number>,
     /** Kuyrukta bu süreden uzun bekleyen teslimler "gecikmeli" sayılır. */
     delayedAfterSec: 3600,
     /** Simülasyon adımı ve grafik örnekleme aralığı. */
@@ -238,5 +257,88 @@ export const HYPOTHETICAL = {
     defaultStart: '2028-03-03',
     defaultDays: 60,
     lengthOptions: [7, 14, 30, 60],
+  },
+
+  /**
+   * Aşama 9, madde 1: havuz projeksiyonunun İYİMSER varsayımlarını kaldıran seçenekler ('coverage', 'rolling', 'adaptive' politikaları kullanır).
+   * Varsayılan ikisi de KAPALI: Aşama 3–8 sayıları birebir yeniden üretilir.
+   * surfaceClosure: araç tamponundaki veri yüzey hattı (araç → uydu) kapalıyken boşalmaz (iki aşamalı havuz: araç tamponu → uydu payı → Dünya).
+   * arqHold: ARQ kopyaları RTT (= 2 × ışık gecikmesi) boyunca uydu tamponunda yer tutar, yani havuzun boşalması RTT kadar gecikir.
+   */
+  projection: { surfaceClosure: false, arqHold: false },
+
+  /**
+   * Aşama 9, madde 2: değer ağırlıklı fayda ölçütü. Sınıfların birim değeri `scheduler.classes[].valuePerMb`'dadır (telemetri 4, bilim verisi 1; UYDURMA).
+   * Ölçüt = teslim edilen değer / talep edilen değer. Talep edilen değer = (üretilen + üretilmeyen Mb) × birim değer (yaşı 0).
+   * Zamanla azalma (isteğe bağlı, yalnızca bilim verisinde): teslim edilen paketin değeri 2^(−yaş / yarı ömür) ile çarpılır; yaş = teslim anı − üretim anı.
+   * Değer ağırlıkları ve yarı ömürler gerçek bir bilimsel değeri temsil ETMEZ; sonucun onlara duyarlılığı taranır.
+   */
+  value: {
+    /** Arayüzde "azalan değer" seçilince varsayılan yarı ömür (gün). */
+    decayHalfLifeDays: 14,
+    /** Her çalıştırmada eşzamanlı hesaplanan yarı ömürler (gün); tarama bunlar üzerindendir. */
+    decayOptionsDays: [3, 7, 14, 30, 90],
+    /** Telemetri değerinin bilim verisi değerine oranı taraması (bilim verisi = 1). */
+    telemetryWeightScan: [1, 2, 4, 8, 16, 32],
+  },
+
+  /**
+   * Aşama 9, madde 2: uyarlamalı kayan ufuk ('adaptive' politikası). 'rolling' ile aynı havuz projeksiyonu, ama ufuk sabit değil, TAKVİMDEN KAPALI DÖNEMİN UZUNLUĞUNA göre seçilir:
+   * şimdi ya da leadDays içinde başlayan ilk kapalı Dünya hattı döneminin sonuna + tailFactor × (dönemin uzunluğu) kadar ileri bakılır, [minDays, maxDays] aralığına kırpılır;
+   * yakın kapalı dönem yoksa minDays. Takvim önceden bilinir (tahmin hatası forecast ile taranır).
+   */
+  adaptiveStrategy: {
+    minDays: 1,
+    maxDays: 45,
+    leadDays: 1,
+    /** Kapalı dönem bittikten sonra boşalma (toparlanma) için eklenen süre, dönem uzunluğunun katı. */
+    tailFactor: 1,
+    margin: 0.9,
+    minFactor: 0,
+    assetBufferShare: 1,
+    refreshSec: 1800,
+  },
+
+  /**
+   * Aşama 9, madde 3: Ay aktarma uydusu yörünge seçenekleri. Varsayılan 'equatorial' = Aşama 2'nin 3000 km dairesel ekvatoral yörüngesi (eski sonuçlar birebir).
+   * 'elliptical': eğimli/eliptik, kutup bölgesini gören (kutupsal, apolün güney kutbu üzerinde); elemanlar UYDURMADIR. Düzlem eylemsiz sabit, presesyon yok.
+   * Periapsis yüksekliği ≈ 863 km, apoapsis yüksekliği ≈ 8663 km, dönem ≈ 13 sa.
+   */
+  moonOrbits: {
+    elliptical: { semiMajorKm: 6500, ecc: 0.6, incDeg: 90, raanDeg: 0, argPeriDeg: 90, meanAnomalyDeg: 0 } as OrbitElements,
+  },
+
+  /**
+   * Aşama 9, madde 3: İKİNCİ Ay aktarma uydusu (isteğe bağlı). Apolünü kuzey kutbu üzerinde olan, birinciyle aynı biçimde eliptik/kutupsal yörünge (faz farkı yarım dönem).
+   * Kendi hat hızı ve tamponu vardır (`scheduler.relayDownlinkKbps` / `relayBufferMb` içinde 'ay-aktarma-2'): ikinci uydu kapasiteyi de İKİ KATINA çıkarır; kapsama
+   * etkisini kapasite etkisinden ayırmak için aynı kapasiteli tek uydu karşılaştırması da yapılır.
+   * Araçlar: 'best' = uyduyu gören(ler) arasında önce Dünya hattı açık olanı, ardından en yüksek yükseklikte olanı kullanır; 'order' = hat sırası (önce birinci uydu, görmüyorsa ikinci).
+   */
+  moonRelay2: {
+    id: 'ay-aktarma-2',
+    name: 'Ay Aktarma Uydusu 2',
+    orbit: { semiMajorKm: 6500, ecc: 0.6, incDeg: 90, raanDeg: 0, argPeriDeg: 270, meanAnomalyDeg: 180 } as OrbitElements,
+  },
+
+  /**
+   * Aşama 9, madde 3: isteğe bağlı Ay kutup aracı (güney kutbuna yakın). Varsayılan KAPALI (topolojiye yalnızca seçilince eklenir; eski sayılar değişmez).
+   * Ekvatoral dairesel yörünge bu aracı hiç göremez (Aşama 4 bulgusu); eliptik/kutupsal yörünge görür.
+   */
+  moonPolarAsset: { id: 'ay-3', name: 'Ay Kutup Aracı C', body: 'moon', latDeg: -85, lonDeg: 30, relay: 'ay-aktarma', dataRateKbps: 128, color: '#e8a8ff' } as AssetConfig,
+
+  /**
+   * Aşama 9, madde 3: Mars aktarma uydusu gölgesi (tutulma). Silindirik gölge (Güneş yönü Mars'ın Güneş'e göre konumundan; Mars ekseni ekliptiğe paralel varsayıldığı için
+   * ekvator yörüngeli uydu her turda gölgeden geçer; gerçekte eksen eğikliği (≈25°) mevsimsel olarak gölgeyi azaltır/kaldırır). GÜÇ MODELİ YOK: gölgede yalnızca
+   * hat kapalı sayılır ('earth': yalnız uydu → Dünya hattı; 'both': yüzey hattı da). Tamponlar çalışmaya devam eder.
+   */
+  marsEclipse: { modes: ['none', 'earth', 'both'] as const },
+
+  /**
+   * Aşama 9, madde 4: genelleme taraması. Ay için ≥ 3 farklı tarih aralığı (60 gün; Ay'ın yer istasyonlarından görünürlüğü, Ay'ın bahar/kış durağanlık evresine
+   * (≈18,6 yıllık düğüm döngüsü) göre değişir: 2025 civarı büyük durağanlık, 2034 civarı küçük) ve Mars'ın 9 penceresi.
+   */
+  generalization: {
+    moonStarts: ['2021-03-01', '2025-09-01', '2028-03-03', '2034-05-01', '2038-01-15'],
+    moonDays: 60,
   },
 };

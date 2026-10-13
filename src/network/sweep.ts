@@ -5,11 +5,25 @@ import { simulate, type LinkSample, type Policy, type SchedConfig, type SchedTop
 import { MARS_RELAY, withParams, type SweepParams } from './timeline';
 
 export const POLICIES: Policy[] = ['fifo', 'priority', 'strategy', 'coverage'];
-/** Aşama 8: dört eski politika + kayan ufuklu strateji. `POLICIES` (Aşama 7 tarama/kısayol) değişmedi; 'rolling' ayrı istenir. */
-export const ALL_POLICIES: Policy[] = [...POLICIES, 'rolling'];
-/** Kavuşum kesintisi (earthBlackout) yoksa 'strategy' ve 'coverage' kısma yapmaz: sonuç öncelikliyle birebir aynıdır (testle doğrulanır). 'rolling' kesinti işaretine bağlı değildir, bu kısayol ona uygulanmaz. */
+/** Aşama 8-9: dört eski politika + kayan ufuklu strateji + uyarlamalı ufuk. `POLICIES` (Aşama 7 tarama/kısayol) değişmedi; 'rolling' ve 'adaptive' ayrı istenir. */
+export const ALL_POLICIES: Policy[] = [...POLICIES, 'rolling', 'adaptive'];
+/** Kavuşum kesintisi (earthBlackout) yoksa 'strategy' ve 'coverage' kısma yapmaz: sonuç öncelikliyle birebir aynıdır (testle doğrulanır). 'rolling' ve 'adaptive' kesinti işaretine bağlı değildir, bu kısayol onlara uygulanmaz. */
 export const hasBlackout = (samples: LinkSample[]) => samples.some((s) => s.earthBlackout?.some(Boolean));
 export type SweepKey = keyof SweepParams;
+
+/** Aşama 9: bir sınıfın değer hesabı için ham toplamları (ağırlık ve yarı ömür sonradan uygulanır; ek çizelgeleyici hesabı gerekmez). */
+export interface ValuePart {
+  id: string;
+  /** Sınıfın birim değeri (Mb başına; config'teki varsayımsal ağırlık). */
+  weight: number;
+  /** En önemli sınıf dışındaki sınıflar (bilim verisi) isteğe bağlı olarak zamanla azalan değerlidir. */
+  decays: boolean;
+  /** Talep = üretilen + üretilmeyen (Mb). */
+  demandMb: number;
+  deliveredMb: number;
+  /** SchedConfig.valueHalfLivesSec sırasında, azalan değerli teslim hacmi (Mb eşdeğeri). */
+  decayMb: number[];
+}
 
 /** Bir çizelgeleyici çalıştırmasının karşılaştırma ölçütleri. Talep = üretilen + üretilmeyen (Mb). */
 export interface Metrics {
@@ -42,6 +56,27 @@ export interface Metrics {
   topMeanSec: number;
   lowP95Sec: number;
   lowMeanSec: number;
+  /** Aşama 9: değer ölçütü ham toplamları ve bunlara karşılık gelen yarı ömürler (sn). Değer % için `valuePct` işlevi. */
+  valueParts: ValuePart[];
+  valueHalfLivesSec: number[];
+}
+
+export interface ValueOpts {
+  /** Sınıfa göre ağırlık geçersiz kılma (yoksa config ağırlığı). */
+  weightOf?: (p: ValuePart) => number;
+  /** valueHalfLivesSec içindeki sıra; verilirse bilim verisi (decays) zamanla azalan değerle sayılır. Yoksa sabit değer. */
+  halfLifeIdx?: number;
+}
+
+/** Değer ağırlıklı fayda ölçütü (%) = teslim edilen değer / talep edilen değer. Sabit değerde yalnızca ağırlıklı hacim oranı; yarı ömürle bilim verisi 2^(−yaş/yarı ömür) çarpanını alır. */
+export function valuePct(m: Pick<Metrics, 'valueParts'>, o: ValueOpts = {}): number {
+  let num = 0, den = 0;
+  for (const p of m.valueParts) {
+    const w = o.weightOf ? o.weightOf(p) : p.weight;
+    num += w * (p.decays && o.halfLifeIdx !== undefined && o.halfLifeIdx >= 0 ? p.decayMb[o.halfLifeIdx] : p.deliveredMb);
+    den += w * p.demandMb;
+  }
+  return den > 0 ? (100 * num) / den : 0;
 }
 
 /** Sınıf kimliklerinden "en önemli" ve "düşük öncelikli" olanı seçer (priority sayısı en küçük / en büyük). */
@@ -57,6 +92,11 @@ export function metricsOf(r: SimResult, cfg: SchedConfig): Metrics {
     demandMb, deliveredMb: t.deliveredMb, droppedMb: t.droppedMb, suppressedMb: t.suppressedMb,
     dropPct: pct(t.droppedMb), abandonedPct: pct(t.abandonedMb), txLost: t.txLost, retransmissions: t.retransmissions, attempts: t.attempts, txLostPct: t.attempts > 0 ? (100 * t.txLost) / t.attempts : 0, abandoned: t.abandoned, abandonedSurface: r.abandonedSurface, maxLossRun: r.maxLossRun, lossPct: pct(t.droppedMb + t.abandonedMb + t.suppressedMb), deliveredPct: pct(t.deliveredMb), topDropPct: topDemand > 0 ? (100 * (top.droppedMb + top.abandonedMb)) / topDemand : 0,
     topP95Sec: top.latencyP95Sec, topMeanSec: top.latencyMeanSec, lowP95Sec: low.latencyP95Sec, lowMeanSec: low.latencyMeanSec,
+    valueParts: cfg.classes.map((c) => {
+      const s = r.perClass[c.id];
+      return { id: c.id, weight: c.valuePerMb ?? 1, decays: c.priority !== byPrio[0].priority, demandMb: s.generatedMb + s.suppressedMb, deliveredMb: s.deliveredMb, decayMb: s.decayMb };
+    }),
+    valueHalfLivesSec: cfg.valueHalfLivesSec ?? [],
   };
 }
 

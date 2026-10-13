@@ -12,6 +12,7 @@ const WHY: Record<LinkState, string> = {
   occulted: 'Dünya cismin arkasında',
   blackout: 'Mars kavuşumu: kesinti',
   nostation: 'hiçbir yer istasyonu uyduyu görmüyor',
+  eclipse: 'uydu Mars gölgesinde (varsayımsal kesinti)',
 };
 
 /** Cisim başına varsayımsal sayılar: hepsi config/hypothetical.ts'ten türetilir. */
