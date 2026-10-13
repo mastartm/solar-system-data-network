@@ -10,9 +10,11 @@
     "prebuild": "node scripts/fetch-horizons.mjs --soft",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build-eclipses": "node scripts/build-eclipses.mjs"
   },
   "devDependencies": {
+    "astronomy-engine": "^2.1.19",
     "typescript": "^5.6.3",
     "vite": "^6.0.0",
     "vitest": "^2.1.0"

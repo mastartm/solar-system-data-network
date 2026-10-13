@@ -1,4 +1,5 @@
 import './style.css';
+import { eclipseLabel, loadEclipses, nearestEclipse } from './data/eclipses';
 import { loadTracks } from './data/loader';
 import type { BodyId } from './data/types';
 import { dateToJd, trackEndJD } from './map/ephemeris';
@@ -18,6 +19,7 @@ async function start() {
     return;
   }
 
+  const eclipses = await loadEclipses();
   const planetTrack = tracks.earth;
   const minJD = planetTrack.startJD;
   const maxJD = Math.min(trackEndJD(planetTrack), trackEndJD(tracks.moon));
@@ -29,11 +31,12 @@ async function start() {
   dateLabel.id = 'date-label';
   document.querySelector('main')!.appendChild(dateLabel);
 
-  const controls = createControls(
-    document.getElementById('controls')!, minJD, maxJD,
-    (v) => { jd = v; map.dirty = true; },
-    (f) => (f === 'reset' ? map.resetView() : map.zoomBy(f)),
-  );
+  const controls = createControls(document.getElementById('controls')!, {
+    minJD, maxJD, eclipses,
+    onChange: (v) => { jd = v; map.dirty = true; },
+    onZoom: (f) => (f === 'reset' ? map.resetView() : map.zoomBy(f)),
+    onView: (m) => map.setMode(m),
+  });
   map.onSelect = (id) => { selected = id; };
   controls.setJD(jd);
 
@@ -50,7 +53,15 @@ async function start() {
       map.dirty = false;
       map.render(jd);
       renderInfo(info, selected, jd, tracks);
-      dateLabel.textContent = new Date((jd - 2440587.5) * 86400000).toISOString().slice(0, 10);
+      const day = new Date((jd - 2440587.5) * 86400000).toISOString().slice(0, 10);
+      const near = nearestEclipse(eclipses, jd);
+      dateLabel.textContent = day;
+      if (near && Math.abs(near.days) < 0.75) {
+        const badge = document.createElement('div');
+        badge.className = 'eclipse-badge';
+        badge.textContent = `${eclipseLabel(near.eclipse)} (en yüksek an civarı)`;
+        dateLabel.appendChild(badge);
+      }
     }
     requestAnimationFrame(frame);
   };
