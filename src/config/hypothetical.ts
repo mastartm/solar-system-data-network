@@ -334,6 +334,12 @@ export const HYPOTHETICAL = {
   marsEclipse: { modes: ['none', 'earth', 'both'] as const },
 
   /**
+   * Aşama 9: Mars aktarma hattının kavuşumsuz serbest tarih aralığı senaryosu (arayüzde "Mars aktarma hattı (tarih aralığı, kavuşumsuz)"). Varsayılan aralık hiçbir kavuşum
+   * penceresiyle (2028-03, 2030-05) kesişmez; Mars gölgesinin (marsEclipse) cisim arkası kapanmasıyla örtüşmeden etkisini görmek için.
+   */
+  marsFreeScenario: { defaultStart: '2029-06-01', defaultDays: 60 },
+
+  /**
    * Aşama 9, madde 4: genelleme taraması. Ay için ≥ 3 farklı tarih aralığı (60 gün; Ay'ın yer istasyonlarından görünürlüğü, Ay'ın bahar/kış durağanlık evresine
    * (≈18,6 yıllık düğüm döngüsü) göre değişir: 2025 civarı büyük durağanlık, 2034 civarı küçük) ve Mars'ın 9 penceresi.
    */

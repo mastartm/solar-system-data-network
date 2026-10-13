@@ -9,7 +9,7 @@ import { createBodiesPanel } from './ui/bodiesPanel';
 import { createInfoPanel } from './ui/infoPanel';
 import { loadLayers, saveLayers } from './ui/layers';
 import { renderNetwork } from './ui/networkPanel';
-import { mountScheduler } from './ui/schedulerPanel';
+import type { SchedulerPanel } from './ui/schedulerPanel';
 import { NetworkLayer } from './map/networkLayer';
 import { computeNetwork, findBlackoutWindows } from './network/network';
 
@@ -112,7 +112,9 @@ async function start() {
   const main = document.querySelector('main') as HTMLElement;
   const footer = document.getElementById('controls')!;
   const schedEl = document.getElementById('sched')!;
-  const sched = mountScheduler(schedEl, tracks, windows, isSynthetic());
+  // Çizelgeleyici paneli (büyük şablon, Aşama 3-9 bölümleri) ayrı parça olarak ve ilk açılışta yüklenir/kurulur: harita açılışı bununla uzamaz.
+  let sched: Promise<SchedulerPanel> | null = null;
+  const getSched = () => (sched ??= import('./ui/schedulerPanel').then((m) => m.mountScheduler(schedEl, tracks, windows, isSynthetic())));
   let tab: 'map' | 'sched' = 'map';
   const setTab = (t: 'map' | 'sched') => {
     tab = t;
@@ -124,7 +126,7 @@ async function start() {
       b.setAttribute('aria-selected', String(name === t));
     }
     infoPanel.setActive(t === 'map');
-    if (t === 'sched') void sched.show();
+    if (t === 'sched') void getSched().then((p) => p.show());
     else map.dirty = true;
   };
   document.getElementById('tab-map')!.addEventListener('click', () => setTab('map'));

@@ -230,9 +230,9 @@ export function mountExtras(ctx: ExtrasCtx) {
     const rd = moonLike ? c.rollingDays : 30;
     const pols: Policy[] = moonLike ? ['fifo', 'priority', 'rolling', 'adaptive'] : ['priority', 'strategy', 'coverage', 'rolling', 'adaptive'];
     const errPols: Policy[] = moonLike ? ['rolling', 'adaptive'] : ['coverage', 'rolling', 'adaptive'];
-    const errs = [-120, 120];
+    const errs = [-240, -120, 120, 240];
     const n = c.stations;
-    const total = cases.length * (pols.length + 1 + errPols.length * (1 + errs.length));
+    const total = cases.length * (pols.length + 1 + 1 + errPols.length * (1 + errs.length));
     let done = 0;
     const prog = () => { st.textContent = `Hesaplanıyor… ${done}/${total}`; };
     prog();
@@ -262,18 +262,19 @@ export function mountExtras(ctx: ExtrasCtx) {
     const summary = pols.filter((p) => p !== 'priority' && p !== 'fifo').map((p) => `<tr><td>${NAME[p]}</td><td>${dm(p, dropOf)}</td><td>${dm(p, (m) => m.lossPct)}</td><td>${dm(p, (m) => m.deliveredPct)}</td><td>${dm(p, (m) => valuePct(m, { weightOf: valueOpts().weightOf }))}</td><td>${dm(p, (m) => valuePct(m, { ...vo, halfLifeIdx: hl }))}</td></tr>`).join('');
     const errRows = res.flatMap((r) => errPols.map((p, i) => {
       const e = r.err[p];
-      return [i === 0 ? r.cs.label : '', i === 0 ? cell(r.e0) : '', NAME[p], cell(e[0]), cell(e[1]), cell(e[2])];
+      return [i === 0 ? r.cs.label : '', i === 0 ? cell(r.e0) : '', NAME[p], cell(e[0]), cell(e[1]), cell(e[2]), cell(e[3]), cell(e[4])];
     }));
     // en kötü toplam kayıp farkı (öncelikliye göre), |hata| ≤ 120 dk
-    const worst = errPols.map((p) => `${NAME[p]}: ${mmm(res.map((r) => Math.max(...r.err[p].map((m) => m.lossPct - r.e0.lossPct))), 2)}`);
+    // err[p] = [hata yok, −240, −120, +120, +240]; |hata| ≤ 120 dk içindeki en kötü toplam kayıp farkı ve ayrıca −240 dk
+    const worst = errPols.map((p) => `${NAME[p]}: ${mmm(res.map((r) => Math.max(...[r.err[p][0], r.err[p][2], r.err[p][3]].map((m) => m.lossPct - r.e0.lossPct))), 2)} (−240 dk: ${mmm(res.map((r) => r.err[p][1].lossPct - r.e0.lossPct), 2)})`);
     const dropWorse = errPols.map((p) => `${NAME[p]}: ${res.filter((r) => r.err[p].some((m) => dropOf(m) - dropOf(r.e0) > 0.1)).length}/${res.length}`);
     body.innerHTML = `<h4>Hata yokken karşılaştırma (${moonLike ? 'her tarih aralığı' : 'her kavuşum penceresi'})</h4>`
       + table([moonLike ? 'Başlangıç' : 'Pencere', 'Hat açık %', ...pols.map((p) => NAME[p]), 'Değer %: öncelikli → uyarlamalı (seçili model / 14 gün yarı ömür)'], rows)
       + `<h4>Öncelikliye göre fark: ${res.length} senaryo üzerinde en küçük / medyan / en büyük (puan)</h4>`
       + `<table class="stats"><thead><tr><th>Çizelgeleyici</th><th>Düşen + hatta kayıp</th><th>Toplam kayıp</th><th>Teslim</th><th>Değer % (seçili model, sabit)</th><th>Değer % (bilim verisi 14 gün yarı ömür)</th></tr></thead><tbody>${summary}</tbody></table>`
-      + `<h4>Tahmin hatası (pencere başı/sonu kayması −120 / +120 dk; ${fmt(errStep)} sn adım; + iyimser)</h4>`
-      + table([moonLike ? 'Başlangıç' : 'Pencere', 'öncelikli (referans)', 'Çizelgeleyici', 'hata yok', '−120 dk', '+120 dk'], errRows)
-      + `<p class="hint"><b>Okuma:</b> hücre = düşen + hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen %]. Tahmin hatasında toplam kayıp farkı, ±120 dk içindeki en kötü değerin öncelikliye göre farkıdır (min / medyan / maks, puan): ${worst.join(' · ')}. Düşen + hatta kayıp öncelikliden (0,1 puandan fazla) <i>kötüleşen</i> senaryo sayısı: ${dropWorse.join(' · ')}. Tek bir senaryodan genelleme yapılmaz: sonuçların aralığa göre değişimi yukarıdaki en küçük / en büyük değerlerdedir.</p>`;
+      + `<h4>Tahmin hatası (pencere başı/sonu kayması −240 … +240 dk; ${fmt(errStep)} sn adım; + iyimser, − kötümser)</h4>`
+      + table([moonLike ? 'Başlangıç' : 'Pencere', 'öncelikli (referans)', 'Çizelgeleyici', 'hata yok', '−240 dk', '−120 dk', '+120 dk', '+240 dk'], errRows)
+      + `<p class="hint"><b>Okuma:</b> hücre = düşen + hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen %]. Tahmin hatasında toplam kayıp farkı, |hata| ≤ 120 dk içindeki en kötü değerin öncelikliye göre farkıdır (min / medyan / maks, puan; parantezde −240 dk): ${worst.join(' · ')}. Düşen + hatta kayıp öncelikliden (0,1 puandan fazla) <i>kötüleşen</i> senaryo sayısı: ${dropWorse.join(' · ')}. Tek bir senaryodan genelleme yapılmaz: sonuçların aralığa göre değişimi yukarıdaki en küçük / en büyük değerlerdedir.</p>`;
   }
 
   $('#pj-run').addEventListener('click', () => void runProjection());

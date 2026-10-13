@@ -208,3 +208,37 @@ describe('kapsama özeti (sentetik izler)', () => {
     expect(Object.keys(d.see)).toEqual(['ay-aktarma', 'mars-aktarma']);
   });
 });
+
+describe('yeni yollarda korunum denklemleri (sentetik izler)', () => {
+  // üretilen = teslim + düşen + hatta kayıp + kalan (her sınıf); talep = üretilen + üretilmeyen (öncelikli çizelgenin üretimine ±1 paket)
+  const run = async (net: NetOptions, relayIds: string[], mode: 'ideal' | 'arq' | 'burst') => {
+    const { simulate } = await import('./scheduler');
+    const { schedConfig, withParams, defaultParams } = await import('./timeline');
+    const topo0 = schedTopology(net);
+    const { topo, samples } = restrictToRelays(topo0, buildLinkTimeline(tracks, jd0, jd0 + 12, 600, topo0, 1, net), relayIds);
+    const cfg = { ...withParams(schedConfig(mode), defaultParams(relayIds[0]), relayIds[0], relayIds.slice(1)), stepSec: 600, projection: { surfaceClosure: true, arqHold: true } };
+    const prio = simulate(topo, samples, 'priority', cfg);
+    for (const pol of ['fifo', 'priority', 'strategy', 'coverage', 'rolling', 'adaptive'] as const) {
+      const r = pol === 'priority' ? prio : simulate(topo, samples, pol, cfg);
+      expect(r.total.generated).toBe(r.total.delivered + r.total.dropped + r.total.abandoned + r.total.remaining);
+      for (const c of Object.values(r.perClass)) expect(c.generated).toBe(c.delivered + c.dropped + c.abandoned + c.remaining);
+      for (const [id, c] of Object.entries(r.perClass)) {
+        const packet = id === 'telemetri' ? 0.8 : 24;
+        const p = prio.perClass[id];
+        if (pol !== 'fifo') expect(Math.abs(c.generatedMb + c.suppressedMb - p.generatedMb)).toBeLessThanOrEqual(2 * packet + 1e-6);
+      }
+    }
+  };
+
+  it('ikinci Ay uydusu + kutup aracı + eliptik yörünge: tüm politikalarda, kayıpsız / periyodik / kümelenmiş hatla, iki projeksiyon seçeneği açıkken', async () => {
+    const net: NetOptions = { moonOrbit: 'elliptical', moonSecond: 'best', moonPolarAsset: true };
+    for (const mode of ['ideal', 'arq', 'burst'] as const) await run(net, ['ay-aktarma', HYPOTHETICAL.moonRelay2.id], mode);
+    await run({ moonSecond: 'order' }, ['ay-aktarma', HYPOTHETICAL.moonRelay2.id], 'arq');
+  });
+
+  it('eliptik tek uydu ve kutup aracı; Mars gölgesi (earth / both)', async () => {
+    await run({ moonOrbit: 'elliptical', moonPolarAsset: true }, ['ay-aktarma'], 'arq');
+    await run({ marsEclipse: 'earth' }, ['mars-aktarma'], 'arq');
+    await run({ marsEclipse: 'both' }, ['mars-aktarma'], 'burst');
+  });
+});

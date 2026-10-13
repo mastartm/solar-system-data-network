@@ -124,10 +124,10 @@ if (!only || only === 'golge') {
     }
   }
   // Kavuşumdan uzak bir aralık: Dünya ile Güneş'in Mars'tan görünen yönleri ayrı olduğundan gölge, cisim arkası kapanmasıyla örtüşmez.
-  console.log('### Kavuşumdan uzak aralık (2029-06-01, 35 gün; kavuşum yok, strateji/kapsama bilen = öncelikli)');
+  console.log(`### Kavuşumdan uzak aralık (${HYPOTHETICAL.marsFreeScenario.defaultStart}, ${HYPOTHETICAL.marsFreeScenario.defaultDays} gün; kavuşum yok, strateji/kapsama bilen = öncelikli)`);
   console.log('| İstasyon | Yapılandırma | Dünya hattı açık % | yüzey görüşü % (araçlar) | öncelikli | kayan ufuklu | uyarlamalı |');
   for (const n of [1, 3]) for (const [name, net] of MODES) {
-    const sc: Scn = { kind: 'mars', relay: 'mars-aktarma', startJD: jdOf('2029-06-01'), endJD: jdOf('2029-06-01') + 35, net };
+    const sc: Scn = { kind: 'mars', relay: 'mars-aktarma', startJD: jdOf(HYPOTHETICAL.marsFreeScenario.defaultStart), endJD: jdOf(HYPOTHETICAL.marsFreeScenario.defaultStart) + HYPOTHETICAL.marsFreeScenario.defaultDays, net };
     const cov = coverageRow(tracks, sc.startJD, sc.endJD, n, net);
     const pc = (v: number) => f((100 * v) / cov.steps);
     const assets = Object.keys(cov.surf).filter((a) => a.startsWith('mars-'));
