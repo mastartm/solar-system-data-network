@@ -2,7 +2,7 @@
 
 Gerçek gezegen konumlarını gösteren etkileşimli bir güneş sistemi haritası. İlerleyen aşamalarda Ay ve Mars yüzeyindeki araçların aktarma uyduları üzerinden Dünya'ya veri gönderdiği bir haberleşme ağı simülasyonu eklenecek.
 
-> **Durum: Aşama 1 (etkileşimli harita).** Ağ modeli ve çizelgeleyici henüz yok.
+> **Durum: Aşama 1 (etkileşimli harita, 2B/3B görünüm, tutulmalar).** Ağ modeli ve çizelgeleyici henüz yok.
 
 **Canlı site:** GitHub Pages açıldıktan sonra `https://mastartm.github.io/solar-system-data-network/` (Settings → Pages → Source: *GitHub Actions*).
 
@@ -26,7 +26,9 @@ Diğer komutlar: `npm run build` (yayın derlemesi), `npm test` (birim testler),
 - **Oynat/Durdur** ve **hız** seçimi: zamanı ilerletir.
 - **Kaydırıcı / tarih kutusu / Bugün**: 2020–2040 arasında tarih seçin.
 - **Gezegene (veya Güneş/Ay'a) tıklayın**: Dünya'ya uzaklığı (km) ve ışık gecikmesi (dakika) sağ panelde görünür.
-- Tekerlek ve +/− düğmeleri yakınlaştırır, sürükleme kaydırır.
+- Tekerlek ve +/− düğmeleri yakınlaştırır. **2B** modda sürükleme kaydırır.
+- **3B** düğmesi eğik görünüme geçer: sürükleyerek döndürün (Shift+sürükleme kaydırır). 3B'de gezegenlerin ekliptik düzlemden sapması 3 kat abartılır (görünsün diye).
+- **Tutulmalar:** kaydırıcının üstündeki noktalar tutulmaları gösterir (sarı: güneş, mavi: Ay; dolu: tam/halkalı, boş: kısmi/yarıgölge). Noktaya veya "Tutulmalar" listesine tıklayınca o tarihe gider; ◀ ▶ düğmeleri önceki/sonraki tutulmaya atlar.
 
 ## Veri kaynağı ve kararlar
 
@@ -37,6 +39,8 @@ Diğer komutlar: `npm run build` (yayın derlemesi), `npm test` (birim testler),
 - **Harita ölçeği:** çizim yarıçapı gerçek mesafenin karekökü ile orantılıdır (Neptün ile Merkür aynı ekrana sığsın diye). Açılar gerçektir. **Ay'ın çizim mesafesi abartılıdır** (yönü gerçek). Panelde gösterilen km ve ışık dakikası ise gerçek değerlerdir.
 - **Yörünge izleri** 2020 başından itibaren bir dönem (veya veri sonuna kadar) çizilir; Satürn ve ötesinde tam daire değil 2020–2040 yayıdır.
 - Zaman: Horizons JD (TDB) kullanılır, ekranda UTC gösterilir. Aradaki ~69 saniye fark bu harita için önemsizdir.
+
+- **Tutulmalar** (2020–2040, 91 adet) [astronomy-engine](https://github.com/cosinekitty/astronomy) kütüphanesiyle hesaplanıp `public/data/eclipses.json` dosyasına yazılmıştır (`npm run build-eclipses`, internet gerekmez). Bu NASA kataloğunun kendisi değil, hesaplanmış bir listedir; saat farkı olabilir. Bilinen tarihlerle (örn. 2024-04-08 tam güneş, 2025-03-14 tam Ay) kontrol edilmiştir.
 
 ## Klasörler
 
@@ -51,6 +55,7 @@ public/data/ üretilen JSON dosyaları
 
 ## Açık sorular (varsayımla devam edildi)
 
+0. **3B:** Three.js yerine Canvas'ta kendi perspektif projeksiyonumuz kullanıldı (ağır framework yasağı nedeniyle).
 1. **Ölçek:** karekök sıkıştırma varsayıldı. Gerçek ölçekli (doğrusal) görünüm istenirse eklenebilir.
 2. **Tarih aralığı:** 2020–2040 varsayıldı. Aralık `scripts/fetch-horizons.mjs` içindeki `START`/`STOP` ile değişir.
 3. **CORS:** doğrudan tarayıcı çağrısı test edilemedi (yukarıya bakın). Betikle çekmek bu yüzden seçildi.
@@ -60,6 +65,7 @@ public/data/ üretilen JSON dosyaları
 ## Kullanılan dış kaynaklar
 
 - [NASA/JPL Horizons System](https://ssd.jpl.nasa.gov/horizons/) — gezegen ve Ay konumları (kamuya açık veri).
+- [astronomy-engine](https://github.com/cosinekitty/astronomy) (MIT) — tutulma hesabı (yalnızca geliştirme aşamasında).
 - Araçlar: [Vite](https://vite.dev), [TypeScript](https://www.typescriptlang.org), [Vitest](https://vitest.dev).
 
 ## Sonraki aşamalar

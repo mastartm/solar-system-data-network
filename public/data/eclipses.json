@@ -1,0 +1,461 @@
+{
+ "source": "astronomy-engine (hesaplanmış, NASA kataloğu değil)",
+ "note": "time: tutulmanın en yüksek anı (UTC). solar: global güneş tutulması; lunar: Ay tutulması.",
+ "eclipses": [
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2020-01-10T19:10:04.270Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2020-06-05T19:24:53.102Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2020-06-21T06:40:03.808Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2020-07-05T04:29:48.363Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2020-11-30T09:42:55.469Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2020-12-14T16:13:26.404Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2021-05-26T11:18:40.807Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2021-06-10T10:41:55.008Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "partial",
+   "time": "2021-11-19T09:02:55.258Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2021-12-04T07:33:28.957Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2022-04-30T20:41:24.619Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2022-05-16T04:11:25.341Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2022-10-25T11:00:03.575Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2022-11-08T10:59:07.538Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2023-04-20T04:16:42.455Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2023-05-05T17:22:57.180Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2023-10-14T17:59:26.890Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "partial",
+   "time": "2023-10-28T20:13:57.079Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2024-03-25T07:12:49.852Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2024-04-08T18:17:19.495Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "partial",
+   "time": "2024-09-18T02:44:11.310Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2024-10-02T18:44:56.366Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2025-03-14T06:58:42.343Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2025-03-29T10:47:25.889Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2025-09-07T18:11:41.501Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2025-09-21T19:41:48.934Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2026-02-17T12:11:53.939Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2026-03-03T11:33:40.289Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2026-08-12T17:45:46.794Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "partial",
+   "time": "2026-08-28T04:12:49.076Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2027-02-06T15:59:32.957Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2027-02-20T23:12:44.142Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2027-07-18T16:02:54.880Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2027-08-02T10:06:34.636Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2027-08-17T07:13:44.931Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "partial",
+   "time": "2028-01-12T04:13:00.859Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2028-01-26T15:07:42.381Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "partial",
+   "time": "2028-07-06T18:19:38.379Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2028-07-22T02:55:24.627Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2028-12-31T16:51:54.549Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2029-01-14T17:12:28.816Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2029-06-12T04:04:55.151Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2029-06-26T03:22:06.538Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2029-07-11T15:36:03.870Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2029-12-05T15:02:39.906Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2029-12-20T22:41:54.610Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2030-06-01T06:27:58.051Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "partial",
+   "time": "2030-06-15T18:33:14.732Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2030-11-25T06:50:19.626Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2030-12-09T22:27:32.805Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2031-05-07T03:50:47.970Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2031-05-21T07:14:49.744Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2031-06-05T11:44:03.888Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2031-10-30T07:45:19.656Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2031-11-14T21:06:12.934Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2032-04-25T15:13:29.907Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2032-05-09T13:25:23.487Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2032-10-18T19:02:22.696Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2032-11-03T05:32:53.713Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2033-03-30T18:01:16.136Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2033-04-14T19:12:31.297Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2033-09-23T13:53:11.132Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2033-10-08T10:55:02.604Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2034-03-20T10:17:27.264Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2034-04-03T19:05:34.466Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2034-09-12T16:18:03.806Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "partial",
+   "time": "2034-09-28T02:46:19.262Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2035-02-22T09:04:43.451Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2035-03-09T23:04:31.488Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "partial",
+   "time": "2035-08-19T01:10:55.732Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2035-09-02T01:55:23.141Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2036-02-11T22:11:44.125Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2036-02-27T04:45:29.267Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2036-07-23T10:30:42.941Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2036-08-07T02:51:07.584Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2036-08-21T17:24:21.271Z"
+  },
+  {
+   "type": "solar",
+   "kind": "partial",
+   "time": "2037-01-16T09:47:30.548Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "total",
+   "time": "2037-01-31T14:00:15.453Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2037-07-13T02:39:15.134Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "partial",
+   "time": "2037-07-27T04:08:27.693Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2038-01-05T13:45:48.000Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2038-01-21T03:48:37.644Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2038-06-17T02:43:30.020Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2038-07-02T13:31:32.975Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2038-07-16T11:34:22.851Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "penumbral",
+   "time": "2038-12-11T17:43:41.655Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2038-12-26T00:58:48.244Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "partial",
+   "time": "2039-06-06T18:53:00.989Z"
+  },
+  {
+   "type": "solar",
+   "kind": "annular",
+   "time": "2039-06-21T17:11:28.636Z"
+  },
+  {
+   "type": "lunar",
+   "kind": "partial",
+   "time": "2039-11-30T16:55:03.376Z"
+  },
+  {
+   "type": "solar",
+   "kind": "total",
+   "time": "2039-12-15T16:22:21.355Z"
+  }
+ ]
+}

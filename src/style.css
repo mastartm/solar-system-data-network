@@ -21,3 +21,26 @@ button { cursor:pointer; } button:hover { border-color:var(--accent); }
 label { color:var(--muted); font-size:13px; display:flex; align-items:center; gap:6px; }
 .zoom { display:flex; gap:4px; }
 @media (max-width:700px) { main { flex-direction:column; } #info { width:auto; border-left:0; border-top:1px solid var(--line); max-height:35%; } }
+
+/* --- alt çubuk, tutulma işaretleri, 2B/3B düğmesi --- */
+footer { flex-direction:column; align-items:stretch; position:relative; }
+footer .row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.grow { flex:1; }
+.timeline { position:relative; flex:1; min-width:200px; padding-top:14px; }
+.timeline input[type=range] { width:100%; margin:0; display:block; }
+.ticks { position:absolute; left:0; right:0; top:0; height:14px; }
+.tick { display:inline-block; width:8px; height:8px; border-radius:50%; padding:0; border:1.5px solid; background:transparent; }
+.ticks .tick { position:absolute; top:3px; transform:translateX(-50%); cursor:pointer; }
+.ticks .tick:hover { transform:translateX(-50%) scale(1.6); }
+.tick.solar { border-color:#ffc83d; } .tick.solar.central { background:#ffc83d; }
+.tick.lunar { border-color:#9db4d8; } .tick.lunar.central { background:#9db4d8; }
+.legend { color:var(--muted); font-size:12px; display:flex; align-items:center; gap:6px; }
+.legend small { opacity:.8; }
+.seg { display:inline-flex; } .seg button { border-radius:0; } .seg button:first-child { border-radius:6px 0 0 6px; } .seg button:last-child { border-radius:0 6px 6px 0; border-left:0; }
+.seg .on { background:var(--accent); border-color:var(--accent); color:#fff; }
+#elist-panel { position:absolute; right:16px; bottom:100%; width:min(420px, calc(100% - 32px)); max-height:50vh; overflow:auto; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px; box-shadow:0 8px 30px rgba(0,0,0,.5); z-index:5; }
+#elist-panel[hidden] { display:none; }
+.eitem { display:grid; grid-template-columns:14px 1fr auto; gap:8px; align-items:center; width:100%; text-align:left; background:transparent; border:0; border-radius:4px; padding:6px 8px; font-size:13px; }
+.eitem:hover { background:#16203a; } .eitem b { font-weight:500; color:var(--muted); font-size:12px; }
+.eclipse-badge { font-size:13px; color:#ffc83d; margin-top:2px; }
+#date-label { pointer-events:none; }
