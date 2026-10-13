@@ -106,8 +106,8 @@ export type PolicyMetrics = Record<Policy, Metrics>;
 export type PartialPolicyMetrics = Partial<Record<Policy, Metrics>>;
 
 /** Tek bir çizelgeleyiciyi parametrelerle çalıştırır (arayüz, uzun hesabı politika politika bölmek için kullanır). */
-export function runPolicy(topo: SchedTopology, samples: LinkSample[], cfg: SchedConfig, params: SweepParams, policy: Policy, override: Partial<SweepParams> = {}, relayId: string = MARS_RELAY): Metrics {
-  const c = withParams(cfg, { ...params, ...override }, relayId);
+export function runPolicy(topo: SchedTopology, samples: LinkSample[], cfg: SchedConfig, params: SweepParams, policy: Policy, override: Partial<SweepParams> = {}, relayId: string = MARS_RELAY, extraRelayIds: string[] = []): Metrics {
+  const c = withParams(cfg, { ...params, ...override }, relayId, extraRelayIds);
   return metricsOf(simulate(topo, samples, policy, c), c);
 }
 

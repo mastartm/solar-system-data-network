@@ -1,40 +1,18 @@
 import type { Chart, ChartConfiguration, Plugin } from 'chart.js';
 import { HYPOTHETICAL, HYPOTHETICAL_LABEL } from '../config/hypothetical';
 import type { Track } from '../data/types';
-import { dateToJd, jdToDate, trackEndJD } from '../map/ephemeris';
-import type { BlackoutWindow } from '../network/network';
+import { dateToJd, trackEndJD } from '../map/ephemeris';
+import { effectiveAssets, effectiveRelays, type BlackoutWindow, type NetOptions } from '../network/network';
 import { ComputePool, createPool } from '../network/computeClient';
-import type { CoverageRow, SimOut, TlInfo, TlSpec } from '../network/compute';
-import type { ForecastError, Policy, SchedConfig, SimResult } from '../network/scheduler';
-import { ALL_POLICIES, POLICIES, sweepValues, type Metrics, type PartialPolicyMetrics, type SweepKey } from '../network/sweep';
+import type { CoverageRow } from '../network/coverage';
+import type { SimOut, TlInfo, TlSpec } from '../network/compute';
+import type { ForecastError, Policy, ProjectionOptions, SchedConfig, SimResult } from '../network/scheduler';
+import { ALL_POLICIES, POLICIES, sweepValues, valuePct, type Metrics, type PartialPolicyMetrics, type SweepKey } from '../network/sweep';
 import { LINK_MODE_LABEL, MARS_RELAY, MOON_RELAY, defaultParams, lightDelaySeries, rollingConfig, schedConfig, withParams, type LinkMode, type SweepParams } from '../network/timeline';
+import { mountExtras } from './schedulerExtras';
+import { C, COLOR, DASH, NAME, NOBLACKOUT_POLICIES, baseOpts, day, fmt, valueOpts, year, type Scen, type ScenKind } from './schedShared';
 
-const fmt = (n: number, d = 0) => n.toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
-const day = (jd: number) => jdToDate(jd).toISOString().slice(0, 10);
-const year = (jd: number) => 1970 + (jd - 2440587.5) / 365.2425;
-
-// Seriler: FIFO = mavi, öncelikli = turuncu, strateji = yeşil, kapsama bilen strateji = mor (koyu yüzeyde ayırt edilen kategorik renkler). Metin rengi seri rengi değildir.
-const C = { fifo: '#3987e5', prio: '#d95926', strat: '#3fb68b', stratLoss: '#9be3c6', cov: '#b88cf2', covLoss: '#dcc5fa', roll: '#e8c13d', rollLoss: '#f5e2a0', adapt: '#2fd4e0', adaptLoss: '#a8eef2', moon: '#cfcfcf', mars: '#d9593a', text: '#8a96b2', grid: '#1e2740', ink: '#e6ebf5' };
-const NAME: Record<Policy, string> = { fifo: 'FIFO', priority: 'Öncelikli', strategy: 'Strateji', coverage: 'Kapsama bilen strateji', rolling: 'Kayan ufuklu strateji', adaptive: 'Uyarlamalı ufuk' };
-const COLOR: Record<Policy, string> = { fifo: C.fifo, priority: C.prio, strategy: C.strat, coverage: C.cov, rolling: C.roll, adaptive: C.adapt };
-const DASH: Record<Policy, number[] | undefined> = { fifo: undefined, priority: [6, 3], strategy: [2, 2], coverage: [10, 3, 2, 3], rolling: [2, 4], adaptive: [8, 3, 1, 3] };
-const MOON_POLICIES: Policy[] = ['fifo', 'priority', 'rolling'];
 const COMPARE_STATIONS = [1, 2, 3];
-
-const baseOpts = (xTitle: string, yTitle: string, extra: Record<string, unknown> = {}) => ({
-  responsive: true, maintainAspectRatio: false, animation: false,
-  interaction: { mode: 'nearest', axis: 'x', intersect: false },
-  plugins: { legend: { labels: { color: C.ink, boxWidth: 12 } } },
-  scales: {
-    x: { title: { display: true, text: xTitle, color: C.text }, ticks: { color: C.text }, grid: { color: C.grid } },
-    y: { title: { display: true, text: yTitle, color: C.text }, ticks: { color: C.text }, grid: { color: C.grid }, beginAtZero: true },
-  },
-  ...extra,
-});
-
-type ScenKind = 'mars' | 'moon';
-/** Bir senaryo: hangi aktarma hattı, hangi tarih aralığı. Mars: kavuşum penceresi ± pay. Ay: serbest tarih aralığı (kavuşum yok). */
-interface Scen { kind: ScenKind; key: string; relayId: string; relayName: string; startJD: number; endJD: number; blackout?: BlackoutWindow; policies: Policy[]; sweepPolicies: Policy[] }
 
 /** Kaydırıcı tanımları: aralıklar config'ten, başlangıç değerleri çizelgeleyici config'inden gelir. */
 interface SliderDef { key: SweepKey; label: string; unit: string; scale: number; digits: number; min: number; max: number; step: number }
@@ -83,6 +61,10 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
   let linkMode: LinkMode = 'arq';
   let kind: ScenKind = 'mars';
   let rollingDays = HYPOTHETICAL.rollingStrategy.rollingDays;
+  // Aşama 9 seçenekleri (hepsi varsayılan = Aşama 3-8 davranışı)
+  let projection: ProjectionOptions = { ...HYPOTHETICAL.projection };
+  const netSel = { moonOrbit: 'equatorial' as 'equatorial' | 'elliptical', moonSecond: 'none' as 'none' | 'best' | 'order', moonPolarAsset: false, marsEclipse: 'none' as 'none' | 'earth' | 'both' };
+  let marsFree = false; // Mars: kavuşumsuz serbest tarih aralığı
   let active: Scen | null = null;
   const params = () => prms[kind];
   const def = () => defs[kind];
@@ -110,9 +92,9 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       <section>
         <h3>Senaryo ve ayarlar <small>(${HYPOTHETICAL_LABEL})</small></h3>
         <div class="row">
-          <label>Hat <select id="sel-scen"><option value="mars">Mars aktarma hattı (kavuşum penceresi)</option><option value="moon">Ay aktarma hattı (tarih aralığı, kavuşum yok)</option></select></label>
+          <label>Hat <select id="sel-scen"><option value="mars">Mars aktarma hattı (kavuşum penceresi)</option><option value="marsfree">Mars aktarma hattı (tarih aralığı, kavuşumsuz)</option><option value="moon">Ay aktarma hattı (tarih aralığı, kavuşum yok)</option></select></label>
           <label id="lb-window">Kavuşum penceresi <select id="sc-window">${opts || '<option>Uygun pencere yok</option>'}</select></label>
-          <span id="moon-ctl" class="row" hidden>
+          <span id="date-ctl" class="row" hidden>
             <label>Başlangıç <input type="date" id="moon-start" min="${day(dataStart + 1)}" max="${day(dataEnd - 8)}" value="${clampISO(ms.defaultStart)}"></label>
             <label>Süre <select id="moon-days">${ms.lengthOptions.map((n) => `<option value="${n}"${n === ms.defaultDays ? ' selected' : ''}>${n} gün</option>`).join('')}</select></label>
           </span>
@@ -124,6 +106,19 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
           <label>Kayan ufuk <select id="sel-rolling">${HYPOTHETICAL.rollingStrategy.rollingDaysOptions.map((d) => `<option value="${d}"${d === rollingDays ? ' selected' : ''}>${fmt(d, d < 1 ? 1 : 0)} gün</option>`).join('')}</select></label>
           <label>Hat modu <select id="sel-mode">${(Object.keys(LINK_MODE_LABEL) as LinkMode[]).map((m) => `<option value="${m}"${m === linkMode ? ' selected' : ''}>${LINK_MODE_LABEL[m]}</option>`).join('')}</select></label>
         </div>
+        <div class="row" id="a9-row">
+          <label title="Havuz projeksiyonu araç tamponundaki verinin yüzey hattı (araç → uydu) kapalıyken boşalmadığını hesaba katar">Projeksiyon <span class="badge-hyp">Aşama 9</span> <input type="checkbox" id="pj-surface"> yüzey hattı kapalılığı</label>
+          <label><input type="checkbox" id="pj-arq"> ARQ kopyaları RTT boyunca tamponda</label>
+          <span id="moon-opts" class="row" hidden>
+            <label>Ay yörüngesi <select id="sel-orbit"><option value="equatorial">ekvatoral dairesel (mevcut)</option><option value="elliptical">eğimli/eliptik (kutupsal)</option></select></label>
+            <label>İkinci Ay uydusu <select id="sel-second"><option value="none">yok</option><option value="best">var: araç en iyi görüneni kullanır</option><option value="order">var: hat sırasıyla</option></select></label>
+            <label><input type="checkbox" id="sel-polar"> kutup aracı ekle</label>
+          </span>
+          <span id="mars-opts" class="row" hidden>
+            <label>Mars uydusu gölgesi <select id="sel-eclipse"><option value="none">yok (mevcut)</option><option value="earth">gölgede yalnız Dünya hattı kapalı</option><option value="both">gölgede yüzey + Dünya hattı kapalı</option></select></label>
+          </span>
+        </div>
+        <p class="hint" id="a9-hint"></p>
         <p class="hint"><b>Yer istasyonu:</b> aktarma uydusunun Dünya bağlantısı, istasyonlardan en az biri uyduyu ${HYPOTHETICAL.groundStations.minElevationDeg}° üstünde görüyorsa açıktır. <b>Hat modu:</b> <i>kayıpsız</i> = Aşama 3-4 davranışı; <i>hatalı, yeniden iletimsiz</i> = kaybolan paket kalıcı kayıp (“hatta kayıp”); <i>hatalı + yeniden iletim</i> = periyodik kayıp (her ${fmt(100 / HYPOTHETICAL.arq.earthLossPct, 0)}. deneme, ortalama %${HYPOTHETICAL.arq.earthLossPct}), gönderici paketi ışık gidiş-dönüş süresi (RTT) boyunca tamponunda tutar, kaybolursa en çok ${HYPOTHETICAL.arq.maxAttempts} denemeye kadar yeniden gönderir; <i>kümelenmiş hata + yeniden iletim</i> = <b>aynı ortalama kayıp</b>, ama iki durumlu (iyi: %${fmt(HYPOTHETICAL.arq.burst.goodLossPct, 1)} / kötü: %${HYPOTHETICAL.arq.burst.badLossPct} kayıp, kötü durum ortalama ${fmt(HYPOTHETICAL.arq.burst.meanBadSec / 60)} dk) kümelenmiş dağılım; durum zinciri sabit tohumlu kendi üretecimizle üretilir (rastgelelik yok). Hat kaybı kaydırıcısı hatalı modlarda ortalama kaybı belirler; yüzey hattı kaybı sabit %${HYPOTHETICAL.arq.surfaceLossPct}.</p>
         <p class="hint" id="scen-hint"></p>
         <p class="hint">Aynı bağlantı çizelgesi beş (Ay'da üç) çizelgeleyiciyle çalıştırılır: <b>FIFO</b> (geliş sırası), <b>öncelikli</b> (${cls.map((c) => c.name).join(' > ')}), <b>strateji</b> (öncelikli + kavuşum öncesi/sırasında bilim verisi üretimini kısma; Aşama 4, olduğu gibi korundu) ve <b>kapsama bilen strateji</b> (Aşama 7: aynı kısma, ama bütçede kavuşum sonrası boşaltma kapasitesi — yer istasyonu kapsaması ve hat açık süresi — de hesaba katılır) ve <b>kayan ufuklu strateji</b> (Aşama 8: aynı havuz projeksiyonu, ama kavuşum işaretine bağlı değil; her adımda önümüzdeki “kayan ufuk” boyunca takvimden öngörülen <i>her</i> kapalı hat dönemi — yer istasyonu boşluğu, cisim arkası, kavuşum — için kısar; Ay'da da çalışır). Taşan tamponda FIFO yeni geleni atar; diğerleri daha düşük sınıfın en yeni paketini atarak yer açar.</p>
@@ -183,7 +178,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       <section>
         <h3>(f) Duyarlılık analizi <small>(her grafikte yalnızca o parametre değişir, diğerleri kaydırıcı değerinde)</small></h3>
         <div class="row">
-          <label>Kayıp ölçütü <select id="sw-loss-metric"><option value="total">Toplam (hacim %)</option><option value="top">Telemetri (hacim %)</option><option value="deliv">Teslim edilen (talebin %'si)</option><option value="abandoned">Hatta kayıp (hacim %)</option><option value="retx">Yeniden gönderilen (paket)</option></select></label>
+          <label>Kayıp ölçütü <select id="sw-loss-metric"><option value="total">Toplam (hacim %)</option><option value="top">Telemetri (hacim %)</option><option value="deliv">Teslim edilen (talebin %'si)</option><option value="value">Değer (bölüm i: teslim edilen değer %)</option><option value="abandoned">Hatta kayıp (hacim %)</option><option value="retx">Yeniden gönderilen (paket)</option></select></label>
           <label>Süre ölçütü <select id="sw-time-metric"><option value="topP95">Telemetri, %95</option><option value="lowP95">Bilim verisi, %95</option><option value="topMean">Telemetri, ortalama</option><option value="lowMean">Bilim verisi, ortalama</option></select></label>
           <span class="legend" id="sw-status" role="status"></span>
         </div>
@@ -204,6 +199,42 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
         <p class="hint">Kümelenmiş hata modelinin (iyi/kötü durum) parametreleri taranır; <b>ortalama kayıp sabit kalır</b> (yüzey %${HYPOTHETICAL.arq.surfaceLossPct}, Dünya hattı kaydırıcıdaki değer), yalnızca dağılımı değişir. Çıktı: hatta kayıp paket sayısı (${HYPOTHETICAL.arq.maxAttempts} deneme aşıldı), <b>yüzey / Dünya hattı ayrımıyla</b>. Üçüncü grafik, Aşama 7'de baskın çıkan yüzey hattı kaybının yeniden deneme aralığıyla nasıl değiştiğini gösterir (varsayılan ${HYPOTHETICAL.arq.surfaceRetrySec} sn = aynı adımda; <code>HYPOTHETICAL.arq.surfaceRetrySec</code>). Kaybolan paket yeniden deneme beklerken tamponda yer tutar. Düğmeyle başlar.</p>
         <div class="row"><button type="button" id="em-run">Hata modeli taramalarını hesapla</button><span class="legend" id="em-status" role="status"></span></div>
         <div id="em-body"></div>
+      </section>
+
+      <section>
+        <h3>(i) Değer ağırlıklı fayda <small>(teslim edilen değer / talep edilen değer · telemetri ve bilim verisi için varsayımsal birim değer · isteğe bağlı zamanla azalan değer · ${HYPOTHETICAL_LABEL})</small></h3>
+        <p class="hint">Mevcut ölçütler (düşen %, düşen + üretilmeyen %, teslim %) aynen kalır; bu bölüm onlara <b>ek</b> bir ölçüt ekler. Birim değerler (<code>src/config/hypothetical.ts</code>: telemetri ${HYPOTHETICAL.scheduler.classes[0].valuePerMb}, bilim verisi ${HYPOTHETICAL.scheduler.classes[1].valuePerMb} birim/Mb) <b>uydurmadır</b>. Seçimler yalnızca bu bölümü, karşılaştırma tablosundaki “Değer %” sütununu ve duyarlılık grafiklerinin “Değer” ölçütünü etkiler; ek çizelgeleyici hesabı gerekmez.</p>
+        <div class="row">
+          <label>Telemetri birim değeri <select id="v-tw"></select></label>
+          <label>Bilim verisi değeri <select id="v-hl"></select></label>
+          <label>Duyarlılık ızgarası politikası <select id="v-pol"></select></label>
+        </div>
+        <p class="hint" id="v-def"></p>
+        <div id="v-table"></div>
+        <div id="v-st"></div>
+        <div id="v-grid"></div>
+        <p class="hint" id="v-verdict"></p>
+      </section>
+
+      <section>
+        <h3>(j) İyimser varsayımların kaldırılması: etki <small>(havuz projeksiyonu: yüzey hattı kapalılığı, ARQ kopyalarının RTT boyunca tampon payı · 1/2/3 istasyon · ${HYPOTHETICAL_LABEL})</small></h3>
+        <p class="hint">Kapsama bilen, kayan ufuklu ve uyarlamalı stratejilerin havuz projeksiyonu Aşama 8'e kadar iki şeyi iyimser varsayıyordu: (1) araç tamponundaki veri yüzey hattı (araç → uydu) kapalıyken de boşalır, (2) ARQ kopyaları uydu tamponunda yer tutmaz. İkisi de artık <b>seçenektir</b> (varsayılan kapalı, yukarıdaki işaret kutuları; Aşama 3–8 sayıları yeniden üretilir). Aşağıdaki tablo her iki seçeneği seçili senaryoda ve 1/2/3 istasyonda karşılaştırır. Düğmeyle başlar.</p>
+        <div class="row"><button type="button" id="pj-run">Etkiyi hesapla</button><span class="legend" id="pj-status" role="status"></span></div>
+        <div id="pj-body"></div>
+      </section>
+
+      <section>
+        <h3 id="ob-title">(k) Ay aktarma uydusu yörüngesi ve ikinci uydu</h3>
+        <p class="hint" id="ob-hint"></p>
+        <div class="row"><button type="button" id="ob-run">Yörünge karşılaştırmasını hesapla</button><span class="legend" id="ob-status" role="status"></span></div>
+        <div id="ob-body"></div>
+      </section>
+
+      <section>
+        <h3>(l) Genelleme <small>(birden çok tarih aralığı / kavuşum penceresi · hata yokken ve tahmin hatasıyla · ${HYPOTHETICAL_LABEL})</small></h3>
+        <p class="hint">Aşama 8 sonuçları tek senaryo aralığındandı (Ay 2028-03-03, Mars 2028 penceresi). Bu bölüm seçili hat, istasyon sayısı, hat modu ve kaydırıcı değerleriyle <b>Ay için ${HYPOTHETICAL.generalization.moonStarts.length} farklı ${HYPOTHETICAL.generalization.moonDays} günlük aralıkta</b> (${HYPOTHETICAL.generalization.moonStarts.join(', ')}) ya da <b>Mars'ın tüm kavuşum pencerelerinde</b> kayan ufuklu ve uyarlamalı stratejiyi öncelikliyle karşılaştırır ve pencere başı/sonu tahmin hatasını (−120/+120 dk) tekrarlar. Düğmeyle başlar.</p>
+        <div class="row"><button type="button" id="gn-run">Genellemeyi hesapla</button><span class="legend" id="gn-status" role="status"></span></div>
+        <div id="gn-body"></div>
       </section>
 
       <section>
@@ -238,6 +269,12 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       ${row('Strateji (bütçeli kısma, Aşama 4)', `kesintiye ${fmt(st.lookaheadDays, 1)} gün kala başlar · boş tamponun %${fmt(st.margin * 100)}'i bilim verisi bütçesi · çarpan alt sınırı ${fmt(st.minFactor, 2)} · telemetri kısılmaz`)}
       ${row('Kapsama bilen strateji (Aşama 7)', `kesintiye ${fmt(cs.lookaheadDays, 1)} gün kala başlar, kesinti boyunca ve bittikten sonra ${fmt(cs.recoveryDays)} gün sürer · tepe doluluk havuzun %${fmt(cs.margin * 100)}'ini geçmez (araç tamponunun %${fmt(cs.assetBufferShare * 100)}'i havuzda) · boşaltma kapasitesi = hat hızı × payı × (1 − ortalama kayıp) × hattın açık olduğu zamanlar (önceden bilinen takvim) · telemetri kısılmaz`)}
       ${row('Kayan ufuklu strateji (Aşama 8)', `her ${fmt(HYPOTHETICAL.rollingStrategy.refreshSec / 60)} dk'da önümüzdeki kayan ufuk (varsayılan ${fmt(HYPOTHETICAL.rollingStrategy.rollingDays, 1)} gün; seçenekler ${HYPOTHETICAL.rollingStrategy.rollingDaysOptions.join(' / ')}) boyunca takvimden öngörülen her kapalı hat dönemi için havuz ileri izlenir · tepe doluluk havuzun %${fmt(HYPOTHETICAL.rollingStrategy.margin * 100)}'ini geçmez (araç tamponunun %${fmt(HYPOTHETICAL.rollingStrategy.assetBufferShare * 100)}'i havuzda) · telemetri kısılmaz · takvim ve ortalama kayıp önceden bilinir (hata (g) bölümünde taranır)`)}
+      ${row('Uyarlamalı ufuk (Aşama 9)', `her ${fmt(HYPOTHETICAL.adaptiveStrategy.refreshSec / 60)} dk'da: şimdi sürmekte olan ya da ${fmt(HYPOTHETICAL.adaptiveStrategy.leadDays, 1)} gün içinde başlayan ilk kapalı hat döneminin bitişine kalan süre + ${fmt(HYPOTHETICAL.adaptiveStrategy.tailFactor, 1)} × dönem uzunluğu kadar ileri izlenir, [${fmt(HYPOTHETICAL.adaptiveStrategy.minDays, 1)}, ${fmt(HYPOTHETICAL.adaptiveStrategy.maxDays)}] gün aralığına kırpılır (yakın kapalı dönem yoksa ${fmt(HYPOTHETICAL.adaptiveStrategy.minDays, 1)} gün) · tepe doluluk havuzun %${fmt(HYPOTHETICAL.adaptiveStrategy.margin * 100)}'ini geçmez · telemetri kısılmaz · takvim önceden bilinir`)}
+      ${row('Değer ölçütü (Aşama 9)', `birim değer: ${cls.map((c) => `${c.name} ${c.valuePerMb}`).join(' · ')} (uydurma) · zamanla azalan değer yarı ömürleri (gün): ${HYPOTHETICAL.value.decayOptionsDays.join(', ')} (arayüzde varsayılan ${HYPOTHETICAL.value.decayHalfLifeDays}) · telemetri değeri taraması: ${HYPOTHETICAL.value.telemetryWeightScan.join(', ')}×`)}
+      ${row('Projeksiyon seçenekleri (Aşama 9)', `yüzey hattı kapalılığı: ${HYPOTHETICAL.projection.surfaceClosure ? 'açık' : 'kapalı'} · ARQ kopyası RTT tamponu: ${HYPOTHETICAL.projection.arqHold ? 'açık' : 'kapalı'} (varsayılanlar; arayüzden değişir)`)}
+      ${row('Ay yörüngeleri (Aşama 9)', `ekvatoral dairesel ${fmt(HYPOTHETICAL.relays[0].altitudeKm)} km (mevcut) · eğimli/eliptik: a ${fmt(HYPOTHETICAL.moonOrbits.elliptical.semiMajorKm)} km, e ${fmt(HYPOTHETICAL.moonOrbits.elliptical.ecc, 2)}, i ${HYPOTHETICAL.moonOrbits.elliptical.incDeg}°, ω ${HYPOTHETICAL.moonOrbits.elliptical.argPeriDeg}° (apolün güneyde) · ikinci uydu: ω ${HYPOTHETICAL.moonRelay2.orbit.argPeriDeg}° (apolün kuzeyde), ortalama anomali ${HYPOTHETICAL.moonRelay2.orbit.meanAnomalyDeg}°, hat hızı ${fmt(sc.relayDownlinkKbps[HYPOTHETICAL.moonRelay2.id])} kbit/sn, tampon ${fmt(sc.relayBufferMb[HYPOTHETICAL.moonRelay2.id])} Mb · kutup aracı ${HYPOTHETICAL.moonPolarAsset.latDeg}° / ${HYPOTHETICAL.moonPolarAsset.lonDeg}°, ${fmt(HYPOTHETICAL.moonPolarAsset.dataRateKbps)} kbit/sn · düzlem eylemsiz sabit (presesyon yok)`)}
+      ${row('Mars uydusu gölgesi (Aşama 9)', `silindirik gölge (Güneş yönü Mars'ın Güneş'e göre konumundan; eksen ekliptiğe paralel varsayıldığından ekvatoral yörünge her turda gölgeden geçer) · güç modeli yok · gölgede yalnızca hat kapalı: ${HYPOTHETICAL.marsEclipse.modes.slice(1).join(' / ')} (earth: yalnız uydu → Dünya hattı, both: yüzey hattı da)`)}
+      ${row('Genelleme (Aşama 9)', `Ay: ${HYPOTHETICAL.generalization.moonStarts.join(', ')} (${HYPOTHETICAL.generalization.moonDays} gün) · Mars: tüm kavuşum pencereleri`)}
       ${row('Tahmin hatası taraması (Aşama 8)', `adım ${fmt(HYPOTHETICAL.forecastScan.stepSec)} sn · pencere başı/sonu kayması (dk): ${HYPOTHETICAL.forecastScan.edgeShiftMin.join(', ')} · pencere ötelemesi (dk): ${HYPOTHETICAL.forecastScan.offsetMin.join(', ')} · ortalama kayıp sapması (%): ${HYPOTHETICAL.forecastScan.lossBiasPct.join(', ')}`)}
       ${row('Hata modeli taraması (Aşama 8)', `kötü durum kaybı (%): ${HYPOTHETICAL.errorScan.badLossPct.join(', ')} · kötü durum ortalama süresi (sn): ${HYPOTHETICAL.errorScan.meanBadSec.join(', ')} · yüzey hattı yeniden deneme aralığı (sn): ${HYPOTHETICAL.errorScan.surfaceRetrySec.join(', ')} (varsayılan ${HYPOTHETICAL.arq.surfaceRetrySec} = aynı adımda)`)}
       ${row('Yer istasyonları', `${HYPOTHETICAL.groundStations.stations.map((g) => `${g.name} (${fmt(g.latDeg, 1)}°, ${fmt(g.lonDeg, 1)}°)`).join(' · ')} · en düşük yükseklik ${HYPOTHETICAL.groundStations.minElevationDeg}° · anlık devir, tek hat`)}
@@ -268,19 +305,33 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
   }
 
   // ---- Senaryo ----
-  function scenario(): Scen | null {
-    if (kind === 'mars') {
-      const idx = Number($<HTMLSelectElement>('#sc-window').value);
-      const w = usable[idx];
-      if (!w) return null;
-      return { kind, key: `mars|${idx}`, relayId: MARS_RELAY, relayName: 'Mars', startJD: w.startJD - pad.before, endJD: w.endJD + pad.after, blackout: w, policies: ALL_POLICIES, sweepPolicies: POLICIES };
+  /** Seçili ağ seçenekleri (yalnızca varsayılandan farklı olanlar; boş = Aşama 2-8 ağı). */
+  function netOptions(k: ScenKind): NetOptions {
+    if (k === 'moon') {
+      return { ...(netSel.moonOrbit !== 'equatorial' ? { moonOrbit: netSel.moonOrbit } : {}), ...(netSel.moonSecond !== 'none' ? { moonSecond: netSel.moonSecond } : {}), ...(netSel.moonPolarAsset ? { moonPolarAsset: true } : {}) };
     }
+    return netSel.marsEclipse !== 'none' ? { marsEclipse: netSel.marsEclipse } : {};
+  }
+  const dateRange = (): { startJD: number; endJD: number } | null => {
     const iso = $<HTMLInputElement>('#moon-start').value;
     const startJD = iso ? dateToJd(new Date(iso + 'T00:00:00Z')) : NaN;
     const days = Number($<HTMLSelectElement>('#moon-days').value);
     if (!Number.isFinite(startJD) || startJD < dataStart || startJD + 1 > dataEnd) return null;
-    const endJD = Math.min(startJD + days, dataEnd);
-    return { kind, key: `moon|${startJD}|${endJD}`, relayId: MOON_RELAY, relayName: 'Ay', startJD, endJD, policies: MOON_POLICIES, sweepPolicies: MOON_POLICIES };
+    return { startJD, endJD: Math.min(startJD + days, dataEnd) };
+  };
+  function scenario(): Scen | null {
+    const net = netOptions(kind);
+    const nk = JSON.stringify(net);
+    if (kind === 'mars' && !marsFree) {
+      const idx = Number($<HTMLSelectElement>('#sc-window').value);
+      const w = usable[idx];
+      if (!w) return null;
+      return { kind, key: `mars|${idx}|${nk}`, relayId: MARS_RELAY, relayName: 'Mars', startJD: w.startJD - pad.before, endJD: w.endJD + pad.after, blackout: w, net, policies: ALL_POLICIES, sweepPolicies: POLICIES };
+    }
+    const r = dateRange();
+    if (!r) return null;
+    if (kind === 'mars') return { kind, key: `marsfree|${r.startJD}|${r.endJD}|${nk}`, relayId: MARS_RELAY, relayName: 'Mars', ...r, free: true, net, policies: NOBLACKOUT_POLICIES, sweepPolicies: NOBLACKOUT_POLICIES };
+    return { kind, key: `moon|${r.startJD}|${r.endJD}|${nk}`, relayId: MOON_RELAY, relayName: 'Ay', ...r, net, policies: NOBLACKOUT_POLICIES, sweepPolicies: NOBLACKOUT_POLICIES };
   }
 
   // ---- Yer istasyonu kapsaması (senaryo başına bir kez; istasyon sayısından bağımsız tüm sayılar için) ----
@@ -291,25 +342,26 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     if (cached) { el.innerHTML = cached.html; $('#st-hint').innerHTML = cached.hint; return; }
     el.textContent = 'Hesaplanıyor…';
     const counts = [0, ...HYPOTHETICAL.groundStations.stations.map((_, i) => i + 1)];
-    const relays = HYPOTHETICAL.relays;
+    const relays = effectiveRelays(s.net);
+    const assets = effectiveAssets(s.net);
+    const multiMoon = relays.filter((r) => r.body === 'moon').length > 1;
     const rows: string[] = [];
     let surface: Record<string, number> = {};
-    const covRows = await Promise.all(counts.map((n) => getPool().call<CoverageRow>({ op: 'coverage', startJD: s.startJD, endJD: s.endJD, n })));
+    const covRows = await Promise.all(counts.map((n) => getPool().call<CoverageRow>({ op: 'coverage', startJD: s.startJD, endJD: s.endJD, n, net: s.net })));
     if (my !== token) return;
-    for (const { n, steps: t, see, up, surf } of covRows) {
-      const perRelay = (r: string) => HYPOTHETICAL.assets.filter((a) => a.relay === r).length;
+    for (const { n, steps: t, see, up, surf, anyUp } of covRows) {
       if (n === 0) surface = Object.fromEntries(Object.entries(surf).map(([k, v]) => [k, (100 * v) / t]));
-      rows.push(`<tr${n === stationCount ? ' class="cur"' : ''}><td>${n === 0 ? 'Yok (ideal)' : n}</td>${relays.map((r) => `<td>${n === 0 ? '—' : fmt((100 * see[r.id]) / t / perRelay(r.id), 1)}</td><td>${fmt((100 * up[r.id]) / t / perRelay(r.id), 1)}</td>`).join('')}</tr>`);
+      rows.push(`<tr${n === stationCount ? ' class="cur"' : ''}><td>${n === 0 ? 'Yok (ideal)' : n}</td>${relays.map((r) => `<td>${n === 0 ? '—' : fmt((100 * see[r.id]) / t, 1)}</td><td>${fmt((100 * up[r.id]) / t, 1)}</td>`).join('')}${multiMoon ? `<td>${fmt((100 * anyUp) / t, 1)}</td>` : ''}</tr>`);
     }
-    const html = `<table class="stats"><thead><tr><th>İstasyon sayısı</th>${relays.map((r) => `<th>${r.name.replace(' Aktarma Uydusu', '')}: istasyon uyduyu görüyor %</th><th>${r.name.replace(' Aktarma Uydusu', '')}: Dünya hattı açık %</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`;
-    const hint = `Aralık: ${day(s.startJD)} – ${day(s.endJD)} (30 dk adım). “Görüyor”: en az bir istasyon uyduyu ${HYPOTHETICAL.groundStations.minElevationDeg}° üstünde görüyor. “Dünya hattı açık”: ayrıca uydu cismin arkasında değil ve (Mars) kavuşum kesintisinde değil. Yüzey görüşü (araç → uydu, istasyon sayısından bağımsız): ${HYPOTHETICAL.assets.map((a) => `${a.name} %${fmt(surface[a.id] ?? 0)}`).join(' · ')}.`;
+    const html = `<table class="stats"><thead><tr><th>İstasyon sayısı</th>${relays.map((r) => `<th>${r.name.replace(' Aktarma Uydusu', '').replace('Ay Aktarma Uydusu 2', 'Ay 2')}: istasyon uyduyu görüyor %</th><th>${r.name.replace(' Aktarma Uydusu', '').replace('Ay Aktarma Uydusu 2', 'Ay 2')}: Dünya hattı açık %</th>`).join('')}${multiMoon ? '<th>Ay: en az bir uydunun Dünya hattı açık %</th>' : ''}</tr></thead><tbody>${rows.join('')}</tbody></table>`;
+    const hint = `Aralık: ${day(s.startJD)} – ${day(s.endJD)} (30 dk adım). “Görüyor”: en az bir istasyon uyduyu ${HYPOTHETICAL.groundStations.minElevationDeg}° üstünde görüyor. “Dünya hattı açık”: ayrıca uydu cismin arkasında değil ve (Mars) kavuşum kesintisinde ya da (seçilirse) gölgede değil. Yüzey görüşü (araç → seçilen uydu, istasyon sayısından bağımsız): ${assets.map((a) => `${a.name} %${fmt(surface[a.id] ?? 0)}`).join(' · ')}.`;
     coverageCache.set(s.key, { html, hint });
     el.innerHTML = html;
     $('#st-hint').innerHTML = hint;
   }
 
   // ---- Bağlantı çizelgesi: Worker'larda üretilir ve önbelleklenir; ana iş parçacığı yalnızca tanımı ve özeti tutar ----
-  const tlSpec = (s: Scen, stepSec: number, n: number = stationCount): TlSpec => ({ startJD: s.startJD, endJD: s.endJD, stepSec, stations: n, relayId: s.relayId });
+  const tlSpec = (s: Scen, stepSec: number, n: number = stationCount): TlSpec => ({ startJD: s.startJD, endJD: s.endJD, stepSec, stations: n, relayId: s.relayId, ...(Object.keys(s.net).length ? { net: s.net } : {}) });
   // Yalnızca tamamlanmış özetler önbelleklenir (iptal edilen işin sözü hiç sonuçlanmaz; bekleyen söz önbelleğe alınmaz).
   const infoCache = new Map<string, TlInfo>();
   async function tlInfo(s: Scen, stepSec: number, n: number = stationCount): Promise<TlInfo> {
@@ -324,12 +376,29 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
   /** Bir çizelgeleyici çalıştırması (Worker); metrikler her zaman, tam sonuç (seriler, sayaçlar) yalnızca full ile döner. */
   const sim = (s: Scen, stepSec: number, n: number, policy: Policy, cfg: SchedConfig, full = false) =>
     getPool().call<SimOut>({ op: 'sim', tl: tlSpec(s, stepSec, n), policy, cfg, full });
-  const schedCfg = (s: Scen, mode: LinkMode = linkMode, over: Partial<SweepParams> = {}): SchedConfig => ({ ...withParams(schedConfig(mode), { ...params(), ...over }, s.relayId), rolling: rollingConfig(rollingDays) });
+  /** Bu senaryodaki ek uydular (ikinci Ay uydusu): kaydırıcı değerleri (tampon, hat hızı) onlara da uygulanır. */
+  const extraRelays = (net: NetOptions) => (net.moonSecond && net.moonSecond !== 'none' ? [HYPOTHETICAL.moonRelay2.id] : []);
+  const schedCfg = (s: Scen, mode: LinkMode = linkMode, over: Partial<SweepParams> = {}): SchedConfig => ({ ...withParams(schedConfig(mode), { ...params(), ...over }, s.relayId, extraRelays(s.net)), rolling: rollingConfig(rollingDays), projection: { ...projection } });
+  // Aşama 9 bölümleri (değer ölçütü, projeksiyon etkisi, yörünge/gölge, genelleme): ayrı modül; ortak durum buradan verilir.
+  let cmpDone = false;
+  const extras = mountExtras({
+    $, addChart: (list, id, cfg) => addChart(list, id, cfg),
+    call: <T,>(req: Parameters<ComputePool['call']>[0]) => getPool().call<T>(req),
+    cur: () => ({ s: active, stations: stationCount, mode: linkMode, rollingDays, projection: { ...projection } }),
+    cfgFor: (relayId, net, over = {}) => {
+      const k: ScenKind = relayId === MOON_RELAY ? 'moon' : 'mars';
+      return {
+        ...withParams(schedConfig(over.mode ?? linkMode), { ...prms[k], ...(over.params ?? {}) }, relayId, extraRelays(net)),
+        rolling: rollingConfig(over.rollingDays ?? rollingDays), projection: over.projection ?? { ...projection }, stepSec: over.step ?? sc.stepSec,
+      };
+    },
+    windows: usable, pad, dataEnd,
+  });
 
   function tableHtml(res: Partial<Record<Policy, SimResult>>, policies: Policy[]) {
     const h = (s: number) => (s < 7200 ? `${fmt(s / 60, 1)} dk` : s < 172800 ? `${fmt(s / 3600, 1)} sa` : `${fmt(s / 86400, 1)} gün`);
     let ok = true;
-    const supp = (p: Policy) => p === 'strategy' || p === 'coverage' || p === 'rolling';
+    const supp = (p: Policy) => p === 'strategy' || p === 'coverage' || p === 'rolling' || p === 'adaptive';
     const rows = (p: Policy) => {
       const r = res[p]!;
       return [...cls.map((c) => [c.name, r.perClass[c.id]] as const), ['Toplam', r.total] as const]
@@ -373,8 +442,8 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     });
 
     const nodes = [
-      ...HYPOTHETICAL.relays.filter((r) => topo.relays.includes(r.id)).map((r) => ({ n: r.name.replace(' Uydusu', ''), get: (x: SimResult) => x.peakRelayFill[r.id] })),
-      ...HYPOTHETICAL.assets.filter((a) => topo.assets.some((t) => t.id === a.id)).map((a) => ({ n: a.name, get: (x: SimResult) => x.peakAssetFill[a.id] })),
+      ...effectiveRelays(s.net).filter((r) => topo.relays.includes(r.id)).map((r) => ({ n: r.name.replace(' Uydusu', ''), get: (x: SimResult) => x.peakRelayFill[r.id] })),
+      ...effectiveAssets(s.net).filter((a) => topo.assets.some((t) => t.id === a.id)).map((a) => ({ n: a.name, get: (x: SimResult) => x.peakAssetFill[a.id] })),
     ];
     const yb = baseOpts('', '').scales.y;
     addChart(scenarioCharts, '#ch-fill', {
@@ -387,6 +456,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       ...(pols.includes('strategy') ? [{ label: 'Strateji: üretilmeyen', data: cls.map((c) => R('strategy').perClass[c.id].suppressed), backgroundColor: C.stratLoss }] : []),
       ...(pols.includes('coverage') ? [{ label: 'Kapsama bilen: üretilmeyen', data: cls.map((c) => R('coverage').perClass[c.id].suppressed), backgroundColor: C.covLoss }] : []),
       ...(pols.includes('rolling') ? [{ label: 'Kayan ufuklu: üretilmeyen', data: cls.map((c) => R('rolling').perClass[c.id].suppressed), backgroundColor: C.rollLoss }] : []),
+      ...(pols.includes('adaptive') ? [{ label: 'Uyarlamalı: üretilmeyen', data: cls.map((c) => R('adaptive').perClass[c.id].suppressed), backgroundColor: C.adaptLoss }] : []),
     ];
     addChart(scenarioCharts, '#ch-loss', {
       type: 'bar',
@@ -397,7 +467,8 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     $('#stats-table').innerHTML = tableHtml(res, pols);
 
     // (c) aktarma uydusu tampon doluluğu
-    const toPts = (r: SimResult) => r.series.map((x) => ({ x: x.tSec / 86400, y: x.relayFill[0] * 100 }));
+    // birden çok uydu (ikinci Ay uydusu): uydu tamponlarının ortalama doluluğu
+    const toPts = (r: SimResult) => r.series.map((x) => ({ x: x.tSec / 86400, y: (100 * x.relayFill.reduce((a, b) => a + b, 0)) / x.relayFill.length }));
     const intervals = shadeIntervals(s, info);
     const shade: Plugin = {
       id: 'blackout',
@@ -419,7 +490,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       options: baseOpts(`Gün (0 = ${day(s.startJD)})`, `${s.relayName} uydu tamponu doluluğu (%)`, {
         parsing: false,
         scales: { x: { type: 'linear', title: { display: true, text: `Gün (0 = ${day(s.startJD)})`, color: C.text }, ticks: { color: C.text }, grid: { color: C.grid } },
-          y: { title: { display: true, text: `${s.relayName} uydu tamponu doluluğu (%)`, color: C.text }, ticks: { color: C.text }, grid: { color: C.grid }, min: 0, max: 100 } },
+          y: { title: { display: true, text: `${s.relayName} uydu tamponu doluluğu (%${info.topo.relays.length > 1 ? ', uyduların ortalaması' : ''})`, color: C.text }, ticks: { color: C.text }, grid: { color: C.grid }, min: 0, max: 100 } },
       }),
       plugins: [shade],
     });
@@ -428,7 +499,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
   // ---- (d) İstasyon sayısına göre karşılaştırma ----
   const cmpCache = new Map<string, { n: number; open: number; m: Record<Policy, Metrics> }[]>();
   async function renderCompare(my: number, s: Scen) {
-    const deps = JSON.stringify([s.key, params(), linkMode]);
+    const deps = JSON.stringify([s.key, params(), linkMode, rollingDays, projection]);
     let rows = cmpCache.get(deps);
     if (!rows) {
       $('#cmp-table').textContent = 'Hesaplanıyor…';
@@ -439,7 +510,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
         const [info, outs] = await Promise.all([tlInfo(s, sc.stepSec, n), Promise.all(s.policies.map((p) => sim(s, sc.stepSec, n, p, cfg)))]);
         const m = {} as Record<Policy, Metrics>;
         s.policies.forEach((p, i) => { m[p] = outs[i].metrics; });
-        return { n, open: info.openFrac, m };
+        return { n, open: info.openFracAny, m };
       }));
       if (my !== token) return;
       cmpCache.set(deps, rows);
@@ -456,11 +527,13 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     barOf('#ch-st-loss', 'Düşen + hatta kayıp + üretilmeyen %', (m) => m.lossPct);
     const body = rows.flatMap((r) => pols.map((p, i) => {
       const m = r.m[p];
-      return `<tr><td>${i === 0 ? r.n : ''}</td><td>${i === 0 ? fmt(r.open * 100, 1) : ''}</td><td>${NAME[p]}</td><td>${fmt(m.dropPct, 1)}</td><td>${fmt(m.abandonedPct, 2)}</td><td>${fmt((100 * m.suppressedMb) / (m.demandMb || 1), 1)}</td><td><b>${fmt(m.lossPct, 1)}</b></td><td>${fmt(m.deliveredPct, 1)}</td><td>${fmt(m.topP95Sec / 86400, 1)}</td></tr>`;
+      return `<tr><td>${i === 0 ? r.n : ''}</td><td>${i === 0 ? fmt(r.open * 100, 1) : ''}</td><td>${NAME[p]}</td><td>${fmt(m.dropPct, 1)}</td><td>${fmt(m.abandonedPct, 2)}</td><td>${fmt((100 * m.suppressedMb) / (m.demandMb || 1), 1)}</td><td><b>${fmt(m.lossPct, 1)}</b></td><td>${fmt(m.deliveredPct, 1)}</td><td>${fmt(valuePct(m, valueOpts()), 1)}</td><td>${fmt(m.topP95Sec / 86400, 1)}</td></tr>`;
     })).join('');
-    $('#cmp-table').innerHTML = `<table class="stats cmp"><thead><tr><th>İstasyon</th><th>Hat açık %</th><th>Çizelgeleyici</th><th>Düşen %</th><th>Hatta kayıp %</th><th>Üretilmeyen %</th><th>Düşen + hatta kayıp + üretilmeyen %</th><th>Teslim %</th><th>Telemetri %95 süre (gün)</th></tr></thead><tbody>${body}</tbody></table>`;
+    $('#cmp-table').innerHTML = `<table class="stats cmp"><thead><tr><th>İstasyon</th><th>Hat açık %</th><th>Çizelgeleyici</th><th>Düşen %</th><th>Hatta kayıp %</th><th>Üretilmeyen %</th><th>Düşen + hatta kayıp + üretilmeyen %</th><th>Teslim %</th><th>Değer % (bölüm i)</th><th>Telemetri %95 süre (gün)</th></tr></thead><tbody>${body}</tbody></table>`;
+    extras.setValueStations(s, rows);
+    cmpDone = true;
     $('#cmp-hint').innerHTML = s.kind === 'mars'
-      ? `“Hat açık %”: ${s.relayName} aktarma uydusunun Dünya hattının açık olduğu zaman oranı (kavuşum, uydu cismin arkasında, istasyon görmüyor kapalı sayılır). Hat modu: <b>${LINK_MODE_LABEL[linkMode]}</b>. <b>Strateji</b> bütçeyi yalnızca boş tampondan hesaplar: az istasyonda (hat çoğu zaman kapalı) kavuşum sonrası boşalma yavaştır, tampon yine taşar. <b>Kapsama bilen strateji</b> aynı bütçeye boşaltma kapasitesini katar ve daha çok kısar; “düşen” azalır ama “üretilmeyen” artar, <i>toplam kayıp</i> (kalın sütun) ve teslim edilen hacim çoğu durumda çok değişmez (hat kapasitesi sınırlayıcıdır). “Teslim %” tüm çizelgeleyicilerde aynı hat kapasitesine yaslanır.`
+      ? `“Hat açık %”: ${s.relayName} aktarma uydusunun Dünya hattının açık olduğu zaman oranı (kavuşum, uydu cismin arkasında, istasyon görmüyor, [seçilirse] gölge kapalı sayılır). Hat modu: <b>${LINK_MODE_LABEL[linkMode]}</b>. <b>Strateji</b> bütçeyi yalnızca boş tampondan hesaplar: az istasyonda (hat çoğu zaman kapalı) kavuşum sonrası boşalma yavaştır, tampon yine taşar. <b>Kapsama bilen strateji</b> aynı bütçeye boşaltma kapasitesini katar ve daha çok kısar; “düşen” azalır ama “üretilmeyen” artar, <i>toplam kayıp</i> (kalın sütun) ve teslim edilen hacim çoğu durumda çok değişmez (hat kapasitesi sınırlayıcıdır). “Teslim %” tüm çizelgeleyicilerde aynı hat kapasitesine yaslanır.`
       : `“Hat açık %”: Ay aktarma uydusunun Dünya hattının açık olduğu zaman oranı (hiçbir istasyon uyduyu görmüyor ya da uydu Ay'ın arkasında olunca kapalı). Hat modu: <b>${LINK_MODE_LABEL[linkMode]}</b>. Ay'da kavuşum kesintisi yok, bu yüzden Aşama 4/7 stratejileri kısma yapmaz (öncelikliyle aynı) ve gösterilmez; <b>kayan ufuklu strateji</b> istasyon boşluklarını önceden görüp kısar: “düşen” azalır, “üretilmeyen” artar, <i>toplam kayıp</i> ve teslim edilen hacim çoğunlukla değişmez ya da biraz kötüleşir.`;
   }
 
@@ -531,6 +604,9 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     } else if (lossMode === 'retx') {
       lossSets = perPolicy((m) => m.retransmissions);
       lossY = 'Yeniden gönderilen paket'; lossTitle = `${meta.title}: yeniden iletim`;
+    } else if (lossMode === 'value') {
+      lossSets = perPolicy((m) => valuePct(m, valueOpts()));
+      lossY = 'Teslim edilen değer / talep edilen değer (%)'; lossTitle = `${meta.title}: değer`;
     } else if (lossMode === 'deliv') {
       lossSets = perPolicy((m) => m.deliveredPct);
       lossY = 'Teslim edilen / talep (%)'; lossTitle = `${meta.title}: teslim edilen`;
@@ -550,6 +626,10 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
           line('Kayan ufuklu (düşen + hatta kayıp)', C.roll, col((m) => m.rolling!.dropPct + m.rolling!.abandonedPct), DASH.rolling),
           line('Kayan ufuklu (+ üretilmeyen)', C.rollLoss, col((m) => m.rolling!.lossPct)),
         ] : []),
+        ...(pols.includes('adaptive') ? [
+          line('Uyarlamalı (düşen + hatta kayıp)', C.adapt, col((m) => m.adaptive!.dropPct + m.adaptive!.abandonedPct), DASH.adaptive),
+          line('Uyarlamalı (+ üretilmeyen)', C.adaptLoss, col((m) => m.adaptive!.lossPct)),
+        ] : []),
       ];
       lossY = 'Kayıp (talebin %\'si)'; lossTitle = `${meta.title}: kayıp`;
     }
@@ -567,7 +647,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
         plugins: [marker(key, s.relayName)],
       });
     };
-    mk(`#sw-loss-${key}`, lossSets, lossY, lossTitle, lossMode === 'deliv' ? 100 : undefined);
+    mk(`#sw-loss-${key}`, lossSets, lossY, lossTitle, lossMode === 'deliv' || lossMode === 'value' ? 100 : undefined);
     mk(`#sw-time-${key}`, timeSets, 'Teslim süresi (gün)', `${meta.title}: ${timeLabel}`);
   }
 
@@ -576,14 +656,14 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
 
   async function runSweeps(my: number, s: Scen) {
     const se = HYPOTHETICAL.sensitivity;
-    const cfg = { ...schedConfig(linkMode), rolling: rollingConfig(rollingDays), stepSec: se.sweepStepSec };
+    const cfg = { ...schedConfig(linkMode), rolling: rollingConfig(rollingDays), projection: { ...projection }, stepSec: se.sweepStepSec };
     const tl = tlSpec(s, se.sweepStepSec);
     const status = $('#sw-status');
     const p0 = params(), d0 = def();
     // Tüm taramalar (parametre × nokta × çizelgeleyici) işçi havuzuna birlikte verilir; her grafik kendi noktaları bitince çizilir.
     const todo = sliderDefs(d0, kind).filter((d) => {
       const others = SWEEP_KEYS.filter((k) => k !== d.key).map((k) => p0[k]);
-      const deps = JSON.stringify([s.key, d.key, others, stationCount, linkMode, rollingDays]);
+      const deps = JSON.stringify([s.key, d.key, others, stationCount, linkMode, rollingDays, projection]);
       if (sweeps[d.key]?.deps === deps) { drawSweep(d.key, s); return false; }
       return true;
     });
@@ -594,7 +674,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     tick();
     await Promise.all(per.map(async ({ d, values }) => {
       const others = SWEEP_KEYS.filter((k) => k !== d.key).map((k) => p0[k]);
-      const deps = JSON.stringify([s.key, d.key, others, stationCount, linkMode, rollingDays]);
+      const deps = JSON.stringify([s.key, d.key, others, stationCount, linkMode, rollingDays, projection]);
       const rows = await Promise.all(values.map(async (v) => {
         const row: PartialPolicyMetrics = {};
         await Promise.all(s.sweepPolicies.map(async (p) => {
@@ -615,7 +695,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
   const scanCharts: Chart[] = [];
   let fcToken = 0, emToken = 0;
   const resetScans = () => {
-    fcToken++; emToken++; pool?.cancel(); // süren taramalar bırakılır
+    fcToken++; emToken++; extras.reset(); pool?.cancel(); // süren taramalar bırakılır
     for (const c of scanCharts.splice(0)) c.destroy();
     $('#fc-body').innerHTML = ''; $('#em-body').innerHTML = '';
     $('#fc-status').textContent = ''; $('#em-status').textContent = '';
@@ -781,13 +861,20 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
 
   /** Senaryoya göre değişen başlık ve açıklama metinleri. */
   function applyTexts(s: Scen) {
-    $('#buf-title').textContent = s.kind === 'mars' ? '(c) Kavuşum penceresinde Mars aktarma uydusu tamponu' : '(c) Ay aktarma uydusu tamponu';
-    $('#buf-hint').innerHTML = s.kind === 'mars'
-      ? `Gölgeli alan: Güneş–Mars açısı ${HYPOTHETICAL.conjunctionBlackoutAngleDeg}° eşiğinin altında (kesinti). Kesintide araç → uydu hattı açık kalır, uydu → Dünya hattı kapalıdır; uydu tamponu dolar, kesinti bitince boşalır. FIFO ve öncelikli toplam doluluğu hemen hemen aynı doldurup boşalttığı için eğriler çoğunlukla üst üste biner; fark tamponda <i>hangi</i> verinin kaldığında ve kayıp tablosundadır. Stratejiler kesintiye ${fmt(HYPOTHETICAL.strategy.lookaheadDays, 1)} gün kala üretimi kıstığı için tamponu yavaş doldurur. Az yer istasyonunda (hat çoğu zaman kapalı) kesinti sonrası tampon yavaş boşalır; <b>kapsama bilen strateji</b> bunu önceden hesaba katıp kesinti öncesinden daha çok kısar, <b>strateji</b> (Aşama 4) ise bilmediği için kavuşum sonrası yeniden taşabilir.`
-      : `Gölgeli alanlar: Dünya hattının kapalı olduğu zamanlar (hiçbir yer istasyonu uyduyu ${HYPOTHETICAL.groundStations.minElevationDeg}° üstünde görmüyor ya da uydu Ay'ın arkasında). Hat kapalıyken uydu tamponu dolar, açılınca boşalır; az istasyonda boşluklar uzun, tampon sık dolar ve taşabilir. Ay'da kavuşum yok: Aşama 4 ve Aşama 7 stratejileri kısma yapmaz (öncelikliyle birebir aynı, gösterilmez); yalnızca <b>kayan ufuklu strateji</b> istasyon boşluklarını önceden görüp kısar (FIFO, öncelikli ve kayan ufuklu gösterilir).`;
+    const win = s.kind === 'mars' && !s.free;
+    $('#buf-title').textContent = win ? '(c) Kavuşum penceresinde Mars aktarma uydusu tamponu' : `(c) ${s.relayName} aktarma uydusu tamponu`;
+    $('#buf-hint').innerHTML = win
+      ? `Gölgeli alan: Güneş–Mars açısı ${HYPOTHETICAL.conjunctionBlackoutAngleDeg}° eşiğinin altında (kesinti). Kesintide araç → uydu hattı açık kalır, uydu → Dünya hattı kapalıdır; uydu tamponu dolar, kesinti bitince boşalır. FIFO ve öncelikli toplam doluluğu hemen hemen aynı doldurup boşalttığı için eğriler çoğunlukla üst üste biner; fark tamponda <i>hangi</i> verinin kaldığında ve kayıp tablosundadır. Stratejiler kesintiye ${fmt(HYPOTHETICAL.strategy.lookaheadDays, 1)} gün kala üretimi kıstığı için tamponu yavaş doldurur. Az yer istasyonunda (hat çoğu zaman kapalı) kesinti sonrası tampon yavaş boşalır; <b>kapsama bilen strateji</b> bunu önceden hesaba katıp kesinti öncesinden daha çok kısar, <b>strateji</b> (Aşama 4) ise bilmediği için kavuşum sonrası yeniden taşabilir; <b>uyarlamalı ufuk</b> ufku kapalı dönemin uzunluğuna göre seçer.`
+      : `Gölgeli alanlar: Dünya hattının kapalı olduğu zamanlar (hiçbir yer istasyonu uyduyu ${HYPOTHETICAL.groundStations.minElevationDeg}° üstünde görmüyor, uydu cismin arkasında ya da [Mars, seçilirse] gölgede; birden çok uydu varsa hiçbirinin hattı açık değil). Hat kapalıyken uydu tamponu dolar, açılınca boşalır; az istasyonda boşluklar uzun, tampon sık dolar ve taşabilir. Kavuşum yok: Aşama 4 ve Aşama 7 stratejileri kısma yapmaz (öncelikliyle birebir aynı, gösterilmez); yalnızca <b>kayan ufuklu</b> ve <b>uyarlamalı</b> strateji kapalı hat dönemlerini önceden görüp kısar (FIFO, öncelikli, kayan ufuklu ve uyarlamalı gösterilir).${s.net.moonSecond && s.net.moonSecond !== 'none' ? ' Çizgi: iki uydu tamponunun ortalaması.' : ''}`;
     $('#scen-hint').innerHTML = s.kind === 'mars'
-      ? `Kapsam: karşılaştırma bölümleri <b>Mars aktarma hattını</b> (uydu + ona bağlı 2 araç) simüle eder; kavuşum ve stratejiler yalnızca Mars'ı ilgilendirir. Kaydırıcıların başlangıç değerleri <code>src/config/hypothetical.ts</code> değerleridir; yalnızca Mars hattını değiştirirler. Bırakınca (kısa bir bekleme sonrası) senaryo ve diğer bölümler yeniden hesaplanır.`
-      : `Kapsam: <b>Ay aktarma hattı</b> (uydu + 2 araç; Ay Aracı A enlemi −40°). Ay'da kavuşum kesintisi yok; seçilen tarih aralığında etkili olan şey <b>yer istasyonu kapsaması</b> (uydunun Dünya'dan görülme süresi) ve <b>hat hatası/yeniden iletim</b>dir. Aralık veri aralığı (2020–2040) içinde seçilir; sonuçlar aralığa göre değişir. Kaydırıcılar yalnızca Ay hattını değiştirir.`;
+      ? `Kapsam: karşılaştırma bölümleri <b>Mars aktarma hattını</b> (uydu + ona bağlı 2 araç) simüle eder; ${win ? 'kavuşum ve stratejiler yalnızca Mars\'ı ilgilendirir' : '<b>kavuşumsuz serbest tarih aralığı</b>: kavuşum kesintisi yok (Aşama 4/7 stratejileri öncelikliyle aynı), yalnızca yer istasyonu kapsaması ve [seçilirse] Mars gölgesi hattı kapatır'}. Kaydırıcıların başlangıç değerleri <code>src/config/hypothetical.ts</code> değerleridir; yalnızca Mars hattını değiştirirler. Bırakınca (kısa bir bekleme sonrası) senaryo ve diğer bölümler yeniden hesaplanır.`
+      : `Kapsam: <b>Ay aktarma hattı</b> (uydu + 2 araç${s.net.moonPolarAsset ? ' + kutup aracı' : ''}; Ay Aracı A enlemi −40°${s.net.moonOrbit === 'elliptical' ? '; <b>eğimli/eliptik yörünge</b>' : ''}${s.net.moonSecond && s.net.moonSecond !== 'none' ? `; <b>ikinci Ay uydusu</b> (araçlar ${s.net.moonSecond === 'best' ? 'en iyi görüneni' : 'hat sırasını'} kullanır; kaydırıcı tampon ve hat hızı iki uyduya da uygulanır)` : ''}). Ay'da kavuşum kesintisi yok; seçilen tarih aralığında etkili olan şey <b>yer istasyonu kapsaması</b> (uydunun Dünya'dan görülme süresi) ve <b>hat hatası/yeniden iletim</b>dir. Aralık veri aralığı (2020–2040) içinde seçilir; sonuçlar aralığa göre değişir (bkz. bölüm l). Kaydırıcılar yalnızca Ay hattını değiştirir.`;
+    const a9 = [
+      projection.surfaceClosure ? 'projeksiyon: yüzey hattı kapalılığı' : '', projection.arqHold ? 'projeksiyon: ARQ kopyaları RTT boyunca tamponda' : '',
+      s.net.moonOrbit === 'elliptical' ? 'Ay yörüngesi: eğimli/eliptik (varsayımsal elemanlar)' : '', s.net.moonSecond && s.net.moonSecond !== 'none' ? 'ikinci Ay uydusu' : '', s.net.moonPolarAsset ? 'Ay kutup aracı' : '',
+      s.net.marsEclipse && s.net.marsEclipse !== 'none' ? `Mars uydusu gölgesi (${s.net.marsEclipse === 'earth' ? 'yalnız Dünya hattı' : 'yüzey + Dünya hattı'}; güç modeli yok)` : '',
+    ].filter(Boolean);
+    $('#a9-hint').innerHTML = a9.length ? `<b>Etkin Aşama 9 seçenekleri:</b> ${a9.join(' · ')}. Bu seçenekler Aşama 3–8 sayılarını değiştirir; hepsi kapalıyken eski sayılar birebir yeniden üretilir. Hepsi varsayımdır (${HYPOTHETICAL_LABEL}).` : 'Aşama 9 seçenekleri kapalı: sayılar Aşama 3–8 ile birebir aynıdır. Yörünge elemanları, ikinci uydunun kapasitesi, gölge modeli ve değer ağırlıkları varsayımdır.';
     $('#st-sub').textContent = `(${day(s.startJD)} – ${day(s.endJD)}, 30 dk adım · ${HYPOTHETICAL_LABEL})`;
   }
 
@@ -798,9 +885,11 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
     active = s;
     const my = bump();
     resetScans();
+    cmpDone = false;
     status.textContent = 'Hesaplanıyor…';
     $('#sw-status').textContent = '';
     applyTexts(s);
+    extras.applyKind(s);
     const perf: Record<string, number> = {};
     try {
       const t0 = performance.now();
@@ -812,12 +901,11 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       const met: Partial<Record<Policy, Metrics>> = {};
       s.policies.forEach((p, i) => { res[p] = outs[i].result!; met[p] = outs[i].metrics; });
       drawScenario(s, info, res);
+      extras.setValueInputs(s, met, stationCount);
       perf.senaryoMs = Math.round(performance.now() - t0);
-      const m = met[s.policies[s.policies.length - 1]]!;
-      const sp = (100 * m.suppressedMb) / (m.demandMb || 1);
-      status.textContent = s.kind === 'mars'
-        ? `${fmt(info.n)} adım × ${s.policies.length} çizelgeleyici, ${fmt(perf.senaryoMs)} ms (Mars hattı, Web Worker) · kayan ufuklu strateji: düşen %${fmt(m.dropPct, 1)}, üretilmeyen %${fmt(sp, 1)}`
-        : `${fmt(info.n)} adım × ${s.policies.length} çizelgeleyici, ${fmt(perf.senaryoMs)} ms (Ay hattı, Web Worker) · öncelikli: teslim %${fmt(met.priority!.deliveredPct, 1)}, düşen %${fmt(met.priority!.dropPct, 1)} · kayan ufuklu: düşen %${fmt(m.dropPct, 1)}, üretilmeyen %${fmt(sp, 1)}, teslim %${fmt(m.deliveredPct, 1)}`;
+      const spp = (m: Metrics) => (100 * m.suppressedMb) / (m.demandMb || 1);
+      const rm = met.rolling!, am = met.adaptive!;
+      status.textContent = `${fmt(info.n)} adım × ${s.policies.length} çizelgeleyici, ${fmt(perf.senaryoMs)} ms (${s.relayName} hattı${info.topo.relays.length > 1 ? ', 2 Ay uydusu' : ''}, Web Worker) · öncelikli: teslim %${fmt(met.priority!.deliveredPct, 1)}, düşen %${fmt(met.priority!.dropPct, 1)} · kayan ufuklu: düşen %${fmt(rm.dropPct, 1)}, üretilmeyen %${fmt(spp(rm), 1)}, teslim %${fmt(rm.deliveredPct, 1)} · uyarlamalı: düşen %${fmt(am.dropPct, 1)}, üretilmeyen %${fmt(spp(am), 1)}, teslim %${fmt(am.deliveredPct, 1)}`;
       // Kalan bölümler birbirinden bağımsızdır: işçi havuzunda birlikte hesaplanır, her biri bitince çizilir (süreler tamamlanma zamanıdır, toplamı vermez).
       const timed = async (key: string, f: Promise<void>) => { await f; perf[key] = Math.round(performance.now() - t0); };
       await Promise.all([
@@ -878,14 +966,30 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
 
   function setKind(k: ScenKind) {
     kind = k;
-    $('#lb-window').hidden = k !== 'mars';
-    $('#moon-ctl').hidden = k !== 'moon';
+    $('#lb-window').hidden = !(k === 'mars' && !marsFree);
+    $('#date-ctl').hidden = !(k === 'moon' || marsFree);
+    $('#moon-opts').hidden = k !== 'moon';
+    $('#mars-opts').hidden = k !== 'mars';
     for (const c of Object.values(sweepCharts)) for (const ch of c) ch.destroy();
     for (const key of Object.keys(sweepCharts)) delete sweepCharts[key];
     for (const key of SWEEP_KEYS) delete sweeps[key];
     renderSliders();
   }
-  $<HTMLSelectElement>('#sel-scen').addEventListener('change', (e) => { setKind((e.target as HTMLSelectElement).value as ScenKind); bump(); schedule(0); });
+  $<HTMLSelectElement>('#sel-scen').addEventListener('change', (e) => {
+    const v = (e.target as HTMLSelectElement).value;
+    marsFree = v === 'marsfree';
+    setKind(v === 'moon' ? 'moon' : 'mars');
+    bump(); schedule(0);
+  });
+  const onToggle = (id: string, f: (el: HTMLInputElement) => void) => $<HTMLInputElement>(id).addEventListener('change', (e) => { f(e.target as HTMLInputElement); bump(); schedule(0); });
+  onToggle('#pj-surface', (el) => { projection = { ...projection, surfaceClosure: el.checked }; });
+  onToggle('#pj-arq', (el) => { projection = { ...projection, arqHold: el.checked }; });
+  onToggle('#sel-polar', (el) => { netSel.moonPolarAsset = el.checked; });
+  $<HTMLSelectElement>('#sel-orbit').addEventListener('change', (e) => { netSel.moonOrbit = (e.target as HTMLSelectElement).value as typeof netSel.moonOrbit; bump(); schedule(0); });
+  $<HTMLSelectElement>('#sel-second').addEventListener('change', (e) => { netSel.moonSecond = (e.target as HTMLSelectElement).value as typeof netSel.moonSecond; bump(); schedule(0); });
+  $<HTMLSelectElement>('#sel-eclipse').addEventListener('change', (e) => { netSel.marsEclipse = (e.target as HTMLSelectElement).value as typeof netSel.marsEclipse; bump(); schedule(0); });
+  // değer modeli değişince (bölüm i): karşılaştırma tablosundaki değer sütunu ve “değer” ölçütlü duyarlılık grafikleri yenilenir (ek hesap yok)
+  $('#v-tw').addEventListener('value-model', () => { if (active && cmpDone) void renderCompare(token, active); if ($<HTMLSelectElement>('#sw-loss-metric').value === 'value') drawSweeps(); });
   $('#sc-window').addEventListener('change', () => schedule(0));
   $('#moon-start').addEventListener('change', () => schedule(0));
   $('#moon-days').addEventListener('change', () => schedule(0));
@@ -894,6 +998,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
   $<HTMLSelectElement>('#sel-mode').addEventListener('change', (e) => { linkMode = (e.target as HTMLSelectElement).value as LinkMode; syncLossEnabled(); bump(); schedule(0); });
   for (const id of ['#sw-loss-metric', '#sw-time-metric']) $(id).addEventListener('change', drawSweeps);
   $('#lb-window').hidden = false;
+  $('#moon-opts').hidden = true; $('#mars-opts').hidden = false;
 
   return {
     async show() {

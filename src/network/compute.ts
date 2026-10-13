@@ -60,7 +60,7 @@ export function createHandler(): (req: Req) => unknown {
       if (full.some((x) => [...x.surfaceDelaySec, ...x.earthDelaySec].some((v) => !Number.isFinite(v)))) throw new Error('Işık gecikmesi sayısal değil: konum verisi bozuk görünüyor.');
       t = restrictToRelays(topo0, full, relayIdsOf(s.relayId, s.net));
       cache.set(key, t);
-      if (cache.size > 16) cache.delete(cache.keys().next().value as string);
+      if (cache.size > 48) cache.delete(cache.keys().next().value as string);
     }
     return t;
   }
@@ -92,7 +92,7 @@ export function createHandler(): (req: Req) => unknown {
       }
       case 'policy': {
         const { topo, samples } = timeline(req.tl);
-        return runPolicy(topo, samples, req.cfg, req.params, req.policy, req.override, req.tl.relayId);
+        return runPolicy(topo, samples, req.cfg, req.params, req.policy, req.override, req.tl.relayId, relayIdsOf(req.tl.relayId, req.tl.net).slice(1));
       }
       case 'coverage': return coverageRow(need(), req.startJD, req.endJD, req.n, req.net);
     }
