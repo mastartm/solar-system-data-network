@@ -4,7 +4,28 @@
 // Tüm sayılar (hızlar, boyutlar, kapasiteler) çağıranın verdiği ayarlardan gelir; varsayılanı
 // src/config/hypothetical.ts içindeki VARSAYIMSAL değerlerdir. Sonuçlar gerçek bir görev sonucu değildir.
 
-export type Policy = 'fifo' | 'priority';
+/**
+ * 'fifo' ve 'priority': yalnızca sıralama/atma kuralı. 'strategy': 'priority' + kavuşum stratejisi
+ * (bilim verisi üretimini kısma). Strateji kapalı sınıf (en önemli sınıf) hiç kısılmaz.
+ */
+export type Policy = 'fifo' | 'priority' | 'strategy';
+
+/**
+ * Kavuşum stratejisi ("bütçeli kısma"; varsayılanı src/config/hypothetical.ts). Kesinti takvimi öngörülebilir varsayılır
+ * (Güneş–Mars geometrisi önceden bilinir): kesintiye lookaheadSec kala ve kesinti boyunca, aktarma uydusu hattındaki
+ * (uydu + ona bağlı araçlar) boş tampon, kesintinin kalan süresine yayılacak şekilde kısılabilir sınıfların (en önemli
+ * sınıf dışındakiler) üretimi kısılır. Böylece tampon taşmadan kesinti bitişine kadar yetecek kadar veri üretilir.
+ * Kısılan veri "düşen" (kayıp) DEĞİL "üretilmeyen" (suppressed) sayılır: hiç üretilmedi, tampona girmedi.
+ * Adil karşılaştırma için talep = üretilen + üretilmeyen esas alınır.
+ */
+export interface StrategyConfig {
+  /** Kesintiye bu süreden az kaldığında kısma başlar (sn). */
+  lookaheadSec: number;
+  /** Boş tamponun kısma bütçesine ayrılan oranı (0–1); kalanı telemetriye ve yuvarlama payına bırakılır. */
+  margin: number;
+  /** Kısılabilir sınıfların üretim çarpanının alt sınırı (0–1). */
+  minFactor: number;
+}
 
 export interface SchedClass { id: string; priority: number; share: number; packetMb: number }
 
@@ -18,6 +39,8 @@ export interface SchedConfig {
   delayedAfterSec: number;
   stepSec: number;
   seriesEverySec: number;
+  /** 'strategy' politikası için gerekli; yoksa strateji kısma yapmaz (öncelikli ile aynı). */
+  strategy?: StrategyConfig;
 }
 
 export interface SchedAsset { id: string; body: string; relay: string; dataRateKbps: number }
@@ -29,6 +52,8 @@ export interface LinkSample {
   surfaceDelaySec: number[];
   earthUp: boolean[];
   earthDelaySec: number[];
+  /** İsteğe bağlı: uydu→Dünya hattı Mars kavuşumu nedeniyle kapalı mı (cisim arkası kapanması değil). Strateji bunu öngörmek için kullanır. */
+  earthBlackout?: boolean[];
 }
 
 export interface ClassStats {
@@ -42,6 +67,9 @@ export interface ClassStats {
   delayed: number;
   /** Simülasyon sonunda hâlâ tamponda. */
   remaining: number;
+  /** Strateji yüzünden hiç üretilmeyen (kısılan) veri; kayıp (dropped) DEĞİLDİR. Talep = generated + suppressed. */
+  suppressed: number;
+  suppressedMb: number;
   generatedMb: number;
   deliveredMb: number;
   droppedMb: number;
@@ -108,6 +136,33 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const assetBuf = topo.assets.map((a) => new Buffer(cfg.assetBufferMb[a.body] ?? 0, nC));
   const relayBuf = topo.relays.map((r) => new Buffer(cfg.relayBufferMb[r] ?? 0, nC));
   const acc = topo.assets.map(() => new Array(nC).fill(0));
+  const supAcc = topo.assets.map(() => new Array(nC).fill(0));
+  const sup = new Array(nC).fill(0), supMb = new Array(nC).fill(0);
+  const topRank = Math.min(...rank);
+  const st = policy === 'strategy' ? cfg.strategy : undefined;
+  // Kesinti öngörüsü (yalnızca strateji): relay başına, adım i için kesintiye kalan süre içinde mi, ve o kesintinin bitişine kalan adım.
+  const ahead = topo.relays.map(() => new Array<boolean>(samples.length).fill(false));
+  const endsIn = topo.relays.map(() => new Array<number>(samples.length).fill(0));
+  if (st) {
+    const L = Math.ceil(st.lookaheadSec / dt);
+    topo.relays.forEach((_, ri) => {
+      let start = Infinity, end = Infinity; // sonraki (veya süren) kesinti serisinin ilk adımı ve bitişi (ilk açık adım)
+      for (let i = samples.length - 1; i >= 0; i--) {
+        const b = !!samples[i].earthBlackout?.[ri];
+        if (b) { end = i + 1 < samples.length && samples[i + 1].earthBlackout?.[ri] ? end : i + 1; start = i; }
+        ahead[ri][i] = start - i <= L;
+        endsIn[ri][i] = end - i;
+      }
+    });
+  }
+  // Araç başına tam hızda üretim (Mb/sn): en önemli sınıf ve kısılabilir sınıflar; ve uydudaki araçların toplam hızı (uydu tamponunu hız oranında paylaştırmak için).
+  const assetRate = topo.assets.map((a) => {
+    let top = 0, rest = 0;
+    const mb = (a.dataRateKbps / 1000) * cfg.dutyCycle;
+    classes.forEach((c, k) => { if (rank[k] === topRank) top += mb * c.share / shareSum; else rest += mb * c.share / shareSum; });
+    return { top, rest, total: top + rest };
+  });
+  const relayTotal = topo.relays.map((r) => topo.assets.reduce((s, a, ai) => s + (a.relay === r ? assetRate[ai].total : 0), 0));
 
   const gen = new Array(nC).fill(0), genMb = new Array(nC).fill(0);
   const drop = new Array(nC).fill(0), dropMb = new Array(nC).fill(0);
@@ -124,7 +179,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
 
   /** Daha düşük öncelikli sınıflardan atılabilecek hacim (yalnızca 'priority'). */
   const evictable = (b: Buffer, cls: number) => {
-    if (policy !== 'priority') return 0;
+    if (policy === 'fifo') return 0;
     let s = 0;
     for (let k = 0; k < nC; k++) if (rank[k] > rank[cls]) s += b.usedByClass[k];
     return s;
@@ -158,7 +213,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
       if (!h) continue;
       if (best < 0) { best = k; continue; }
       const bh = b.q[best].peek()!;
-      const better = policy === 'priority'
+      const better = policy !== 'fifo'
         ? rank[k] < rank[best] || (rank[k] === rank[best] && h.seq < bh.seq)
         : h.seq < bh.seq;
       if (better) best = k;
@@ -177,11 +232,30 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     const end = now + dt;
     const s = samples[i];
 
-    // 1) Üretim (deterministik birikim)
+    // 1) Üretim (deterministik birikim). Strateji: en önemli sınıf dışındakiler kısılır; kısılan hiç üretilmez.
     topo.assets.forEach((a, ai) => {
       const mbPerSec = (a.dataRateKbps / 1000) * cfg.dutyCycle;
+      let throttle = 1;
+      if (st) {
+        const ri = relayIndex.get(a.relay)!;
+        if (ahead[ri][i]) {
+          // Bu aracın kullanabileceği boş yer: kendi tamponu + uydu tamponunun hız oranındaki payı.
+          const free = assetBuf[ai].freeMb + relayBuf[ri].freeMb * (relayTotal[ri] > 0 ? assetRate[ai].total / relayTotal[ri] : 0);
+          const D = Math.max(1, endsIn[ri][i]) * dt; // kesintinin kalan süresi (sn)
+          const need = assetRate[ai].rest * D;
+          const allowed = st.margin * free - assetRate[ai].top * D;
+          throttle = need > 0 ? Math.min(1, Math.max(st.minFactor, allowed / need)) : 1;
+        }
+      }
       for (let k = 0; k < nC; k++) {
-        acc[ai][k] += mbPerSec * (classes[k].share / shareSum) * dt;
+        const full = mbPerSec * (classes[k].share / shareSum) * dt;
+        const f = rank[k] === topRank ? 1 : throttle;
+        if (f < 1) {
+          supAcc[ai][k] += full * (1 - f);
+          supMb[k] += full * (1 - f);
+          while (supAcc[ai][k] >= classes[k].packetMb) { supAcc[ai][k] -= classes[k].packetMb; sup[k]++; }
+        }
+        acc[ai][k] += full * f;
         while (acc[ai][k] >= classes[k].packetMb) {
           acc[ai][k] -= classes[k].packetMb;
           const p: Pkt = { cls: k, sizeMb: classes[k].packetMb, createdSec: now, sentMb: 0, seq: 0, propSec: 0 };
@@ -253,6 +327,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     const l = [...lat[k]].sort((x, y) => x - y);
     return {
       generated: gen[k], delivered: deliv[k], dropped: drop[k], stored: stored[k], delayed: delayed[k], remaining: remaining[k],
+      suppressed: sup[k], suppressedMb: supMb[k],
       generatedMb: genMb[k], deliveredMb: delivMb[k], droppedMb: dropMb[k],
       latencyMeanSec: l.length ? l.reduce((x, y) => x + y, 0) / l.length : 0,
       latencyP95Sec: l.length ? l[Math.min(l.length - 1, Math.floor(0.95 * l.length))] : 0,
@@ -268,6 +343,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const total: ClassStats = {
     generated: sum((c) => c.generated), delivered: sum((c) => c.delivered), dropped: sum((c) => c.dropped),
     stored: sum((c) => c.stored), delayed: sum((c) => c.delayed), remaining: sum((c) => c.remaining),
+    suppressed: sum((c) => c.suppressed), suppressedMb: sum((c) => c.suppressedMb),
     generatedMb: sum((c) => c.generatedMb), deliveredMb: sum((c) => c.deliveredMb), droppedMb: sum((c) => c.droppedMb),
     latencyMeanSec: allLat.length ? allLat.reduce((x, y) => x + y, 0) / allLat.length : 0,
     latencyP95Sec: allLat.length ? allLat[Math.min(allLat.length - 1, Math.floor(0.95 * allLat.length))] : 0,

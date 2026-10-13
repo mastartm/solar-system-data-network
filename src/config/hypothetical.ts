@@ -87,4 +87,30 @@ export const HYPOTHETICAL = {
     /** Karşılaştırma senaryosu: Mars kavuşum penceresinden önce/sonra simüle edilen gün sayısı. */
     scenarioPadDays: { before: 5, after: 30 },
   },
+
+  /**
+   * Aşama 4: kavuşum stratejisi ("bütçeli kısma"). Telemetri (en önemli sınıf) hiç kısılmaz; diğer sınıfların (bilim verisi) ÜRETİMİ,
+   * uydu hattındaki boş tampon kesintinin kalan süresine yetecek kadar kısılır. Kısılan veri "kayıp" değil "üretilmeyen" sayılır
+   * (hiç üretilmedi, tampona girmedi); karşılaştırma talep (= üretilen + üretilmeyen) üzerinden yapılır.
+   * Varsayım: kesintinin başlangıç ve bitişi önceden bilinir (Güneş–Mars geometrisi öngörülebilir).
+   */
+  strategy: {
+    /** Kesintiye bu kadar gün kala kısma başlar (kesinti boyunca sürer). */
+    lookaheadDays: 1,
+    /** Boş tamponun bu oranı bilim verisi bütçesidir; kalanı telemetri ve yuvarlama payıdır. */
+    margin: 0.9,
+    /** Kısılabilir sınıfların üretim çarpanının alt sınırı (0 = tamamen durdurulabilir). */
+    minFactor: 0,
+  },
+
+  /** Aşama 4: duyarlılık analizi. Kaydırıcı başlangıçları yukarıdaki değerlerdir; buradaki min/max yalnızca kaydırıcı ve tarama aralığıdır. Mars değerleri değişir; Ay değerleri sabit kalır. */
+  sensitivity: {
+    /** Tarama (ve kaydırıcıyla yeniden hesap) için daha kaba adım; ana senaryo scheduler.stepSec ile çalışır. */
+    sweepStepSec: 1800,
+    /** Tarama grafiğindeki nokta sayısı. */
+    sweepPoints: 7,
+    marsRelayBufferMb: { min: 8000, max: 160000, step: 2000 },
+    marsRelayDownlinkKbps: { min: 100, max: 600, step: 10 },
+    dutyCycle: { min: 0.02, max: 0.15, step: 0.005 },
+  },
 };

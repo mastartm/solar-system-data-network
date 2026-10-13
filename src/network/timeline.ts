@@ -2,14 +2,36 @@ import { HYPOTHETICAL } from '../config/hypothetical';
 import type { Track } from '../data/types';
 import { C_KM_S, dist, sample, trackEndJD } from '../map/ephemeris';
 import { computeNetwork } from './network';
-import type { LinkSample, SchedConfig, SchedTopology } from './scheduler';
+import type { LinkSample, SchedConfig, SchedTopology, StrategyConfig } from './scheduler';
 
 export const schedTopology = (): SchedTopology => ({
   assets: HYPOTHETICAL.assets.map((a) => ({ id: a.id, body: a.body, relay: a.relay, dataRateKbps: a.dataRateKbps })),
   relays: HYPOTHETICAL.relays.map((r) => r.id),
 });
 
-export const schedConfig = (): SchedConfig => ({ ...HYPOTHETICAL.scheduler });
+export const strategyConfig = (): StrategyConfig => {
+  const { lookaheadDays, ...rest } = HYPOTHETICAL.strategy;
+  return { ...rest, lookaheadSec: lookaheadDays * 86400 };
+};
+
+export const schedConfig = (): SchedConfig => ({ ...HYPOTHETICAL.scheduler, strategy: strategyConfig() });
+
+/** Duyarlılık analizinin değiştirdiği parametreler (Mars tarafı). Başlangıç değerleri config'ten gelir. */
+export interface SweepParams { marsRelayBufferMb: number; marsRelayDownlinkKbps: number; dutyCycle: number }
+
+export const defaultParams = (): SweepParams => ({
+  marsRelayBufferMb: HYPOTHETICAL.scheduler.relayBufferMb['mars-aktarma'],
+  marsRelayDownlinkKbps: HYPOTHETICAL.scheduler.relayDownlinkKbps['mars-aktarma'],
+  dutyCycle: HYPOTHETICAL.scheduler.dutyCycle,
+});
+
+/** Ayarlara parametreleri uygular (girdiyi değiştirmez). */
+export const withParams = (cfg: SchedConfig, p: SweepParams): SchedConfig => ({
+  ...cfg,
+  dutyCycle: p.dutyCycle,
+  relayBufferMb: { ...cfg.relayBufferMb, 'mars-aktarma': p.marsRelayBufferMb },
+  relayDownlinkKbps: { ...cfg.relayDownlinkKbps, 'mars-aktarma': p.marsRelayDownlinkKbps },
+});
 
 /**
  * [startJD, endJD) aralığını stepSec adımla tarar; her adımda computeNetwork'ten bağlantı pencerelerini
@@ -27,9 +49,26 @@ export function buildLinkTimeline(tracks: Record<string, Track>, startJD: number
       surfaceDelaySec: topo.assets.map((a) => byAsset.get(a.id)!.surfaceKm / C_KM_S),
       earthUp: topo.relays.map((r) => byRelay.get(r)!.earthLink === 'up'),
       earthDelaySec: topo.relays.map((r) => byRelay.get(r)!.earthKm / C_KM_S),
+      earthBlackout: topo.relays.map((r) => byRelay.get(r)!.earthLink === 'blackout'),
     });
   }
   return out;
+}
+
+/** Topolojiyi ve bağlantı çizelgesini tek bir aktarma uydusuna (ve ona bağlı araçlara) indirger. Saf fonksiyon. */
+export function restrictToRelay(topo: SchedTopology, samples: LinkSample[], relayId: string): { topo: SchedTopology; samples: LinkSample[] } {
+  const ri = topo.relays.indexOf(relayId);
+  if (ri < 0) throw new Error(`Bilinmeyen aktarma uydusu: ${relayId}`);
+  const keep = topo.assets.map((a) => a.relay === relayId);
+  const pick = <T>(arr: T[]) => arr.filter((_, i) => keep[i]);
+  return {
+    topo: { assets: pick(topo.assets), relays: [relayId] },
+    samples: samples.map((x) => ({
+      surfaceUp: pick(x.surfaceUp), surfaceDelaySec: pick(x.surfaceDelaySec),
+      earthUp: [x.earthUp[ri]], earthDelaySec: [x.earthDelaySec[ri]],
+      ...(x.earthBlackout ? { earthBlackout: [x.earthBlackout[ri]] } : {}),
+    })),
+  };
 }
 
 export interface DelayPoint { jd: number; sec: number }
