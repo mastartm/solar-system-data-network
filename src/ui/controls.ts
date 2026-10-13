@@ -7,6 +7,7 @@ export interface Controls {
   setJD(jd: number): void;
   isPlaying(): boolean;
   speed(): number; // gün/sn
+  jumpTo(jd: number): void; // oynatmayı durdurup tarihe gider
 }
 
 export interface ControlOptions {
@@ -140,5 +141,5 @@ export function createControls(root: HTMLElement, o: ControlOptions): Controls {
     if (el) jumpTo(+el.dataset.jd!);
   });
 
-  return { setJD, isPlaying: () => playing, speed: () => +speed.value };
+  return { setJD, jumpTo, isPlaying: () => playing, speed: () => +speed.value };
 }
