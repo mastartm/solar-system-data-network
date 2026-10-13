@@ -12,6 +12,7 @@ const why: Record<LinkState, string> = {
   horizon: 'uydu ufkun altında',
   occulted: 'Dünya cismin arkasında kaldı',
   blackout: 'Mars kavuşumu: kesinti',
+  nostation: 'hiçbir yer istasyonu uyduyu görmüyor',
 };
 
 export function renderNetwork(el: HTMLElement, jd: number, net: NetworkState, layer: NetworkLayer, windows: BlackoutWindow[]) {
@@ -20,7 +21,7 @@ export function renderNetwork(el: HTMLElement, jd: number, net: NetworkState, la
       const b = layer.buffered(s.asset.id);
       const state = s.connected ? '<b class="ok">bağlı</b>' : `<b class="bad">kesik</b> <small>(${s.surfaceLink !== 'up' ? why[s.surfaceLink] : why[s.earthLink]})</small>`;
       return `<div class="asset"><div><span class="dot" style="background:${s.asset.color}"></span>${s.asset.name} ${state}</div>
-        <small>${fmt(s.asset.dataRateKbps)} kbit/sn · tek yön gecikme ${delayText(s.delaySec)} · araç→uydu ${fmt(s.surfaceKm)} km · uydu→Dünya ${fmt(s.earthKm)} km · bekleyen paket: ${b.atAsset + b.atRelay} · ulaşan: ${layer.delivered.get(s.asset.id) ?? 0}</small></div>`;
+        <small>${fmt(s.asset.dataRateKbps)} kbit/sn · tek yön gecikme ${delayText(s.delaySec)} · araç→uydu ${fmt(s.surfaceKm)} km · uydu→Dünya ${fmt(s.earthKm)} km · bekleyen paket: ${b.atAsset + b.atRelay} · ulaşan: ${layer.delivered.get(s.asset.id) ?? 0}${net.stationCount ? ` · yer istasyonu: ${s.station ? `${s.station.name.split(' (')[0]} (${fmt(s.station.elevDeg)}°)` : 'görüş yok'}` : ''}</small></div>`;
     })
     .join('');
   const next = windows.find((w) => w.endJD >= jd);

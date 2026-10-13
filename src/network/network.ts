@@ -1,6 +1,7 @@
-import { HYPOTHETICAL, type AssetConfig, type RelayConfig } from '../config/hypothetical';
+import { HYPOTHETICAL, type AssetConfig, type GroundStationConfig, type RelayConfig } from '../config/hypothetical';
 import type { Track, Vec3 } from '../data/types';
 import { C_KM_S, sample, trackEndJD } from '../map/ephemeris';
+import { bestStation } from './stations';
 
 // Fiziksel sabitler (gerçek değerler). Varsayımsal sayılar config/hypothetical.ts içindedir.
 const BODY = {
@@ -13,14 +14,14 @@ const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const norm = (a: Vec3) => Math.hypot(a[0], a[1], a[2]);
 
-export type LinkState = 'up' | 'horizon' | 'occulted' | 'blackout';
+export type LinkState = 'up' | 'horizon' | 'occulted' | 'blackout' | 'nostation';
 
 export interface AssetStatus {
   asset: AssetConfig;
   relay: RelayConfig;
   /** araç → uydu bağlantısı: 'up' veya 'horizon' (uydu ufkun altında). */
   surfaceLink: LinkState;
-  /** uydu → Dünya bağlantısı: 'up', 'occulted' (cisim arkasında) veya 'blackout' (Mars kavuşumu). */
+  /** uydu → Dünya bağlantısı: 'up', 'occulted' (cisim arkasında) veya 'blackout' (Mars kavuşumu) veya 'nostation' (hiçbir yer istasyonu uyduyu göremiyor). */
   earthLink: LinkState;
   surfaceKm: number;
   earthKm: number;
@@ -28,6 +29,8 @@ export interface AssetStatus {
   delaySec: number;
   /** Uçtan uca yol açık mı? */
   connected: boolean;
+  /** Uyduyu gören en yüksek yer istasyonu (yoksa null; istasyon modeli kapalıysa da null). */
+  station: { name: string; elevDeg: number } | null;
 }
 
 export interface NetworkState {
@@ -37,6 +40,8 @@ export interface NetworkState {
   marsBlackout: boolean;
   /** Ekliptik çerçevede cisim merkezli aktarma uydusu konumları (km) ve faz açıları (rad). */
   relayPhase: Record<string, number>;
+  /** Kullanılan yer istasyonu sayısı (0 = istasyon modeli kapalı, Dünya merkezi hedef). */
+  stationCount: number;
 }
 
 /** Cisim merkezli, ekliptiğe paralel çerçevede Dünya yönü (km). */
@@ -81,7 +86,12 @@ export function segmentHitsSphere(p: Vec3, q: Vec3, R: number): boolean {
   return norm(c) < R;
 }
 
-export function computeNetwork(tracks: Record<string, Track>, jd: number): NetworkState {
+/**
+ * stationCount: config'teki ilk N yer istasyonu kullanılır (varsayılan: hepsi); 0 → istasyon modeli kapalı
+ * (Aşama 2-4 davranışı: Dünya merkezi hedef, yer görüşü kısıtı yok).
+ */
+export function computeNetwork(tracks: Record<string, Track>, jd: number, stationCount: number = HYPOTHETICAL.groundStations.stations.length): NetworkState {
+  const stations: GroundStationConfig[] = HYPOTHETICAL.groundStations.stations.slice(0, Math.max(0, stationCount));
   const marsSepDeg = marsSunSeparationDeg(tracks, jd);
   const marsBlackout = marsSepDeg < HYPOTHETICAL.conjunctionBlackoutAngleDeg;
   const statuses: AssetStatus[] = [];
@@ -95,6 +105,10 @@ export function computeNetwork(tracks: Record<string, Track>, jd: number): Netwo
     const toEarthFromRelay = sub(earthVec, rp.pos);
     const earthKm = norm(toEarthFromRelay);
     const occulted = segmentHitsSphere(rp.pos, earthVec, R);
+    // Uydunun Dünya merkezli konumu = Dünya→cisim vektörü + uydunun cisim merkezli konumu
+    const relayFromEarth: Vec3 = [rp.pos[0] - earthVec[0], rp.pos[1] - earthVec[1], rp.pos[2] - earthVec[2]];
+    const gs = stations.length ? bestStation(stations, jd, relayFromEarth, HYPOTHETICAL.groundStations.minElevationDeg) : null;
+    const station = gs ? { name: gs.station.name, elevDeg: gs.elevDeg } : null;
 
     for (const asset of HYPOTHETICAL.assets.filter((a) => a.relay === relay.id)) {
       const s = surfacePosition(asset, jd);
@@ -102,15 +116,16 @@ export function computeNetwork(tracks: Record<string, Track>, jd: number): Netwo
       const surfaceKm = norm(toRelay);
       const visible = dot(s.normal, toRelay) > 0;
       const surfaceLink: LinkState = visible ? 'up' : 'horizon';
-      const earthLink: LinkState = relay.body === 'mars' && marsBlackout ? 'blackout' : occulted ? 'occulted' : 'up';
+      const earthLink: LinkState = relay.body === 'mars' && marsBlackout ? 'blackout' : occulted ? 'occulted' : stations.length && !gs ? 'nostation' : 'up';
       statuses.push({
         asset, relay, surfaceLink, earthLink, surfaceKm, earthKm,
         delaySec: (surfaceKm + earthKm) / C_KM_S,
         connected: surfaceLink === 'up' && earthLink === 'up',
+        station,
       });
     }
   }
-  return { statuses, marsSepDeg, marsBlackout, relayPhase };
+  return { statuses, marsSepDeg, marsBlackout, relayPhase, stationCount: stations.length };
 }
 
 export interface BlackoutWindow { startJD: number; endJD: number; peakJD: number; minSepDeg: number }

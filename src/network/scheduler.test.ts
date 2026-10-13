@@ -24,8 +24,8 @@ const samples = (n: number, up: (i: number) => { s?: boolean; e?: boolean; b?: b
     return { surfaceUp: [u.s ?? true], surfaceDelaySec: [0], earthUp: [u.e ?? true], earthDelaySec: [delay], earthBlackout: [u.b ?? false] };
   });
 const conserved = (r: ReturnType<typeof simulate>) => {
-  expect(r.total.generated).toBe(r.total.delivered + r.total.dropped + r.total.remaining);
-  for (const c of Object.values(r.perClass)) expect(c.generated).toBe(c.delivered + c.dropped + c.remaining);
+  expect(r.total.generated).toBe(r.total.delivered + r.total.dropped + r.total.abandoned + r.total.remaining);
+  for (const c of Object.values(r.perClass)) expect(c.generated).toBe(c.delivered + c.dropped + c.abandoned + c.remaining);
 };
 
 describe('çizelgeleyici (sentetik)', () => {
@@ -146,7 +146,7 @@ describe('duyarlılık yardımcıları (sentetik)', () => {
   it('withParams girdiyi değiştirmez; Mars değerlerini uygular', () => {
     const base = cfg({ relayBufferMb: { r: 5, 'mars-aktarma': 7 }, relayDownlinkKbps: { r: 1, 'mars-aktarma': 2 } });
     const before = JSON.stringify(base);
-    const out = withParams(base, { marsRelayBufferMb: 70, marsRelayDownlinkKbps: 20, dutyCycle: 0.3 });
+    const out = withParams(base, { marsRelayBufferMb: 70, marsRelayDownlinkKbps: 20, dutyCycle: 0.3, earthLossPct: 9 });
     expect(JSON.stringify(base)).toBe(before);
     expect(out.relayBufferMb).toEqual({ r: 5, 'mars-aktarma': 70 });
     expect(out.relayDownlinkKbps['mars-aktarma']).toBe(20);
@@ -175,6 +175,62 @@ describe('duyarlılık yardımcıları (sentetik)', () => {
   });
 });
 
+describe('hat hatası ve yeniden iletim (sentetik)', () => {
+  const arq = (over: Partial<NonNullable<SchedConfig['arq']>> = {}) => ({ surfaceLossPct: 0, earthLossPct: 20, maxAttempts: 10, ...over });
+  const run = (c: SchedConfig, delay = 0, n = 2000, up?: (i: number) => { s?: boolean; e?: boolean }) => simulate(topo, samples(n, up, delay), 'priority', c);
+
+  it('kayıpsız ARQ (0 %) hiçbir şeyi kaybetmez; korunum tutar', () => {
+    const r = run(cfg({ arq: arq({ earthLossPct: 0 }) }));
+    expect(r.total.txLost).toBe(0); expect(r.total.abandoned).toBe(0); expect(r.total.retransmissions).toBe(0);
+    expect(r.total.delivered).toBeGreaterThan(0);
+    conserved(r);
+  });
+
+  it('yeniden iletim yokken (maxAttempts 1) kaybolan deneme kalıcı kayıptır; kayıp ≈ oran', () => {
+    const r = run(cfg({ arq: arq({ maxAttempts: 1 }) }));
+    expect(r.total.abandoned).toBeLessThanOrEqual(r.total.txLost);
+    expect(r.total.txLost - r.total.abandoned).toBeLessThanOrEqual(2); // en fazla birkaç red, simülasyon sonunda henüz işlenmemiş
+    expect(r.total.retransmissions).toBe(0);
+    const attempts = r.total.delivered + r.total.txLost;
+    expect(r.total.txLost / attempts).toBeGreaterThan(0.15); expect(r.total.txLost / attempts).toBeLessThan(0.25); // %20 ± deterministik sapma
+    conserved(r);
+  });
+
+  it('yeniden iletim kaybı kurtarır: teslim artar, kalıcı kayıp neredeyse sıfır, süre uzar', () => {
+    const none = run(cfg({ arq: arq({ maxAttempts: 1 }) }), 60);
+    const withArq = run(cfg({ arq: arq() }), 60);
+    expect(withArq.total.retransmissions).toBeGreaterThan(0);
+    expect(withArq.total.retransmissions).toBeLessThanOrEqual(withArq.total.txLost - withArq.total.abandoned);
+    expect(withArq.total.txLost - withArq.total.abandoned - withArq.total.retransmissions).toBeLessThanOrEqual(15); // sonda RTT (120 sn) içinde bekleyen redler
+    expect(withArq.total.delivered).toBeGreaterThan(none.total.delivered);
+    expect(withArq.total.abandoned).toBeLessThan(none.total.abandoned * 0.05 + 1);
+    expect(withArq.total.latencyMaxSec).toBeGreaterThan(none.total.latencyMaxSec); // geri gelen paket RTT kadar geç
+    conserved(none); conserved(withArq);
+  });
+
+  it('gönderici kopyayı RTT boyunca tutar: ışık gecikmesi büyüdükçe tampon doluluğu artar', () => {
+    const c = cfg({ arq: arq({ earthLossPct: 0 }), relayBufferMb: { r: 5000 } });
+    const near = run(c, 0), far = run(c, 400); // RTT 800 sn
+    expect(far.peakRelayFill.r).toBeGreaterThan(near.peakRelayFill.r);
+    conserved(near); conserved(far);
+  });
+
+  it('küçük tamponda kopya tutma, yeniden iletim ve taşma birlikte korunumu bozmaz (öncelikli ve FIFO)', () => {
+    for (const p of ['fifo', 'priority'] as const) {
+      const r = simulate(topo, samples(1500, (i) => ({ e: i < 100 || i >= 900 }), 300), p, cfg({ arq: arq({ surfaceLossPct: 3 }), relayBufferMb: { r: 200 }, assetBufferMb: { x: 100 } }));
+      expect(r.total.dropped).toBeGreaterThan(0);
+      conserved(r);
+    }
+  });
+
+  it('deterministiktir ve ARQ yokken eski davranışı (txLost 0) korur', () => {
+    const c = cfg({ arq: arq() });
+    expect(run(c, 30)).toEqual(run(c, 30));
+    const off = run(cfg(), 30);
+    expect(off.total.txLost).toBe(0); expect(off.total.abandoned).toBe(0);
+  });
+});
+
 describe('zaman çizelgesi ve gecikme serisi (sentetik izler)', () => {
   const fixed = (p: [number, number, number]): Track => ({
     startJD: 2450000, stepDays: 1000, count: 2, pos: Float64Array.from([...p, ...p]), vel: new Float64Array(6),
@@ -194,7 +250,7 @@ describe('zaman çizelgesi ve gecikme serisi (sentetik izler)', () => {
 });
 
 describe('tarama (sentetik)', () => {
-  const sp = { marsRelayBufferMb: 1000, marsRelayDownlinkKbps: 2000, dutyCycle: 1 }; // dutyCycle: 1 → 1 Mb/sn
+  const sp = { marsRelayBufferMb: 1000, marsRelayDownlinkKbps: 2000, dutyCycle: 1, earthLossPct: 0 }; // dutyCycle: 1 → 1 Mb/sn
   const base = cfg({ relayBufferMb: { r: 1000 }, assetBufferMb: { x: 100 }, relayDownlinkKbps: { r: 2000 }, strategy: { lookaheadSec: 100, margin: 0.9, minFactor: 0 } });
   // 'mars-aktarma' anahtarı bu sentetik topolojide yok; withParams onu ekler ama kullanılmaz. Tarama için gerçek anahtarı kullanan topoloji:
   const tp: SchedTopology = { assets: [{ id: 'a', body: 'x', relay: 'mars-aktarma', dataRateKbps: 1000 }], relays: ['mars-aktarma'] };

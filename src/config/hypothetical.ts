@@ -1,4 +1,4 @@
-// VARSAYIMSAL DEĞERLER — Aşama 2 ve 3'ün tüm uydurma sayıları yalnızca bu dosyadadır.
+// VARSAYIMSAL DEĞERLER — Aşama 2, 3, 4 ve 5'in tüm uydurma sayıları yalnızca bu dosyadadır.
 // Buradaki araç, uydu, yörünge, veri hızı ve eşik değerleri gerçek bir göreve ait DEĞİLDİR;
 // sonuçlar gerçek bir görev sonucu sayılmamalıdır. Gerçek olan tek şey Horizons konumlarıdır.
 // (Cisim yarıçapı ve dönme dönemi gibi fiziksel sabitler src/network/network.ts içinde, gerçek değerlerle.)
@@ -27,6 +27,14 @@ export interface RelayConfig {
   altitudeKm: number;
 }
 
+export interface GroundStationConfig {
+  id: string;
+  name: string;
+  /** Jeodezik değil, küresel Dünya varsayımı (derece). */
+  latDeg: number;
+  lonDeg: number;
+}
+
 export interface TrafficClass {
   id: string;
   name: string;
@@ -43,7 +51,7 @@ type BodyKey = 'moon' | 'mars';
 
 export const HYPOTHETICAL = {
   assets: [
-    { id: 'ay-1', name: 'Ay Aracı A', body: 'moon', latDeg: -85, lonDeg: 20, relay: 'ay-aktarma', dataRateKbps: 256, color: '#7ee0a8' },
+    { id: 'ay-1', name: 'Ay Aracı A', body: 'moon', latDeg: -40, lonDeg: 20, relay: 'ay-aktarma', dataRateKbps: 256, color: '#7ee0a8' },
     { id: 'ay-2', name: 'Ay İniş Aracı B', body: 'moon', latDeg: 10, lonDeg: -60, relay: 'ay-aktarma', dataRateKbps: 128, color: '#a8d8ff' },
     { id: 'mars-1', name: 'Mars Aracı A', body: 'mars', latDeg: 18, lonDeg: 77, relay: 'mars-aktarma', dataRateKbps: 2000, color: '#ffb36b' },
     { id: 'mars-2', name: 'Mars Aracı B', body: 'mars', latDeg: -4, lonDeg: 137, relay: 'mars-aktarma', dataRateKbps: 500, color: '#ff8fa3' },
@@ -108,9 +116,37 @@ export const HYPOTHETICAL = {
     /** Tarama (ve kaydırıcıyla yeniden hesap) için daha kaba adım; ana senaryo scheduler.stepSec ile çalışır. */
     sweepStepSec: 1800,
     /** Tarama grafiğindeki nokta sayısı. */
-    sweepPoints: 7,
+    sweepPoints: 5,
     marsRelayBufferMb: { min: 8000, max: 160000, step: 2000 },
     marsRelayDownlinkKbps: { min: 100, max: 600, step: 10 },
     dutyCycle: { min: 0.02, max: 0.15, step: 0.005 },
+  },
+
+  /**
+   * Aşama 5: yer istasyonları. Konumlar derin uzay istasyonlarına benzer SEÇİLMİŞTİR ama gerçek tesis verisi DEĞİLDİR (varsayımsal).
+   * Bir aktarma uydusunun Dünya hattı, en az bir istasyon uyduyu minElevationDeg üstünde görüyorsa açıktır (anlık devir, tek hat).
+   * Dünya küresel ve dönüşü GMST ile (TDB ≈ UT1 farkı ~1 dk önemsenmedi) modellenir.
+   */
+  groundStations: {
+    minElevationDeg: 10,
+    stations: [
+      { id: 'yi-a', name: 'Yer İstasyonu A (Kaliforniya benzeri)', latDeg: 35.4, lonDeg: -116.9 },
+      { id: 'yi-b', name: 'Yer İstasyonu B (İspanya benzeri)', latDeg: 40.4, lonDeg: -4.2 },
+      { id: 'yi-c', name: 'Yer İstasyonu C (Avustralya benzeri)', latDeg: -35.4, lonDeg: 149.0 },
+    ] as GroundStationConfig[],
+  },
+
+  /**
+   * Aşama 5: hat hatası ve yeniden iletim (ARQ). Rastgelelik YOK: kayıp oranı belirleyici bir biriktiriciyle uygulanır
+   * (her hatta her paket denemesi için oran birikir, 1'i geçince o deneme kaybolur). Yüzey hattında RTT adımdan çok kısa
+   * (yeniden deneme aynı adımda); Dünya hattında gönderici paketi RTT (= 2 × ışık gecikmesi) boyunca tamponunda tutar,
+   * ACK/NAK sonrası bırakır ya da yeniden gönderir. maxAttempts denemede iletilemeyen paket "hatta kayıp" sayılır.
+   */
+  arq: {
+    surfaceLossPct: 1,
+    earthLossPct: 5,
+    maxAttempts: 4,
+    /** Hata/ARQ kaydırıcısının aralığı (Dünya hattı kaybı, %). */
+    earthLossRangePct: { min: 0, max: 40, step: 1 },
   },
 };

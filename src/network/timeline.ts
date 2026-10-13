@@ -2,7 +2,7 @@ import { HYPOTHETICAL } from '../config/hypothetical';
 import type { Track } from '../data/types';
 import { C_KM_S, dist, sample, trackEndJD } from '../map/ephemeris';
 import { computeNetwork } from './network';
-import type { LinkSample, SchedConfig, SchedTopology, StrategyConfig } from './scheduler';
+import type { ArqConfig, LinkSample, SchedConfig, SchedTopology, StrategyConfig } from './scheduler';
 
 export const schedTopology = (): SchedTopology => ({
   assets: HYPOTHETICAL.assets.map((a) => ({ id: a.id, body: a.body, relay: a.relay, dataRateKbps: a.dataRateKbps })),
@@ -14,20 +14,32 @@ export const strategyConfig = (): StrategyConfig => {
   return { ...rest, lookaheadSec: lookaheadDays * 86400 };
 };
 
-export const schedConfig = (): SchedConfig => ({ ...HYPOTHETICAL.scheduler, strategy: strategyConfig() });
+/** Hat modu: 'ideal' = kayıpsız hat (Aşama 3-4); 'loss' = hatalı hat, yeniden iletimsiz (maxAttempts 1); 'arq' = hatalı hat + yeniden iletim. */
+export type LinkMode = 'ideal' | 'loss' | 'arq';
+export const LINK_MODE_LABEL: Record<LinkMode, string> = { ideal: 'Kayıpsız hat', loss: 'Hatalı hat, yeniden iletimsiz', arq: 'Hatalı hat + yeniden iletim' };
+
+export const arqConfig = (mode: LinkMode, earthLossPct = HYPOTHETICAL.arq.earthLossPct): ArqConfig | undefined =>
+  mode === 'ideal' ? undefined : {
+    surfaceLossPct: HYPOTHETICAL.arq.surfaceLossPct, earthLossPct,
+    maxAttempts: mode === 'loss' ? 1 : HYPOTHETICAL.arq.maxAttempts,
+  };
+
+export const schedConfig = (mode: LinkMode = 'ideal'): SchedConfig => ({ ...HYPOTHETICAL.scheduler, strategy: strategyConfig(), arq: arqConfig(mode) });
 
 /** Duyarlılık analizinin değiştirdiği parametreler (Mars tarafı). Başlangıç değerleri config'ten gelir. */
-export interface SweepParams { marsRelayBufferMb: number; marsRelayDownlinkKbps: number; dutyCycle: number }
+export interface SweepParams { marsRelayBufferMb: number; marsRelayDownlinkKbps: number; dutyCycle: number; earthLossPct: number }
 
 export const defaultParams = (): SweepParams => ({
   marsRelayBufferMb: HYPOTHETICAL.scheduler.relayBufferMb['mars-aktarma'],
   marsRelayDownlinkKbps: HYPOTHETICAL.scheduler.relayDownlinkKbps['mars-aktarma'],
   dutyCycle: HYPOTHETICAL.scheduler.dutyCycle,
+  earthLossPct: HYPOTHETICAL.arq.earthLossPct,
 });
 
 /** Ayarlara parametreleri uygular (girdiyi değiştirmez). */
 export const withParams = (cfg: SchedConfig, p: SweepParams): SchedConfig => ({
   ...cfg,
+  ...(cfg.arq ? { arq: { ...cfg.arq, earthLossPct: p.earthLossPct } } : {}),
   dutyCycle: p.dutyCycle,
   relayBufferMb: { ...cfg.relayBufferMb, 'mars-aktarma': p.marsRelayBufferMb },
   relayDownlinkKbps: { ...cfg.relayDownlinkKbps, 'mars-aktarma': p.marsRelayDownlinkKbps },
@@ -37,11 +49,11 @@ export const withParams = (cfg: SchedConfig, p: SweepParams): SchedConfig => ({
  * [startJD, endJD) aralığını stepSec adımla tarar; her adımda computeNetwork'ten bağlantı pencerelerini
  * (ufuk görüşü, Dünya görüşü, Mars kavuşumu) ve ışık gecikmesini (Horizons konumlarından) alır.
  */
-export function buildLinkTimeline(tracks: Record<string, Track>, startJD: number, endJD: number, stepSec: number, topo = schedTopology()): LinkSample[] {
+export function buildLinkTimeline(tracks: Record<string, Track>, startJD: number, endJD: number, stepSec: number, topo = schedTopology(), stationCount: number = HYPOTHETICAL.groundStations.stations.length): LinkSample[] {
   const n = Math.max(0, Math.floor(((endJD - startJD) * 86400) / stepSec));
   const out: LinkSample[] = [];
   for (let i = 0; i < n; i++) {
-    const net = computeNetwork(tracks, startJD + (i * stepSec) / 86400);
+    const net = computeNetwork(tracks, startJD + (i * stepSec) / 86400, stationCount);
     const byAsset = new Map(net.statuses.map((s) => [s.asset.id, s]));
     const byRelay = new Map(net.statuses.map((s) => [s.relay.id, s]));
     out.push({

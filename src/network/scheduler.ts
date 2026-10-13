@@ -27,6 +27,19 @@ export interface StrategyConfig {
   minFactor: number;
 }
 
+/**
+ * Hat hatası ve yeniden iletim (ARQ), varsayılanı src/config/hypothetical.ts. Rastgelelik yok: kayıp oranı belirleyici bir
+ * biriktiriciyle uygulanır (her deneme için oran birikir, 1'i geçince o deneme kaybolur). Yüzey hattında RTT adımdan çok kısa
+ * varsayılır (yeniden deneme aynı adımda, bant genişliği harcar); Dünya hattında gönderici paketi RTT (= 2 × ışık gecikmesi)
+ * boyunca tamponunda tutar, ACK sonrası bırakır ya da NAK sonrası yeniden gönderir. maxAttempts = 1 → yeniden iletim yok.
+ */
+export interface ArqConfig {
+  surfaceLossPct: number;
+  earthLossPct: number;
+  /** Bir hatta bir paket için en çok deneme sayısı; aşılırsa paket "hatta kayıp" (abandoned) sayılır. */
+  maxAttempts: number;
+}
+
 export interface SchedClass { id: string; priority: number; share: number; packetMb: number }
 
 export interface SchedConfig {
@@ -41,6 +54,8 @@ export interface SchedConfig {
   seriesEverySec: number;
   /** 'strategy' politikası için gerekli; yoksa strateji kısma yapmaz (öncelikli ile aynı). */
   strategy?: StrategyConfig;
+  /** Yoksa hatlar kayıpsızdır ve gönderici paketi gönderir göndermez bırakır (Aşama 3-4 davranışı). */
+  arq?: ArqConfig;
 }
 
 export interface SchedAsset { id: string; body: string; relay: string; dataRateKbps: number }
@@ -67,6 +82,12 @@ export interface ClassStats {
   delayed: number;
   /** Simülasyon sonunda hâlâ tamponda. */
   remaining: number;
+  /** Hatta kayıp: maxAttempts denemede iletilemeyen paket (tampon taşması `dropped` ile karıştırılmaz). */
+  abandoned: number;
+  abandonedMb: number;
+  /** Kaybolan iletim denemesi sayısı ve bunlardan yeniden gönderilenler (retransmissions = txLost − abandoned). */
+  txLost: number;
+  retransmissions: number;
   /** Strateji yüzünden hiç üretilmeyen (kısılan) veri; kayıp (dropped) DEĞİLDİR. Talep = generated + suppressed. */
   suppressed: number;
   suppressedMb: number;
@@ -97,7 +118,8 @@ export interface SimResult {
   peakAssetFill: Record<string, number>;
 }
 
-interface Pkt { cls: number; sizeMb: number; createdSec: number; sentMb: number; seq: number; propSec: number }
+interface Pkt { cls: number; sizeMb: number; createdSec: number; sentMb: number; seq: number; propSec: number; attempts: number }
+interface Held { p: Pkt; k: number; at: number; ok: boolean }
 
 class Fifo {
   private a: Pkt[] = [];
@@ -111,15 +133,20 @@ class Fifo {
     return p;
   }
   pop(): Pkt | undefined { return this.length > 0 ? this.a.pop() : undefined; }
+  /** Başa geri koy (yeniden iletim). */
+  unshift(p: Pkt) { if (this.h > 0) this.a[--this.h] = p; else this.a.unshift(p); }
 }
 
 class Buffer {
   q: Fifo[];
   usedMb = 0;
   usedByClass: number[];
+  /** ARQ: gönderilmiş ama onaylanmamış kopyaların (kuyrukta değil, tamponda yer tutan) sınıf başına hacmi. */
+  held: number[];
   constructor(readonly capMb: number, nClasses: number) {
     this.q = Array.from({ length: nClasses }, () => new Fifo());
     this.usedByClass = new Array(nClasses).fill(0);
+    this.held = new Array(nClasses).fill(0);
   }
   get freeMb() { return this.capMb - this.usedMb; }
   get count() { return this.q.reduce((n, f) => n + f.length, 0); }
@@ -169,6 +196,16 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const deliv = new Array(nC).fill(0), delivMb = new Array(nC).fill(0);
   const stored = new Array(nC).fill(0), delayed = new Array(nC).fill(0);
   const lat: number[][] = Array.from({ length: nC }, () => []);
+  const arq = cfg.arq;
+  const aband = new Array(nC).fill(0), abandMb = new Array(nC).fill(0), txLost = new Array(nC).fill(0), retx = new Array(nC).fill(0);
+  const surfAcc = topo.assets.map(() => 0), earthAcc = topo.relays.map(() => 0);
+  const inflight: Held[][] = topo.relays.map(() => []);
+  /** Belirleyici kayıp: oran birikir, 1'i geçince bu deneme kaybolur. */
+  const draw = (acc: number[], i: number, pct: number) => {
+    acc[i] += pct / 100;
+    if (acc[i] >= 1 - 1e-12) { acc[i] -= 1; return true; }
+    return false;
+  };
   let seq = 0;
   let droppedCum = 0;
   const series: SeriesPoint[] = [];
@@ -181,7 +218,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const evictable = (b: Buffer, cls: number) => {
     if (policy === 'fifo') return 0;
     let s = 0;
-    for (let k = 0; k < nC; k++) if (rank[k] > rank[cls]) s += b.usedByClass[k];
+    for (let k = 0; k < nC; k++) if (rank[k] > rank[cls]) s += b.usedByClass[k] - b.held[k];
     return s;
   };
   const canAccept = (b: Buffer, p: Pkt) => b.freeMb >= p.sizeMb - 1e-9 || b.freeMb + evictable(b, p.cls) >= p.sizeMb - 1e-9;
@@ -232,6 +269,24 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     const end = now + dt;
     const s = samples[i];
 
+    // 0) ARQ: onay/ret zamanı gelen kopyaları bırak ya da yeniden kuyruğa al
+    if (arq) {
+      inflight.forEach((list, ri) => {
+        if (!list.length) return;
+        const b = relayBuf[ri];
+        const keep: Held[] = [];
+        for (const h of list) {
+          if (h.at > now) { keep.push(h); continue; }
+          b.held[h.k] -= h.p.sizeMb;
+          if (h.ok) { b.usedMb -= h.p.sizeMb; b.usedByClass[h.k] -= h.p.sizeMb; }
+          else if (h.p.attempts >= arq.maxAttempts) { b.usedMb -= h.p.sizeMb; b.usedByClass[h.k] -= h.p.sizeMb; aband[h.k]++; abandMb[h.k] += h.p.sizeMb; }
+          else { retx[h.k]++; b.q[h.k].unshift(h.p); }
+        }
+        if (b.usedMb < 1e-9) b.usedMb = 0;
+        inflight[ri] = keep;
+      });
+    }
+
     // 1) Üretim (deterministik birikim). Strateji: en önemli sınıf dışındakiler kısılır; kısılan hiç üretilmez.
     topo.assets.forEach((a, ai) => {
       const mbPerSec = (a.dataRateKbps / 1000) * cfg.dutyCycle;
@@ -258,7 +313,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
         acc[ai][k] += full * f;
         while (acc[ai][k] >= classes[k].packetMb) {
           acc[ai][k] -= classes[k].packetMb;
-          const p: Pkt = { cls: k, sizeMb: classes[k].packetMb, createdSec: now, sentMb: 0, seq: 0, propSec: 0 };
+          const p: Pkt = { cls: k, sizeMb: classes[k].packetMb, createdSec: now, sentMb: 0, seq: 0, propSec: 0, attempts: 0 };
           gen[k]++; genMb[k] += p.sizeMb;
           put(assetBuf[ai], p);
         }
@@ -279,8 +334,14 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
         if (budget < need) { p.sentMb += budget; break; }
         if (!canAccept(dst, p)) break; // uydu tamponu dolu: araç gönderemez, kendi tamponunda tutar
         budget -= need;
+        if (arq && draw(surfAcc, ai, arq.surfaceLossPct)) {
+          // kayıp deneme: bant genişliği harcandı; paket tamponda kalır ve yeniden denenir (ya da hak tükenir)
+          txLost[k]++; p.attempts++; p.sentMb = 0;
+          if (p.attempts >= arq.maxAttempts) { take(src, k); aband[k]++; abandMb[k] += p.sizeMb; } else retx[k]++;
+          continue;
+        }
         take(src, k);
-        p.sentMb = 0;
+        p.sentMb = 0; p.attempts = 0;
         p.propSec += s.surfaceDelaySec[ai];
         put(dst, p);
       }
@@ -298,7 +359,13 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
         const need = p.sizeMb - p.sentMb;
         if (budget < need) { p.sentMb += budget; break; }
         budget -= need;
-        take(buf, k);
+        if (arq) {
+          // gönderici kopyayı RTT boyunca tamponunda tutar: kuyruktan çıkar ama yer tutmaya devam eder
+          buf.q[k].shift(); p.sentMb = 0; p.attempts++; buf.held[k] += p.sizeMb;
+          const rtt = 2 * s.earthDelaySec[ri];
+          if (draw(earthAcc, ri, arq.earthLossPct)) { txLost[k]++; inflight[ri].push({ p, k, at: end + rtt, ok: false }); continue; }
+          inflight[ri].push({ p, k, at: end + rtt, ok: true });
+        } else take(buf, k);
         const wait = end - p.createdSec;
         deliv[k]++; delivMb[k] += p.sizeMb;
         lat[k].push(wait + p.propSec + s.earthDelaySec[ri]);
@@ -322,10 +389,12 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
 
   const remaining = new Array(nC).fill(0);
   for (const b of [...assetBuf, ...relayBuf]) for (let k = 0; k < nC; k++) remaining[k] += b.q[k].length;
+  for (const list of inflight) for (const h of list) if (!h.ok) remaining[h.k]++; // reddedilmiş, henüz yeniden kuyruğa alınmamış
 
   const mk = (k: number): ClassStats => {
     const l = [...lat[k]].sort((x, y) => x - y);
     return {
+      abandoned: aband[k], abandonedMb: abandMb[k], txLost: txLost[k], retransmissions: retx[k],
       generated: gen[k], delivered: deliv[k], dropped: drop[k], stored: stored[k], delayed: delayed[k], remaining: remaining[k],
       suppressed: sup[k], suppressedMb: supMb[k],
       generatedMb: genMb[k], deliveredMb: delivMb[k], droppedMb: dropMb[k],
@@ -341,6 +410,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const sum = (f: (c: ClassStats) => number) => all.reduce((x, c) => x + f(c), 0);
   const allLat = lat.flat().sort((x, y) => x - y);
   const total: ClassStats = {
+    abandoned: sum((c) => c.abandoned), abandonedMb: sum((c) => c.abandonedMb), txLost: sum((c) => c.txLost), retransmissions: sum((c) => c.retransmissions),
     generated: sum((c) => c.generated), delivered: sum((c) => c.delivered), dropped: sum((c) => c.dropped),
     stored: sum((c) => c.stored), delayed: sum((c) => c.delayed), remaining: sum((c) => c.remaining),
     suppressed: sum((c) => c.suppressed), suppressedMb: sum((c) => c.suppressedMb),
