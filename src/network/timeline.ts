@@ -2,7 +2,7 @@ import { HYPOTHETICAL } from '../config/hypothetical';
 import type { Track } from '../data/types';
 import { C_KM_S, dist, sample, trackEndJD } from '../map/ephemeris';
 import { computeNetwork } from './network';
-import type { ArqConfig, LinkSample, SchedConfig, SchedTopology, StrategyConfig } from './scheduler';
+import type { ArqConfig, CoverageConfig, LinkSample, SchedConfig, SchedTopology, StrategyConfig } from './scheduler';
 
 export const schedTopology = (): SchedTopology => ({
   assets: HYPOTHETICAL.assets.map((a) => ({ id: a.id, body: a.body, relay: a.relay, dataRateKbps: a.dataRateKbps })),
@@ -14,35 +14,52 @@ export const strategyConfig = (): StrategyConfig => {
   return { ...rest, lookaheadSec: lookaheadDays * 86400 };
 };
 
-/** Hat modu: 'ideal' = kayıpsız hat (Aşama 3-4); 'loss' = hatalı hat, yeniden iletimsiz (maxAttempts 1); 'arq' = hatalı hat + yeniden iletim. */
-export type LinkMode = 'ideal' | 'loss' | 'arq';
-export const LINK_MODE_LABEL: Record<LinkMode, string> = { ideal: 'Kayıpsız hat', loss: 'Hatalı hat, yeniden iletimsiz', arq: 'Hatalı hat + yeniden iletim' };
+export const coverageConfig = (): CoverageConfig => {
+  const { lookaheadDays, recoveryDays, ...rest } = HYPOTHETICAL.coverageStrategy;
+  return { ...rest, lookaheadSec: lookaheadDays * 86400, recoverySec: recoveryDays * 86400 };
+};
+
+/**
+ * Hat modu: 'ideal' = kayıpsız hat (Aşama 3-4); 'loss' = hatalı hat, yeniden iletimsiz (maxAttempts 1); 'arq' = hatalı hat (periyodik kayıp)
+ * + yeniden iletim; 'burst' (Aşama 7) = aynı ortalama kayıp, kümelenmiş (iki durumlu) dağılım + yeniden iletim.
+ */
+export type LinkMode = 'ideal' | 'loss' | 'arq' | 'burst';
+export const LINK_MODE_LABEL: Record<LinkMode, string> = {
+  ideal: 'Kayıpsız hat', loss: 'Hatalı hat, yeniden iletimsiz', arq: 'Hatalı hat + yeniden iletim', burst: 'Kümelenmiş hata + yeniden iletim',
+};
 
 export const arqConfig = (mode: LinkMode, earthLossPct = HYPOTHETICAL.arq.earthLossPct): ArqConfig | undefined =>
   mode === 'ideal' ? undefined : {
     surfaceLossPct: HYPOTHETICAL.arq.surfaceLossPct, earthLossPct,
     maxAttempts: mode === 'loss' ? 1 : HYPOTHETICAL.arq.maxAttempts,
+    ...(mode === 'burst' ? { burst: { ...HYPOTHETICAL.arq.burst } } : {}),
   };
 
-export const schedConfig = (mode: LinkMode = 'ideal'): SchedConfig => ({ ...HYPOTHETICAL.scheduler, strategy: strategyConfig(), arq: arqConfig(mode) });
+export const schedConfig = (mode: LinkMode = 'ideal'): SchedConfig => ({ ...HYPOTHETICAL.scheduler, strategy: strategyConfig(), coverage: coverageConfig(), arq: arqConfig(mode) });
 
-/** Duyarlılık analizinin değiştirdiği parametreler (Mars tarafı). Başlangıç değerleri config'ten gelir. */
-export interface SweepParams { marsRelayBufferMb: number; marsRelayDownlinkKbps: number; dutyCycle: number; earthLossPct: number }
+export const MARS_RELAY = 'mars-aktarma';
+export const MOON_RELAY = 'ay-aktarma';
 
-export const defaultParams = (): SweepParams => ({
-  marsRelayBufferMb: HYPOTHETICAL.scheduler.relayBufferMb['mars-aktarma'],
-  marsRelayDownlinkKbps: HYPOTHETICAL.scheduler.relayDownlinkKbps['mars-aktarma'],
+/**
+ * Duyarlılık analizinin değiştirdiği parametreler: senaryodaki aktarma uydusunun (Mars ya da Ay, Aşama 7) tamponu ve Dünya hat hızı,
+ * görev döngüsü ve Dünya hattı kaybı. Başlangıç değerleri config'ten gelir. (Aşama 4-6'da adları marsRelay* idi; davranış aynı.)
+ */
+export interface SweepParams { relayBufferMb: number; relayDownlinkKbps: number; dutyCycle: number; earthLossPct: number }
+
+export const defaultParams = (relayId: string = MARS_RELAY): SweepParams => ({
+  relayBufferMb: HYPOTHETICAL.scheduler.relayBufferMb[relayId],
+  relayDownlinkKbps: HYPOTHETICAL.scheduler.relayDownlinkKbps[relayId],
   dutyCycle: HYPOTHETICAL.scheduler.dutyCycle,
   earthLossPct: HYPOTHETICAL.arq.earthLossPct,
 });
 
-/** Ayarlara parametreleri uygular (girdiyi değiştirmez). */
-export const withParams = (cfg: SchedConfig, p: SweepParams): SchedConfig => ({
+/** Ayarlara parametreleri uygular (girdiyi değiştirmez). relayId: tampon ve hat hızı hangi uyduya uygulanır (varsayılan Mars). */
+export const withParams = (cfg: SchedConfig, p: SweepParams, relayId: string = MARS_RELAY): SchedConfig => ({
   ...cfg,
   ...(cfg.arq ? { arq: { ...cfg.arq, earthLossPct: p.earthLossPct } } : {}),
   dutyCycle: p.dutyCycle,
-  relayBufferMb: { ...cfg.relayBufferMb, 'mars-aktarma': p.marsRelayBufferMb },
-  relayDownlinkKbps: { ...cfg.relayDownlinkKbps, 'mars-aktarma': p.marsRelayDownlinkKbps },
+  relayBufferMb: { ...cfg.relayBufferMb, [relayId]: p.relayBufferMb },
+  relayDownlinkKbps: { ...cfg.relayDownlinkKbps, [relayId]: p.relayDownlinkKbps },
 });
 
 /**

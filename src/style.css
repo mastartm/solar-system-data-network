@@ -6,7 +6,7 @@ header { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 16px; paddi
 h1 { font-size:18px; margin:0; }
 .note { color:var(--muted); font-size:12px; }
 main { position:relative; flex:1; display:flex; min-height:0; }
-#map { flex:1; width:100%; min-width:0; cursor:grab; touch-action:none; background:radial-gradient(circle at 50% 50%, #0b1226, var(--bg)); }
+#map { flex:1; width:100%; min-width:0; min-height:0; cursor:grab; touch-action:none; background:radial-gradient(circle at 50% 50%, #0b1226, var(--bg)); }
 #date-label { position:absolute; left:16px; bottom:12px; font-size:22px; font-variant-numeric:tabular-nums; color:var(--muted); pointer-events:none; }
 #side { width:320px; background:var(--panel); border-left:1px solid var(--line); overflow:auto; }
 #info { padding:16px; }
@@ -116,3 +116,32 @@ footer .row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
 @media (max-width:700px) { #left { width:auto; border-right:0; border-bottom:1px solid var(--line); max-height:42%; flex:none; } }
 #date-label { left:280px; }
 @media (max-width:700px) { #date-label { left:16px; } }
+
+/* --- Aşama 7: dar ekran (≤700 px). Eski sorun: canvas'ın height niteliği min-height:auto olarak davranıyor, harita küçülemiyor ve
+   alt çubuğun/bilgi panelinin arkasında kalıyordu. min-height:0 ile düzeltildi; kontroller tek satıra sıkıştı, bilgi paneli katlanır. --- */
+.more-btn, .side-toggle { display:none; }
+tr.cur td { background:rgba(74,144,226,.12); }
+.stats.cmp td:nth-child(3), .stats.cmp th:nth-child(3) { text-align:left; }
+@media (max-width:700px) {
+  header { padding:6px 12px; gap:2px 10px; align-items:center; }
+  h1 { font-size:16px; }
+  header .note { display:none; }
+  header .badge-hyp { font-size:10.5px; padding:0 7px; order:3; }
+  #tabs button { padding:4px 10px; }
+  footer { padding:6px 10px; gap:6px; }
+  footer .row { gap:6px; }
+  footer:not(.open) > .row:first-child { flex-wrap:nowrap; }
+  footer:not(.open) .more-row, footer:not(.open) .hide-narrow { display:none; }
+  footer button, footer select, footer input[type=date] { padding:4px 8px; font-size:13px; }
+  footer input[type=date] { width:128px; min-width:0; }
+  footer .timeline { min-width:70px; }
+  .more-btn { display:inline-block; min-width:34px; }
+  .side-toggle { display:block; width:100%; text-align:left; border:0; border-radius:0; border-top:1px solid var(--line); background:var(--panel); padding:7px 12px; font-size:13px; }
+  #side { display:flex; flex-direction:column; flex:none; max-height:48%; }
+  #side-body { overflow:auto; min-height:0; }
+  #side:not(.side-open) #side-body { display:none; }
+  #left { max-height:42%; }
+  #elist-panel { right:8px; width:calc(100% - 16px); }
+  #date-label { bottom:46px; font-size:18px; }
+  main.side-open #date-label { display:none; }
+}

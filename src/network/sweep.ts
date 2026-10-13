@@ -2,9 +2,11 @@
 // çağıran (arayüz) noktaları tek tek hesaplar ve aralarda tarayıcıya nefes aldırır.
 // Tüm değerler varsayımsaldır; sonuçlar gerçek bir görev sonucu değildir.
 import { simulate, type LinkSample, type Policy, type SchedConfig, type SchedTopology, type SimResult } from './scheduler';
-import { withParams, type SweepParams } from './timeline';
+import { MARS_RELAY, withParams, type SweepParams } from './timeline';
 
-export const POLICIES: Policy[] = ['fifo', 'priority', 'strategy'];
+export const POLICIES: Policy[] = ['fifo', 'priority', 'strategy', 'coverage'];
+/** Kavuşum kesintisi (earthBlackout) yoksa 'strategy' ve 'coverage' kısma yapmaz: sonuç öncelikliyle birebir aynıdır (testle doğrulanır). */
+export const hasBlackout = (samples: LinkSample[]) => samples.some((s) => s.earthBlackout?.some(Boolean));
 export type SweepKey = keyof SweepParams;
 
 /** Bir çizelgeleyici çalıştırmasının karşılaştırma ölçütleri. Talep = üretilen + üretilmeyen (Mb). */
@@ -20,6 +22,13 @@ export interface Metrics {
   /** Kaybolan iletim denemesi ve yeniden gönderilen paket sayısı. */
   txLost: number;
   retransmissions: number;
+  /** Tüm iletim denemeleri, kaybolan denemelerin oranı (%), hatta kalıcı kayıp paket sayısı (maxAttempts aşıldı), en uzun art arda kayıp. */
+  attempts: number;
+  txLostPct: number;
+  abandoned: number;
+  /** Hatta kayıp paketlerden yüzey hattında (araç → uydu) olanlar. */
+  abandonedSurface: number;
+  maxLossRun: number;
   /** (Düşen + hatta kayıp + üretilmeyen) / talep (%). Stratejiyi haksız avantajdan koruyan, kısmayı da "kaybedilen" sayan ölçüt. */
   lossPct: number;
   /** En önemli sınıfın (telemetri) düşen + hatta kayıp Mb / kendi talebi (%). Bu sınıf kısılmaz. */
@@ -44,7 +53,7 @@ export function metricsOf(r: SimResult, cfg: SchedConfig): Metrics {
   const pct = (x: number) => (demandMb > 0 ? (100 * x) / demandMb : 0);
   return {
     demandMb, deliveredMb: t.deliveredMb, droppedMb: t.droppedMb, suppressedMb: t.suppressedMb,
-    dropPct: pct(t.droppedMb), abandonedPct: pct(t.abandonedMb), txLost: t.txLost, retransmissions: t.retransmissions, lossPct: pct(t.droppedMb + t.abandonedMb + t.suppressedMb), deliveredPct: pct(t.deliveredMb), topDropPct: topDemand > 0 ? (100 * (top.droppedMb + top.abandonedMb)) / topDemand : 0,
+    dropPct: pct(t.droppedMb), abandonedPct: pct(t.abandonedMb), txLost: t.txLost, retransmissions: t.retransmissions, attempts: t.attempts, txLostPct: t.attempts > 0 ? (100 * t.txLost) / t.attempts : 0, abandoned: t.abandoned, abandonedSurface: r.abandonedSurface, maxLossRun: r.maxLossRun, lossPct: pct(t.droppedMb + t.abandonedMb + t.suppressedMb), deliveredPct: pct(t.deliveredMb), topDropPct: topDemand > 0 ? (100 * (top.droppedMb + top.abandonedMb)) / topDemand : 0,
     topP95Sec: top.latencyP95Sec, topMeanSec: top.latencyMeanSec, lowP95Sec: low.latencyP95Sec, lowMeanSec: low.latencyMeanSec,
   };
 }
@@ -52,17 +61,22 @@ export function metricsOf(r: SimResult, cfg: SchedConfig): Metrics {
 export type PolicyMetrics = Record<Policy, Metrics>;
 
 /** Tek bir çizelgeleyiciyi parametrelerle çalıştırır (arayüz, uzun hesabı politika politika bölmek için kullanır). */
-export function runPolicy(topo: SchedTopology, samples: LinkSample[], cfg: SchedConfig, params: SweepParams, policy: Policy, override: Partial<SweepParams> = {}): Metrics {
-  const c = withParams(cfg, { ...params, ...override });
+export function runPolicy(topo: SchedTopology, samples: LinkSample[], cfg: SchedConfig, params: SweepParams, policy: Policy, override: Partial<SweepParams> = {}, relayId: string = MARS_RELAY): Metrics {
+  const c = withParams(cfg, { ...params, ...override }, relayId);
   return metricsOf(simulate(topo, samples, policy, c), c);
 }
 
 /** Verilen parametrelerle üç çizelgeleyiciyi aynı bağlantı çizelgesi üzerinde çalıştırır. */
-export function runPolicies(topo: SchedTopology, samples: LinkSample[], cfg: SchedConfig, params: SweepParams, override: Partial<SweepParams> = {}): { results: Record<Policy, SimResult>; metrics: PolicyMetrics } {
-  const c = withParams(cfg, { ...params, ...override });
+export function runPolicies(topo: SchedTopology, samples: LinkSample[], cfg: SchedConfig, params: SweepParams, override: Partial<SweepParams> = {}, relayId: string = MARS_RELAY): { results: Record<Policy, SimResult>; metrics: PolicyMetrics } {
+  const c = withParams(cfg, { ...params, ...override }, relayId);
   const results = {} as Record<Policy, SimResult>;
   const metrics = {} as PolicyMetrics;
-  for (const p of POLICIES) { results[p] = simulate(topo, samples, p, c); metrics[p] = metricsOf(results[p], c); }
+  const blackout = hasBlackout(samples);
+  for (const p of POLICIES) {
+    // kesinti yoksa strateji politikaları öncelikliyle aynıdır: yeniden hesaplamaya gerek yok
+    results[p] = !blackout && (p === 'strategy' || p === 'coverage') ? { ...results.priority, policy: p } : simulate(topo, samples, p, c);
+    metrics[p] = metricsOf(results[p], c);
+  }
   return { results, metrics };
 }
 
@@ -75,5 +89,5 @@ export function sweepValues(min: number, max: number, n: number, include?: numbe
 }
 
 /** Tek tarama noktası: key parametresi value olur, diğerleri params'taki gibi kalır. */
-export const sweepPoint = (topo: SchedTopology, samples: LinkSample[], cfg: SchedConfig, params: SweepParams, key: SweepKey, value: number) =>
-  runPolicies(topo, samples, cfg, params, { [key]: value } as Partial<SweepParams>).metrics;
+export const sweepPoint = (topo: SchedTopology, samples: LinkSample[], cfg: SchedConfig, params: SweepParams, key: SweepKey, value: number, relayId: string = MARS_RELAY) =>
+  runPolicies(topo, samples, cfg, params, { [key]: value } as Partial<SweepParams>, relayId).metrics;
