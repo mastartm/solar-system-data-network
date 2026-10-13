@@ -1,4 +1,8 @@
+import { syntheticTracks } from './synthetic';
 import type { Track } from './types';
+
+/** Gerçek veri yerine sentetik yörüngeler (yalnızca ?sentetik=1). */
+export const isSynthetic = () => new URLSearchParams(location.search).has('sentetik');
 
 interface RawBody {
   startJD: number;
@@ -26,6 +30,7 @@ async function loadFile(name: string): Promise<Record<string, Track>> {
 }
 
 export async function loadTracks(): Promise<Record<string, Track>> {
+  if (isSynthetic()) return syntheticTracks();
   const [planets, moon] = await Promise.all([loadFile('planets.json'), loadFile('moon.json')]);
   return { ...planets, ...moon };
 }
