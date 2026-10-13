@@ -1,6 +1,8 @@
 import { HYPOTHETICAL } from '../config/hypothetical';
 import type { BodyId } from '../data/types';
+import type { LayerState } from '../ui/layers';
 import { detailOf } from './MapView';
+import { LabelPriority, type LabelSink } from './labels';
 import type { LinkState, NetworkState } from '../network/network';
 
 type Screen = Map<BodyId, [number, number, number]>;
@@ -50,7 +52,8 @@ export class NetworkLayer {
     return { atAsset: mine.filter((p) => p.leg === 0).length, atRelay: mine.filter((p) => p.leg === 1).length };
   }
 
-  draw(ctx: CanvasRenderingContext2D, scr: Screen, radii: Map<BodyId, number>, zoom: number, net: NetworkState) {
+  /** Ağ katmanını çizer. Etiketler doğrudan çizilmez: `labels` toplayıcısına istek olarak verilir (MapView yerleştirir). */
+  draw(ctx: CanvasRenderingContext2D, scr: Screen, radii: Map<BodyId, number>, zoom: number, net: NetworkState, labels: LabelSink, layers: LayerState) {
     const detail = detailOf(zoom);
     const rb = (id: 'moon' | 'mars') => radii.get(id) ?? 3;
     const earth = scr.get('earth');
@@ -97,9 +100,9 @@ export class NetworkLayer {
       }
     }
 
-    // paketler
+    // paketler (veri akışı katmanı)
     const stalled = new Map<string, number>();
-    for (const p of this.packets) {
+    for (const p of layers.flow ? this.packets : []) {
       const st = net.statuses.find((s) => s.asset.id === p.assetId);
       const a = asset.get(p.assetId);
       const r = st && relay.get(st.relay.id);
@@ -135,43 +138,41 @@ export class NetworkLayer {
       ctx.closePath(); ctx.stroke();
     }
 
-    // yakınlaşınca ayrıntı: adlar ve tek yön gecikme
-    ctx.font = '11px system-ui, sans-serif';
-    if (detail > 2.5) {
-      ctx.fillStyle = 'rgba(255,255,255,0.8)';
-      for (const a of HYPOTHETICAL.assets) {
-        const p = asset.get(a.id);
-        if (p) ctx.fillText(a.name, p.x + 6, p.y - 5);
+    // Çizilen işaretler etiketlere engeldir (kendi etiketi hariç).
+    for (const a of HYPOTHETICAL.assets) { const p = asset.get(a.id); if (p) labels.obstacle(p.x, p.y, 4, `asset:${a.id}`); }
+    for (const r of HYPOTHETICAL.relays) { const p = relay.get(r.id); if (p) labels.obstacle(p.x, p.y, 6, `relay:${r.id}`); }
+
+    // yakınlaşınca ayrıntı: adlar ve tek yön gecikme (ağ etiketleri katmanı)
+    if (layers.netLabels) {
+      if (detail > 2.5) {
+        for (const a of HYPOTHETICAL.assets) {
+          const p = asset.get(a.id), b = scr.get(a.body);
+          if (p) labels.label({ id: `asset:${a.id}`, text: a.name, ax: p.x, ay: p.y, radius: 4, priority: LabelPriority.asset, cx: b?.[0], cy: b?.[1], color: 'rgba(255,255,255,0.8)' });
+        }
+        for (const r of HYPOTHETICAL.relays) {
+          const p = relay.get(r.id), b = scr.get(r.body);
+          if (p) labels.label({ id: `relay:${r.id}`, text: r.name, ax: p.x, ay: p.y, radius: 6, priority: LabelPriority.relay, cx: b?.[0], cy: b?.[1], color: 'rgba(255,255,255,0.85)' });
+        }
       }
-      for (const r of HYPOTHETICAL.relays) {
-        const p = relay.get(r.id);
-        if (p) ctx.fillText(r.name, p.x + 7, p.y + 12);
-      }
-    }
-    if (detail > 1.5) {
-      const done = new Set<string>();
-      for (const s of net.statuses) {
-        const r = relay.get(s.relay.id);
-        if (!r || done.has(s.relay.id)) continue;
-        done.add(s.relay.id);
-        const mx = (r.x + e.x) / 2, my = (r.y + e.y) / 2;
-        const sec = s.earthKm / 299792.458;
-        ctx.fillStyle = 'rgba(160,230,255,0.9)';
-        ctx.fillText(`${sec < 120 ? sec.toFixed(2) + ' sn' : (sec / 60).toFixed(1) + ' dk'}`, mx + 4, my - 4);
+      if (detail > 1.5) {
+        const done = new Set<string>();
+        for (const s of net.statuses) {
+          const r = relay.get(s.relay.id);
+          if (!r || done.has(s.relay.id)) continue;
+          done.add(s.relay.id);
+          const sec = s.earthKm / 299792.458;
+          labels.label({
+            id: `delay:${s.relay.id}`, text: `${sec < 120 ? sec.toFixed(2) + ' sn' : (sec / 60).toFixed(1) + ' dk'}`,
+            ax: (r.x + e.x) / 2, ay: (r.y + e.y) / 2, radius: 1, priority: LabelPriority.delay, cx: e.x, cy: e.y, color: 'rgba(160,230,255,0.9)',
+          });
+        }
       }
     }
 
     // kavuşum uyarısı
     if (net.marsBlackout) {
       const m = scr.get('mars');
-      if (m) {
-        ctx.fillStyle = 'rgba(255,90,90,0.95)';
-        ctx.font = '12px system-ui, sans-serif';
-        ctx.fillText('Mars kavuşumu: iletişim kesintisi', m[0] + 18, m[1] + 22);
-      }
+      if (m) labels.label({ id: 'alert:mars-blackout', text: 'Mars kavuşumu: iletişim kesintisi', ax: m[0], ay: m[1], radius: (radii.get('mars') ?? 4) + 2, priority: LabelPriority.planet, cx: scr.get('sun')?.[0], cy: scr.get('sun')?.[1], color: 'rgba(255,90,90,0.95)', font: '12px system-ui, sans-serif' });
     }
-    ctx.fillStyle = 'rgba(255,200,90,0.9)';
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillText('Varsayımsal değerler', 16, 24);
   }
 }
