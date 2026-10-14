@@ -1,5 +1,9 @@
 # solar-system-data-network
 
+[English](README.en.md) | **Türkçe**
+
+> Bu dosya Türkçe (ana) sürümdür; İngilizce karşılığı [README.en.md](README.en.md). İki dosya birlikte güncellenir: birinde yapılan her değişiklik diğerine de yapılır.
+
 Gerçek gezegen konumlarını gösteren etkileşimli bir güneş sistemi haritası. İlerleyen aşamalarda Ay ve Mars yüzeyindeki araçların aktarma uyduları üzerinden Dünya'ya veri gönderdiği bir haberleşme ağı simülasyonu eklenecek.
 
 > **Durum: Aşama 10 (değere duyarlı kuyruk, takvim hatasına dayanıklı uyarlamalı ufuk, gerçek çok uydulu yönlendirme, yörünge/güç gerçekçiliği [Ay presesyonu, Mars ekseni eğikliği, güç modeli], telemetri denemesi, sayfa başlatma görevinin bölünmesi; [ayrıntı](#aşama-10-değere-duyarlı-kuyruk-takvim-hatasına-dayanıklı-ufuk-çok-uydulu-yönlendirme-yörüngegüç-telemetri-sayfa-başlatma)); önceki: Aşama 9 (model iyimserliklerini giderme, değer ağırlıklı fayda ve uyarlamalı strateji, kapsamayı artıran fiziksel model [Ay yörüngesi, ikinci uydu, Mars gölgesi], genelleme; [ayrıntı](#aşama-9-model-iyimserlikleri-değer-ağırlıklı-fayda-kapsamayı-artıran-fiziksel-model-genelleme)); önceki: Aşama 8 (kayan ufuklu akış kontrolü, tahmin hatası, hata modeli duyarlılığı, Web Worker havuzu; [ayrıntı](#aşama-8-kayan-ufuklu-akış-kontrolü-tahmin-hatası-hata-modeli-duyarlılığı)); önceki: Aşama 7 (kapsama bilen strateji, kümelenmiş hata modeli, Ay hattı senaryosu arayüzde, dar ekran düzeni); önceki: Aşama 6 (3B görünüm ve harita arayüzü: sol "Cisimler" paneli, dönen küre kartı, etiket yerleştirici, katman aç/kapa); ondan önce Aşama 5 (yer istasyonu görüşü, hat hatası ve yeniden iletim, Ay Aracı A düzeltmesi; kendinden önce Aşama 4: Mars kavuşumu stratejisi, duyarlılık analizi, gerçek veriyle doğrulama).** Ağdaki araç/uydu/veri hızı/paket/tampon/strateji değerleri **varsayımsaldır**; çizelgeleyici sonuçları **gerçek bir görev sonucu değildir**. Gerçek olan yalnızca Horizons konumları, bunlardan çıkan ışık gecikmeleri ve bağlantı geometrisidir (Aşama 9'da eklenen yörünge elemanları, ikinci uydu, gölge modeli ve değer ağırlıkları; Aşama 10'da eklenen kuyruk eşikleri, presesyon hızları, Mars eksen yönü, güç parametreleri ve uydular arası bağlantı da **varsayımdır**). Aşama 3 ve 4 artık depodaki **gerçek Horizons verisiyle** (2020–2040) tarayıcıda denendi; sonuçlar ve sentetik veriyle farklar [Aşama 4](#aşama-4-kavuşum-stratejisi-duyarlılık-analizi-gerçek-veri-doğrulaması) bölümünde.
@@ -1190,6 +1194,7 @@ Arayüz: Çizelgeleyici → (m2) "Takvim hatasını gözlemden düzelt (Aşama 1
 **Ay 2028-03-03 (60 g), 1 istasyon — öncelikli: düşen+hatta / toplam / teslim [üretilmeyen] = 23,9 / 23,9 / 73,2 [0,0]**
 
 | gerçek değer modeli | kısma | A: hepsi (üstel 14 g varsayar) | B: yalnız en yeni önce | C: son tarihe uyan kural | D: yalnız son tarihte atma |
+|---|---|---|---|---|---|
 | üstel, yarı ömür 14 g (kontrol: Aşama 9-10) (öncelikli değer % 76,9) | +0,31 | +3,66 | +1,95 | — | — |
 | son tarih 3 g (sonra 0) (öncelikli değer % 70,5) | +2,12 | +10,96 | +8,58 | +10,96 | +10,36 |
 | son tarih 14 g (sonra 0) (öncelikli değer % 81,5) | +0,01 | +0,00 | −1,90 | +0,00 | +0,00 |
@@ -1206,6 +1211,7 @@ Atılan %: A 0,0; son tarih 3 g: C 22,6 / D 8,5; son tarih 14 g: C 2,2 / D 0,0; 
 **Mars 2028 kavuşum penceresi, 1 istasyon — öncelikli: düşen+hatta / toplam / teslim [üretilmeyen] = 47,1 / 47,1 / 41,1 [0,0]**
 
 | gerçek değer modeli | kısma | A: hepsi (üstel 14 g varsayar) | B: yalnız en yeni önce | C: son tarihe uyan kural | D: yalnız son tarihte atma |
+|---|---|---|---|---|---|
 | üstel, yarı ömür 14 g (kontrol: Aşama 9-10) (öncelikli değer % 50,7) | +1,09 | +7,68 | +7,18 | — | — |
 | son tarih 3 g (sonra 0) (öncelikli değer % 43,3) | −0,00 | +15,29 | +14,58 | +15,65 | +14,12 |
 | son tarih 14 g (sonra 0) (öncelikli değer % 54,7) | +2,04 | +4,27 | +3,79 | +4,27 | +4,31 |
@@ -1222,6 +1228,7 @@ Atılan %: A 4,4; son tarih 3 g: C 56,8 / D 54,3; son tarih 14 g: C 20,4 / D 14,
 **Mars 2028 kavuşum penceresi, 3 istasyon — öncelikli: düşen+hatta / toplam / teslim [üretilmeyen] = 32,2 / 32,2 / 67,6 [0,0]**
 
 | gerçek değer modeli | kısma | A: hepsi (üstel 14 g varsayar) | B: yalnız en yeni önce | C: son tarihe uyan kural | D: yalnız son tarihte atma |
+|---|---|---|---|---|---|
 | üstel, yarı ömür 14 g (kontrol: Aşama 9-10) (öncelikli değer % 73,5) | +0,65 | +0,88 | +0,51 | — | — |
 | son tarih 3 g (sonra 0) (öncelikli değer % 69,9) | +0,92 | +2,53 | +2,40 | +2,97 | +4,35 |
 | son tarih 14 g (sonra 0) (öncelikli değer % 73,9) | +1,15 | +1,62 | +0,00 | +1,62 | +2,62 |
@@ -1232,6 +1239,7 @@ Atılan %: A 4,4; son tarih 3 g: C 56,8 / D 54,3; son tarih 14 g: C 20,4 / D 14,
 | doğrusal, 30 günde 0 (öncelikli değer % 73,3) | +1,15 | +1,40 | +0,36 | — | — |
 | üstel 14 g + telemetri son tarih 1 g (öncelikli değer % 54,3) | +0,65 | +0,88 | +0,51 | — | — |
 | üstel 14 g + telemetri son tarih 3 g (öncelikli değer % 55,8) | +0,65 | +0,88 | +0,51 | — | — |
+
 Atılan %: A 3,0; son tarih 3 g: C 38,8 / D 36,7; son tarih 14 g: C 8,6 / D 10,1; son tarih 30 g: C 2,3 / D 0,0. Teslim farkı (puan, öncelikliye göre): A −3,1, B +0,0, C(3 g) −6,9, C(14 g) −3,1, C(30 g) −2,3.
 
 
@@ -1275,7 +1283,7 @@ src/map/     interpolasyon (ephemeris), Canvas çizimi, etiket yerleştirici (la
 src/ui/      kontroller, bilgi paneli + küre kartı, sol panel (Cisimler, katmanlar), ağ paneli; Çizelgeleyici sekmesi: schedulerPanel.ts (ana panel), schedulerExtras.ts (Aşama 9 bölümleri: değer, etki, yörünge/gölge, genelleme), schedShared.ts (ortak yardımcılar, değer modeli seçimi), stage10Panel.ts (Aşama 10 deneyleri m1–m5)
 src/network/ ağ modeli (gecikme, bağlantı durumu, kavuşum; Aşama 9: Kepler yörüngesi, ikinci Ay uydusu, Mars gölgesi; Aşama 10: presesyon, Mars ekseni eğikliği, güç modeli `MarsPower`, uydular arası bağlantı), çizelgeleyici + stratejiler (Aşama 9: uyarlamalı ufuk, projeksiyon seçenekleri, değer ölçütü; Aşama 10: değere duyarlı kuyruk, dayanıklı ufuk, yönlendirme, ayrı tamponlu projeksiyon, telemetri seçenekleri) + hata modeli, tarama, zaman çizelgesi, kapsama özeti (coverage.ts); compute.ts / compute.worker.ts / computeClient.ts (uzun hesabı Web Worker havuzunda çalıştıran işleyici ve istemci)
 src/config/  varsayımsal değerler (tek dosya)
-scripts/     Horizons veri çekme betiği; asama7-sonuclar.ts, asama8-sonuclar.ts, asama9-sonuclar.ts (+ asama9-lib.ts ortak yardımcılar), asama10-sonuclar.ts (README sayılarını gerçek veriyle üreten betikler, Horizons'a erişmez)
+scripts/     Horizons veri çekme betiği; asama7-sonuclar.ts, asama8-sonuclar.ts, asama9-sonuclar.ts (+ asama9-lib.ts ortak yardımcılar), asama10-sonuclar.ts, asama11-sonuclar.ts (README sayılarını gerçek veriyle üreten betikler, Horizons'a erişmez); check-readme.mjs (README.md ve README.en.md eşgüdüm denetimi, `npm run check-readme`)
 public/data/ Horizons JSON dosyaları (gerçek veri, depoda)
 docs/        gerçek veriyle alınmış ekran görüntüleri
 .github/workflows/  GitHub Pages yayını

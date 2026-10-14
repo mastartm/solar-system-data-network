@@ -11,7 +11,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "build-eclipses": "node scripts/build-eclipses.mjs"
+    "build-eclipses": "node scripts/build-eclipses.mjs",
+    "check-readme": "node scripts/check-readme.mjs"
   },
   "devDependencies": {
     "astronomy-engine": "^2.1.19",
