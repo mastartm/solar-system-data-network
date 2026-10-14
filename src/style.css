@@ -129,14 +129,16 @@ tr.cur td { background:rgba(74,144,226,.12); }
   h1 { font-size:16px; }
   header .note { display:none; }
   header .badge-hyp { font-size:10.5px; padding:0 7px; order:3; }
+  header h1 { order:0; } header .lang-switch { order:1; margin-left:auto; } header #tabs { order:2; margin-left:0; }
   #tabs button { padding:4px 10px; }
   footer { padding:6px 10px; gap:6px; }
   footer .row { gap:6px; }
   footer:not(.open) > .row:first-child { flex-wrap:nowrap; }
   footer:not(.open) .more-row, footer:not(.open) .hide-narrow { display:none; }
   footer button, footer select, footer input[type=date] { padding:4px 8px; font-size:13px; }
-  footer input[type=date] { width:128px; min-width:0; }
-  footer .timeline { min-width:70px; }
+  footer input[type=date] { width:116px; min-width:0; }
+  footer .timeline { min-width:60px; }
+  footer input[type=range] { min-width:0; }
   .more-btn { display:inline-block; min-width:34px; }
   .side-toggle { display:block; width:100%; text-align:left; border:0; border-radius:0; border-top:1px solid var(--line); background:var(--panel); padding:7px 12px; font-size:13px; }
   #side { display:flex; flex-direction:column; flex:none; max-height:48%; }
