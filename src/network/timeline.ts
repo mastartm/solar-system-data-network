@@ -1,17 +1,22 @@
 import { HYPOTHETICAL } from '../config/hypothetical';
 import type { Track } from '../data/types';
 import { C_KM_S, dist, sample, trackEndJD } from '../map/ephemeris';
-import { computeNetwork, effectiveAssets, effectiveRelays, relayCandidates, type NetOptions } from './network';
-import type { AdaptiveConfig, ArqConfig, CoverageConfig, LinkSample, ProjectionOptions, RollingConfig, SchedAsset, SchedConfig, SchedTopology, StrategyConfig } from './scheduler';
+import { MarsPower, applyPower, computeNetwork, effectiveAssets, effectiveRelays, relayCandidates, type NetOptions } from './network';
+import type { AdaptiveConfig, AdaptiveRobustConfig, ArqConfig, CoverageConfig, LinkSample, ProjectionOptions, RollingConfig, RoutingConfig, SchedAsset, SchedConfig, SchedTopology, StrategyConfig, ValueAwareConfig } from './scheduler';
 
 /** net (Aşama 9): ağ seçenekleri; varsayılan = Aşama 2-8 topolojisi. Ay araçları ikinci uydu seçilince `alt` olarak ikinci uyduyu da listeler. */
-export const schedTopology = (net: NetOptions = {}): SchedTopology => ({
-  assets: effectiveAssets(net).map((a) => {
-    const alt = relayCandidates(a, net).slice(1);
-    return { id: a.id, body: a.body, relay: a.relay, dataRateKbps: a.dataRateKbps, ...(alt.length ? { alt } : {}) };
-  }),
-  relays: effectiveRelays(net).map((r) => r.id),
-});
+export const schedTopology = (net: NetOptions = {}): SchedTopology => {
+  const relays = effectiveRelays(net).map((r) => r.id);
+  const second = HYPOTHETICAL.moonRelay2.id, first = HYPOTHETICAL.relays.find((r) => r.body === 'moon')!.id;
+  return {
+    assets: effectiveAssets(net).map((a) => {
+      const alt = relayCandidates(a, net).slice(1);
+      return { id: a.id, body: a.body, relay: a.relay, dataRateKbps: a.dataRateKbps, ...(alt.length ? { alt } : {}) };
+    }),
+    relays,
+    ...(net.moonIsl && relays.includes(second) ? { isl: [[relays.indexOf(first), relays.indexOf(second)] as [number, number]] } : {}),
+  };
+};
 
 export const strategyConfig = (): StrategyConfig => {
   const { lookaheadDays, ...rest } = HYPOTHETICAL.strategy;
@@ -32,6 +37,24 @@ export const adaptiveConfig = (): AdaptiveConfig => {
   const { minDays, maxDays, leadDays, ...rest } = HYPOTHETICAL.adaptiveStrategy;
   return { ...rest, minSec: minDays * 86400, maxSec: maxDays * 86400, leadSec: leadDays * 86400 };
 };
+
+/**
+ * Aşama 10: değere duyarlı kuyruk kuralı (HYPOTHETICAL.valueAware). halfLifeSec: azalan değer modelinin yarı ömrü; over: kuralın parçalarını geçersiz kılar.
+ * YALNIZCA azalan değer modeli seçiliyken verilir; verilmezse 'valueAware' politikası 'priority' ile birebir aynıdır.
+ */
+export const valueAwareConfig = (halfLifeSec: number, over: Partial<ValueAwareConfig> = {}): ValueAwareConfig => {
+  const { scan: _s, ...rest } = HYPOTHETICAL.valueAware;
+  return { ...rest, halfLifeSec, ...over };
+};
+
+/** Aşama 10: takvim hatasına dayanıklı uyarlamalı ufuk (HYPOTHETICAL.adaptiveStrategy + HYPOTHETICAL.adaptiveRobust). over: korumaları geçersiz kılar (undefined = kapalı). */
+export const adaptiveRobustConfig = (over: Partial<AdaptiveRobustConfig> = {}): AdaptiveRobustConfig => {
+  const r = HYPOTHETICAL.adaptiveRobust;
+  return { ...adaptiveConfig(), ...(r.capDays > 0 ? { capSec: r.capDays * 86400 } : {}), histFactor: r.histFactor, histSec: r.histDays * 86400, trustMin: r.trustMin, checkSec: r.checkDays * 86400, fallbackSec: r.fallbackDays * 86400, ...over };
+};
+
+/** Aşama 10: çok uydulu yönlendirme (HYPOTHETICAL.routing). isl: uydular arası bağlantı kullanılsın mı. */
+export const routingConfig = (select: RoutingConfig['select'], isl = false): RoutingConfig => ({ select, ...(isl ? { isl: { kbps: HYPOTHETICAL.routing.islKbps } } : {}) });
 
 /** Yarı ömürler (sn): her çalıştırmada eşzamanlı hesaplanır (değer taraması). */
 export const valueHalfLivesSec = (): number[] => HYPOTHETICAL.value.decayOptionsDays.map((d) => d * 86400);
@@ -56,7 +79,7 @@ export const arqConfig = (mode: LinkMode, earthLossPct = HYPOTHETICAL.arq.earthL
 export const projectionOptions = (): ProjectionOptions => ({ ...HYPOTHETICAL.projection });
 
 export const schedConfig = (mode: LinkMode = 'ideal'): SchedConfig => ({
-  ...HYPOTHETICAL.scheduler, strategy: strategyConfig(), coverage: coverageConfig(), rolling: rollingConfig(), adaptive: adaptiveConfig(), arq: arqConfig(mode),
+  ...HYPOTHETICAL.scheduler, strategy: strategyConfig(), coverage: coverageConfig(), rolling: rollingConfig(), adaptive: adaptiveConfig(), adaptiveRobust: adaptiveRobustConfig(), arq: arqConfig(mode),
   projection: projectionOptions(), valueHalfLivesSec: valueHalfLivesSec(),
 });
 
@@ -96,8 +119,10 @@ export function buildLinkTimeline(tracks: Record<string, Track>, startJD: number
   const n = Math.max(0, Math.floor(((endJD - startJD) * 86400) / stepSec));
   const out: LinkSample[] = [];
   const multi = topo.assets.some((a) => a.alt?.length);
+  const pw = netOpts.marsEclipse === 'power' ? new MarsPower(netOpts.marsPowerBatteryWh !== undefined ? { ...HYPOTHETICAL.marsPower, batteryWh: netOpts.marsPowerBatteryWh } : undefined) : null; // Aşama 10: durumlu güç modeli (çizelge başında batarya dolu)
   for (let i = 0; i < n; i++) {
     const net = computeNetwork(tracks, startJD + (i * stepSec) / 86400, stationCount, netOpts);
+    if (pw) applyPower(net, pw, stepSec);
     const byAsset = new Map(net.statuses.map((s) => [s.asset.id, s]));
     const byRelay = new Map(net.relayStates.map((s) => [s.relay.id, s]));
     out.push({
@@ -106,7 +131,14 @@ export function buildLinkTimeline(tracks: Record<string, Track>, startJD: number
       earthUp: topo.relays.map((r) => byRelay.get(r)!.earthLink === 'up'),
       earthDelaySec: topo.relays.map((r) => byRelay.get(r)!.earthKm / C_KM_S),
       earthBlackout: topo.relays.map((r) => byRelay.get(r)!.earthLink === 'blackout'),
-      ...(multi ? { assetRelay: topo.assets.map((a) => topo.relays.indexOf(byAsset.get(a.id)!.relay.id)) } : {}),
+      ...(multi ? {
+        assetRelay: topo.assets.map((a) => topo.relays.indexOf(byAsset.get(a.id)!.relay.id)),
+        cand: topo.assets.map((a) => byAsset.get(a.id)!.candidates.map((c) => ({ relay: topo.relays.indexOf(c.relayId), up: c.visible, delaySec: c.surfaceKm / C_KM_S }))),
+      } : {}),
+      ...(topo.isl ? {
+        islUp: topo.isl.map(([x, y]) => !!net.isl.find((l) => l.a === topo.relays[x] && l.b === topo.relays[y])?.up),
+        islDelaySec: topo.isl.map(([x, y]) => (net.isl.find((l) => l.a === topo.relays[x] && l.b === topo.relays[y])?.km ?? 0) / C_KM_S),
+      } : {}),
     });
   }
   return out;
@@ -131,13 +163,18 @@ export function restrictToRelays(topo: SchedTopology, samples: LinkSample[], rel
     return alt.length ? { ...rest, alt } : rest;
   });
   const multi = assets.some((a) => a.alt?.length);
+  // Aşama 10: uydular arası bağlantı çiftleri (iki ucu da korunanlar) yeni sıraya göre; cand ve islUp aynı biçimde
+  const islKeep = (topo.isl ?? []).map(([x, y]) => idx.includes(x) && idx.includes(y));
+  const isl = (topo.isl ?? []).filter((_, k) => islKeep[k]).map(([x, y]): [number, number] => [idx.indexOf(x), idx.indexOf(y)]);
   return {
-    topo: { assets, relays: [...relayIds] },
+    topo: { assets, relays: [...relayIds], ...(isl.length ? { isl } : {}) },
     samples: samples.map((x) => ({
       surfaceUp: pick(x.surfaceUp), surfaceDelaySec: pick(x.surfaceDelaySec),
       earthUp: idx.map((i) => x.earthUp[i]), earthDelaySec: idx.map((i) => x.earthDelaySec[i]),
       ...(x.earthBlackout ? { earthBlackout: idx.map((i) => x.earthBlackout![i]) } : {}),
       ...(multi && x.assetRelay ? { assetRelay: pick(x.assetRelay).map((r) => Math.max(0, idx.indexOf(r))) } : {}),
+      ...(multi && x.cand ? { cand: pick(x.cand).map((list) => list.filter((c) => idx.includes(c.relay)).map((c) => ({ ...c, relay: idx.indexOf(c.relay) }))) } : {}),
+      ...(isl.length && x.islUp ? { islUp: x.islUp.filter((_, k) => islKeep[k]), islDelaySec: (x.islDelaySec ?? []).filter((_, k) => islKeep[k]) } : {}),
     })),
   };
 }

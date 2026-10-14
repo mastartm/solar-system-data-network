@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FACTS, factRows, formatDays } from '../data/bodyFacts';
 import { BODIES, type BodyId } from '../data/types';
 import { countsFor, ORDER } from '../ui/bodiesPanel';
-import { fbm3, generateTexture, noise3, TEX_H, TEX_W } from './planetTextures';
+import { fbm3, generateTexture, generateTextureRows, noise3, TEX_H, TEX_W } from './planetTextures';
 import { prepareScene, renderFrame, ringColor } from './sphereRender';
 
 // Sentetik/belirleyici kontroller: gerçek bir yüzey verisiyle karşılaştırma yoktur (dokular şematiktir).
@@ -91,5 +91,14 @@ describe('fiziksel bilgiler ve sol panel sayıları', () => {
     expect(countsFor('jupiter')).toEqual({ relays: 0, assets: 0, stations: 0 });
     expect(ORDER.indexOf('moon')).toBe(ORDER.indexOf('earth') + 1);
     expect(new Set(ORDER).size).toBe(10);
+  });
+
+  it('satır parçalarıyla üretim (sayfa başlatmada ana iş parçacığını bölmek için), tek seferde üretimle bayt bayt aynıdır', () => {
+    for (const id of ['earth', 'mars', 'jupiter'] as const) {
+      const whole = generateTexture(id, 64, 32);
+      const out = new Uint8ClampedArray(64 * 32 * 3);
+      for (let j = 0; j < 32; j += 5) generateTextureRows(id, 64, 32, j, Math.min(32, j + 5), out);
+      expect(Array.from(out)).toEqual(Array.from(whole));
+    }
   });
 });

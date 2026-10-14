@@ -13,8 +13,12 @@
  * önümüzdeki rollingSec boyunca (bağlantı takviminden öngörülebilen HER kapalı hat dönemi: kavuşum, yer istasyonu boşluğu, cisim arkası) tampon
  * projekte edilir; böylece Ay senaryosunda da çalışır. 'strategy' ve 'coverage' olduğu gibi korunur.
  * 'adaptive' (Aşama 9): 'rolling' ile aynı projeksiyon, ama ufuk sabit değil: takvimdeki yakın kapalı hat döneminin UZUNLUĞUNA göre seçilir (AdaptiveConfig).
+ * Aşama 10 (hepsi seçenek; yapılandırma yoksa ilgili politika sırasıyla 'priority' / 'adaptive' ile BİREBİR aynıdır):
+ * 'valueAware': 'priority' + değere duyarlı kuyruk kuralı (ValueAwareConfig: bilim verisinde eski paketleri yeniden sırala / at); üretimi KISMAZ.
+ * 'valueAdaptive': 'adaptive' kısması + aynı kuyruk kuralı (kısma ile birlikte).
+ * 'adaptiveRobust': 'adaptive' ile aynı, ama takvim hatasına dayanıklı ufuk seçimi (AdaptiveRobustConfig).
  */
-export type Policy = 'fifo' | 'priority' | 'strategy' | 'coverage' | 'rolling' | 'adaptive';
+export type Policy = 'fifo' | 'priority' | 'strategy' | 'coverage' | 'rolling' | 'adaptive' | 'valueAware' | 'valueAdaptive' | 'adaptiveRobust';
 
 /**
  * Kavuşum stratejisi ("bütçeli kısma"; varsayılanı src/config/hypothetical.ts). Kesinti takvimi öngörülebilir varsayılır
@@ -127,7 +131,15 @@ export interface ForecastError {
  * surfaceClosure: araç tamponundaki veri yüzey hattı kapalıyken boşalmaz — havuz iki aşamalı izlenir (araç tamponu → uydu payı → Dünya); yüzey hattı takvimi de
  * (tahmin hatası dahil) stratejinin bildiği takvimdir. arqHold: ARQ kopyaları RTT boyunca uydu tamponunda kalır; havuzun boşalması RTT (= 2 × ışık gecikmesi) gecikir.
  */
-export interface ProjectionOptions { surfaceClosure?: boolean; arqHold?: boolean }
+export interface ProjectionOptions {
+  surfaceClosure?: boolean;
+  arqHold?: boolean;
+  /**
+   * Aşama 10: çok uydulu araçlarda uydu tamponları birbirinin yerine kullanılamaz: araç tamponu → planlanan uydunun payı (her uydunun payı kendi hattıyla boşalır); sınır her kapta ayrı
+   * (araç tamponu payı ve her uydunun payı). Tek rotalı araçlarda etkisizdir (Aşama 7-9 aritmetiği).
+   */
+  separateRelays?: boolean;
+}
 
 /**
  * Uyarlamalı kayan ufuk (Aşama 9). Her refreshSec'te, her araç için takvimden (stratejinin bildiği Dünya hattı takvimi) şimdi sürmekte olan ya da leadSec içinde
@@ -143,6 +155,55 @@ export interface AdaptiveConfig {
   minFactor: number;
   assetBufferShare?: number;
   refreshSec?: number;
+}
+
+/**
+ * Aşama 10: değere duyarlı kuyruk kuralı ('valueAware' ve 'valueAdaptive' politikaları). Yalnızca bilim verisi (en önemli sınıf dışındakiler) zamanla azalan değerli sayılır:
+ * paketin değeri 2^(−yaş / halfLifeSec). Kural YALNIZCA bu yapılandırma verildiğinde (yani "azalan değer" modeli seçiliyken) devreye girer; yoksa politika 'priority' ile birebir aynıdır.
+ * Kuyruk kuralı üretimi kısmaz.
+ */
+export interface ValueAwareConfig {
+  /** Azalan değerin yarı ömrü (sn). */
+  halfLifeSec: number;
+  /** 0–1: değeri başlangıç değerinin bu oranının altına inen bilim paketi tamponda atılır (atılan = `expired`; düşen değildir). 0 / yok: atma yok. */
+  expireBelow?: number;
+  /** Bilim verisini en yeni önce gönder (üstel azalmada, kapasite kısıtlıyken toplam değeri en çok artıran sıra); gönderimi süren paket bitirilir. */
+  newestFirst?: boolean;
+  /** Tampon doluyken yeni veriye yer açmak için en ESKİ bilim paketini at (bu bir `dropped` sayılır); yoksa eski kural (yeni paket ya da en yeni düşük sınıf atılır). */
+  evictOldest?: boolean;
+  /** Atma taramasının aralığı (sn, varsayılan 3600): yalnızca hesap maliyetini düşürür. */
+  scanSec?: number;
+}
+
+/**
+ * Aşama 10: takvim hatasına dayanıklı uyarlamalı ufuk ('adaptiveRobust'). 'adaptive' ile aynıdır, ama kavuşum kesintisi İÇERMEYEN kapalı dönemler için (yer istasyonu boşluğu,
+ * cisim arkası) şu korumalardan açık olanlar uygulanır (hepsi yoksa 'adaptive' ile birebir aynı):
+ * - capSec: ufuk bu süreyi aşamaz (ufku kırpma).
+ * - histFactor: güven aralığı. Tahmin edilen kapalı dönem uzunluğu, stratejinin GERÇEKTE gözlediği (geçmiş, hata yok) histSec içindeki en uzun kapalı dönemin histFactor katını aşamaz.
+ *   Geçmişte kapalı dönem hiç gözlenmediyse (başlangıç) takvimin kapalı dönem uzunluğuna güvenilmez (geri çekilme, aşağıya bakın).
+ * - trustMin: geri çekilme (kavuşum içeren dönemler dahil). Son checkSec'te takvim, gerçekte açık olan adımların trustMin oranından azını açık gösteriyorsa (pesimist ya da silinmiş takvim:
+ *   "hiç açık değil" görünen takvim) takvime güvenilmez; son checkSec'te hiç açık adım gözlenmediyse (kavuşum sırası) son hüküm korunur. Güvenilmeyen takvimde: fallbackSec > 0 ise ufuk sabit fallbackSec olur (yine aynı takvimle projeksiyon); fallbackSec yok ya da 0 ise KISMA YAPILMAZ (öncelikli kuralına geri çekilme).
+ * Kavuşum kesintisi içeren kapalı dönemlerde (astronomik, öngörülebilir) 'adaptive' kuralı aynen uygulanır.
+ */
+export interface AdaptiveRobustConfig extends AdaptiveConfig {
+  capSec?: number;
+  histFactor?: number;
+  histSec?: number;
+  trustMin?: number;
+  checkSec?: number;
+  fallbackSec?: number;
+}
+
+/**
+ * Aşama 10: gerçek çok uydulu yönlendirme (varsayılan yok = Aşama 9 davranışı: uydu seçimi bağlantı çizelgesinden, `assetRelay`).
+ * select: 'timeline' = çizelgedeki seçim (Aşama 9); 'leastFilled' = aracın görebildiği (yüzey hattı açık) uydular arasında tamponu EN AZ DOLU olan;
+ * 'openFirst' = önce Dünya hattı açık olanlar, onlar arasında en az dolu. Veri girdiği uydunun tamponunda kalır (uydu tamponları ayrı; Aşama 3-9'da da böyleydi, yalnızca
+ * strateji projeksiyonu bunu birbirinin yerine kullanılabilir sayıyordu: ProjectionOptions.separateRelays).
+ * isl: uydular arası bağlantı (topology.isl çiftleri, LinkSample.islUp): kendi Dünya hattı kapalı, eşininki açıkken tampondaki veri kbps hızıyla eşine aktarılır.
+ */
+export interface RoutingConfig {
+  select: 'timeline' | 'leastFilled' | 'openFirst';
+  isl?: { kbps: number };
 }
 
 export interface SchedClass {
@@ -180,11 +241,32 @@ export interface SchedConfig {
   valueHalfLivesSec?: number[];
   /** Yoksa hatlar kayıpsızdır ve gönderici paketi gönderir göndermez bırakır (Aşama 3-4 davranışı). */
   arq?: ArqConfig;
+  /** Aşama 10: 'valueAware' / 'valueAdaptive' için kuyruk kuralı; yoksa bu politikalar 'priority' / 'adaptive' ile birebir aynıdır. */
+  valueAware?: ValueAwareConfig;
+  /** Aşama 10: 'adaptiveRobust' için gerekli; yoksa kısma yapmaz (öncelikliyle aynı). */
+  adaptiveRobust?: AdaptiveRobustConfig;
+  /** Aşama 10: çok uydulu yönlendirme; yoksa Aşama 9 (çizelgedeki seçim, uydular arası bağlantı yok). */
+  routing?: RoutingConfig;
+  /**
+   * Aşama 10: telemetri de kısılır. Kısma çarpanı t (bilim verisi için) iken telemetri çarpanı = m + (1 − m) × t (m = bu değer, 0–1); m yoksa ya da 1 ise telemetri hiç kısılmaz (Aşama 4-9).
+   * Kısılan telemetri "üretilmeyen"dir. Yalnızca kısma yapan politikalara (strategy, coverage, rolling, adaptive, valueAdaptive, adaptiveRobust) etkir.
+   */
+  telemetryMinFactor?: number;
+  /**
+   * Aşama 10: telemetri (en önemli sınıf) için ayrılmış Dünya hattı payı (0–1): hat hızının bu oranı önce telemetriye ayrılır, kullanılmayan pay bilim verisine geçer (işi bırakmaz).
+   * Yok ya da 0: Aşama 3-9 davranışı.
+   */
+  telemetryShare?: number;
 }
 
 /** relay: ana (home) aktarma uydusu. alt (Aşama 9): aracın kullanabileceği DİĞER uydular; varsa bağlantı çizelgesi her adımda hangisinin kullanıldığını söyler (LinkSample.assetRelay). */
 export interface SchedAsset { id: string; body: string; relay: string; dataRateKbps: number; alt?: string[] }
-export interface SchedTopology { assets: SchedAsset[]; relays: string[] }
+export interface SchedTopology {
+  assets: SchedAsset[];
+  relays: string[];
+  /** Aşama 10: uydular arası bağlantı çiftleri (relays sırasında); LinkSample.islUp bu sırada. */
+  isl?: [number, number][];
+}
 
 /** Bir zaman adımındaki bağlantı durumu; diziler topology.assets / topology.relays sırasındadır. */
 export interface LinkSample {
@@ -196,6 +278,14 @@ export interface LinkSample {
   earthBlackout?: boolean[];
   /** Aşama 9: araç başına bu adımda kullanılan aktarma uydusunun topology.relays içindeki sırası (yoksa aracın ana uydusu). surfaceUp / surfaceDelaySec bu uyduya aittir. */
   assetRelay?: number[];
+  /**
+   * Aşama 10: çok uydulu araçlarda her aday uydu için (araç sırasında; aday listesi araçta ana uydu önce) bu adımdaki yüzey hattı durumu: relay = topology.relays sırası,
+   * up = yüzey hattı açık, delaySec = yüzey gecikmesi. `routing.select` 'timeline' dışındaysa çizelgeleyici uyduyu bunlardan seçer.
+   */
+  cand?: { relay: number; up: boolean; delaySec: number }[][];
+  /** Aşama 10: topology.isl çiftlerinin bu adımdaki durumu ve tek yön gecikmesi (sn). */
+  islUp?: boolean[];
+  islDelaySec?: number[];
 }
 
 export interface ClassStats {
@@ -217,6 +307,9 @@ export interface ClassStats {
   retransmissions: number;
   /** Tüm iletim denemeleri (başarılı + kaybolan; her iki hat). Yalnızca ARQ/hat hatası açıkken sayılır. */
   attempts: number;
+  /** Aşama 10: değere duyarlı kuyruk kuralı tamponda attı (değeri eşiğin altına inmiş bilim paketi); `dropped` ve `abandoned` değildir. Diğer politikalarda 0. */
+  expired: number;
+  expiredMb: number;
   /** Strateji yüzünden hiç üretilmeyen (kısılan) veri; kayıp (dropped) DEĞİLDİR. Talep = generated + suppressed. */
   suppressed: number;
   suppressedMb: number;
@@ -313,9 +406,25 @@ interface Held { p: Pkt; k: number; at: number; ok: boolean }
 class Fifo {
   private a: Pkt[] = [];
   private h = 0;
+  /** Aşama 10 (en yeni önce): arkadaki paket gönderimdeyse (sentMb > 0) yeni paket onun önüne girer, gönderimdeki paket bitirilir. */
+  pinBack = false;
   get length() { return this.a.length - this.h; }
   peek(): Pkt | undefined { return this.a[this.h]; }
-  push(p: Pkt) { this.a.push(p); }
+  peekBack(): Pkt | undefined { return this.length > 0 ? this.a[this.a.length - 1] : undefined; }
+  push(p: Pkt) {
+    if (this.pinBack && this.length > 0 && this.a[this.a.length - 1].sentMb > 0) this.a.splice(this.a.length - 1, 0, p);
+    else this.a.push(p);
+  }
+  /** Koşulu sağlayanları çıkarıp döner (sıra korunur). */
+  removeIf(pred: (p: Pkt) => boolean): Pkt[] {
+    let any = false;
+    for (let j = this.h; j < this.a.length; j++) if (pred(this.a[j])) { any = true; break; }
+    if (!any) return [];
+    const out: Pkt[] = [], keep: Pkt[] = [];
+    for (let j = this.h; j < this.a.length; j++) (pred(this.a[j]) ? out : keep).push(this.a[j]);
+    this.a = keep; this.h = 0;
+    return out;
+  }
   shift(): Pkt | undefined {
     const p = this.a[this.h++];
     if (this.h > 1024 && this.h * 2 > this.a.length) { this.a = this.a.slice(this.h); this.h = 0; }
@@ -360,18 +469,31 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const st = policy === 'strategy' ? cfg.strategy : undefined;
   const cv = policy === 'coverage' ? cfg.coverage : undefined;
   const rl = policy === 'rolling' ? cfg.rolling : undefined;
-  const ad = policy === 'adaptive' ? cfg.adaptive : undefined;
+  // Aşama 10: 'valueAdaptive' = 'adaptive' kısması + değere duyarlı kuyruk; 'adaptiveRobust' = takvim hatasına dayanıklı ufuk. Yapılandırma yoksa ilgili eski politikayla birebir aynıdır.
+  const rob = policy === 'adaptiveRobust' ? cfg.adaptiveRobust : undefined;
+  const ad: AdaptiveConfig | undefined = policy === 'adaptive' || policy === 'valueAdaptive' ? cfg.adaptive : rob;
+  const va = policy === 'valueAware' || policy === 'valueAdaptive' ? cfg.valueAware : undefined;
+  const newest = !!va?.newestFirst, evictOld = !!va?.evictOldest;
+  const expireBelow = va && va.expireBelow !== undefined ? Math.min(0.999999, Math.max(0, va.expireBelow)) : 0;
+  const expireAgeSec = va && expireBelow > 0 ? va.halfLifeSec * Math.log2(1 / expireBelow) : Infinity;
+  const scanSteps = Math.max(1, Math.round((va?.scanSec ?? 3600) / dt));
+  const tmin = cfg.telemetryMinFactor;
+  const dyn = !!cfg.routing && cfg.routing.select !== 'timeline';
+  const islKbps = cfg.routing?.isl?.kbps ?? 0;
+  const tShare = Math.min(1, Math.max(0, cfg.telemetryShare ?? 0));
+  if (newest) for (const b of [...assetBuf, ...relayBuf]) b.q.forEach((q, k) => { if (rank[k] !== topRank) q.pinBack = true; });
   /** Havuz projeksiyonu kullanan politikalar. */
   const proj = !!(cv || rl || ad);
   // Aşama 9 seçenekleri (varsayılan kapalı: Aşama 3-8 aritmetiği birebir). arqHold yalnızca ARQ varken anlamlıdır.
   const surfClose = proj && !!cfg.projection?.surfaceClosure;
   const arqHold = proj && !!cfg.projection?.arqHold && !!cfg.arq;
+  const sepOpt = proj && !!cfg.projection?.separateRelays;
   // Stratejilerin bildiği takvim (tahmin): kusursuzsa gerçekle aynı; fc ile sapabilir. Gerçek bağlantılar (samples) hiç değişmez.
   const fc = cfg.forecast;
   const edgeSteps = Math.round((fc?.edgeShiftSec ?? 0) / dt), offSteps = Math.round((fc?.offsetSec ?? 0) / dt);
   const lossBias = fc?.lossBiasPct ?? 0;
   const fUp = topo.relays.map((_, ri) => (st || proj) ? forecastFlags(samples.map((x) => x.earthUp[ri]), edgeSteps, offSteps, false) : new Uint8Array(0));
-  const fBlack = topo.relays.map((_, ri) => st || cv ? forecastFlags(samples.map((x) => !!x.earthBlackout?.[ri]), edgeSteps, offSteps, true) : new Uint8Array(0));
+  const fBlack = topo.relays.map((_, ri) => st || cv || rob ? forecastFlags(samples.map((x) => !!x.earthBlackout?.[ri]), edgeSteps, offSteps, true) : new Uint8Array(0));
   // arqHold: ARQ kopyası RTT boyunca tamponda yer tutar, yani havuz Dünya hattı AÇIKKEN değil, RTT sonra (ACK) boşalır. Simülasyonda kopya, gönderim adımından
   // 1 + ceil(RTT/adım) adım sonra bırakılır (adım başında işlenir): sürekli zamanlı projeksiyonda bu, açık/kapalı bayrağının ceil(RTT/adım) adım ötelenmesidir.
   // (Ay'da RTT ~3 sn < adım: öteleme 1 adımdır; adımın ayrıklaştırma sonucudur.) Başlangıçtan önce gönderim olmadığı için ilk adımlarda boşalma yoktur.
@@ -383,7 +505,9 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
       })
     : fUp;
   // surfaceClosure: yüzey hattı (araç → uydu) takvimi (tahmin hatası aynı kuralla uygulanır).
-  const fSurf = topo.assets.map((_, ai) => (surfClose ? forecastFlags(samples.map((x) => x.surfaceUp[ai]), edgeSteps, offSteps, false) : new Uint8Array(0)));
+  // Aşama 10: separateRelays (çok rotalı araçlar) da yüzey hattı takvimine ve planlanan uydu rotasına ihtiyaç duyar.
+  const sepAsset = topo.assets.map((a) => sepOpt && (a.alt?.length ?? 0) > 0);
+  const fSurf = topo.assets.map((_, ai) => (surfClose || sepAsset[ai] ? forecastFlags(samples.map((x) => x.surfaceUp[ai]), edgeSteps, offSteps, false) : new Uint8Array(0)));
   // Kesinti öngörüsü (yalnızca strateji): relay başına, adım i için kesintiye kalan süre içinde mi, ve o kesintinin bitişine kalan adım.
   const ahead = topo.relays.map(() => new Array<boolean>(samples.length).fill(false));
   const endsIn = topo.relays.map(() => new Array<number>(samples.length).fill(0));
@@ -407,15 +531,23 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   // Aşama 9: aracın kullanabileceği uydular (ana + alt; tek uydulu topolojide tek rota = Aşama 3-8 aritmetiği) ve projeksiyonun kullandığı takvim değişim adımları.
   const routes = topo.assets.map((a) => [relayIndex.get(a.relay)!, ...(a.alt ?? []).map((r) => relayIndex.get(r)).filter((x): x is number => x !== undefined)]);
   const routeTotal = topo.relays.map(() => 0);
-  const flipsOf = (flags: Uint8Array) => { const o: number[] = []; for (let i = 1; i < flags.length; i++) if (flags[i] !== flags[i - 1]) o.push(i); return o; };
+  const flipsOf = (flags: ArrayLike<number>) => { const o: number[] = []; for (let i = 1; i < flags.length; i++) if (flags[i] !== flags[i - 1]) o.push(i); return o; };
   const aFlips: number[][] = topo.assets.map(() => []);
   const aPtr = topo.assets.map(() => 0);
+  // Aşama 10 (separateRelays): çizelgedeki (planlanan) uydu rotası, araç başına adım adım (rotalar içindeki sıra).
+  const planRoute = topo.assets.map((_, ai) => {
+    if (!sepAsset[ai]) return new Int8Array(0);
+    const o = new Int8Array(samples.length);
+    for (let t = 0; t < o.length; t++) o[t] = Math.max(0, routes[ai].indexOf(samples[t].assetRelay ? samples[t].assetRelay![ai] : routes[ai][0]));
+    return o;
+  });
   if (proj) {
     const relFlips = projUp.map(flipsOf);
     topo.assets.forEach((_, ai) => {
       const set = new Set<number>();
       for (const r of routes[ai]) for (const f of relFlips[r]) set.add(f);
-      if (surfClose) for (const f of flipsOf(fSurf[ai])) set.add(f);
+      if (surfClose || sepAsset[ai]) for (const f of flipsOf(fSurf[ai])) set.add(f);
+      if (sepAsset[ai]) for (const f of flipsOf(planRoute[ai])) set.add(f);
       aFlips[ai] = [...set].sort((x, y) => x - y);
     });
   }
@@ -449,7 +581,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const adMin = ad ? Math.max(1, Math.ceil(ad.minSec / dt)) : 0;
   const adMax = ad ? Math.max(adMin, Math.ceil(ad.maxSec / dt)) : 0;
   const adLead = ad ? Math.ceil(ad.leadSec / dt) : 0;
-  const adRefresh = Math.max(1, Math.round((cfg.adaptive?.refreshSec ?? 1800) / dt));
+  const adRefresh = Math.max(1, Math.round((ad?.refreshSec ?? 1800) / dt));
   // 'adaptive': araç için takvimde (tahmin) rotalardan HİÇBİRİ Dünya hattını açık tutmuyorsa kapalı dönem. Tek rotada fUp'un kendisi.
   const spellUp = ad ? topo.assets.map((_, ai) => {
     if (routes[ai].length === 1) return fUp[routes[ai][0]];
@@ -477,6 +609,108 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     const [a, b] = sp;
     return Math.min(adMax, Math.max(adMin, b - i + Math.ceil(ad!.tailFactor * (b - a))));
   };
+  // ---- Aşama 10: takvim hatasına dayanıklı uyarlamalı ufuk ('adaptiveRobust'; ayrıntı: AdaptiveRobustConfig) ----
+  const robCap = rob?.capSec !== undefined ? Math.max(1, Math.ceil(rob.capSec / dt)) : undefined;
+  /** Geri çekilme ufku (adım); −1: kısma yok (öncelikli kuralı). */
+  const robFb = rob?.fallbackSec !== undefined && rob.fallbackSec > 0 ? Math.max(1, Math.ceil(rob.fallbackSec / dt)) : -1;
+  const robHist = Math.max(1, Math.ceil((rob?.histSec ?? 7 * 86400) / dt));
+  const robCheck = Math.max(1, Math.ceil((rob?.checkSec ?? 2 * 86400) / dt));
+  /** Her uydu için kavuşum işareti (tahmin takvimi) önek toplamı: [a, b) aralığında kavuşum var mı. */
+  const blackPref = rob ? topo.relays.map((_, ri) => { const o = new Int32Array(samples.length + 1); for (let t = 0; t < samples.length; t++) o[t + 1] = o[t] + (fBlack[ri][t] ? 1 : 0); return o; }) : [];
+  const spellHasBlackout = (ai: number, a: number, b: number) => routes[ai].some((r) => blackPref[r][b] - blackPref[r][a] > 0);
+  const truthUp = (ai: number, t: number) => { for (const r of routes[ai]) if (samples[t].earthUp[r]) return true; return false; };
+  /** Gözlenen (gerçek) geçmişte, [i − histSec, i) içindeki en uzun kapalı dönem (adım). */
+  const observedLongestClosed = (ai: number, i: number): number => {
+    let best = 0, run = 0;
+    for (let t = Math.max(0, i - robHist); t < i; t++) { if (truthUp(ai, t)) run = 0; else if (++run > best) best = run; }
+    return best;
+  };
+  /** Takvim güvenilir mi: son checkSec'te gerçekte açık olan adımların en az trustMin oranını açık gösteriyor mu. Son checkSec'te hiç açık adım gözlenmediyse (ör. kavuşum) son hüküm korunur. */
+  const trustMem = topo.assets.map(() => true);
+  const calendarTrusted = (ai: number, i: number): boolean => {
+    let ut = 0, uf = 0;
+    for (let t = Math.max(0, i - robCheck); t < i; t++) { if (truthUp(ai, t)) ut++; if (spellUp[ai][t]) uf++; }
+    if (ut > 0) trustMem[ai] = uf >= rob!.trustMin! * ut;
+    return trustMem[ai];
+  };
+  const clampH = (h: number) => Math.min(adMax, Math.max(adMin, h));
+  const retreat = () => (robFb > 0 ? clampH(robFb) : -1);
+  const robustSteps = (ai: number, i: number): number => {
+    const r = rob!;
+    const sp = closedSpell(ai, i);
+    const black = !!sp && spellHasBlackout(ai, sp[0], sp[1]);
+    if (r.trustMin !== undefined && !calendarTrusted(ai, i)) return retreat(); // güvenilmeyen takvim: kavuşum içeren dönemlerde de
+
+    if (!sp) return adMin;
+    let [a, b] = sp;
+    if (!black && r.histFactor !== undefined) {
+      const lobs = observedLongestClosed(ai, i);
+      if (lobs === 0) return retreat(); // geçmişte kapalı dönem gözlenmedi: takvimin uzunluğuna güvenilmez
+      b = Math.min(b, a + Math.ceil(r.histFactor * lobs));
+    }
+    let h = clampH(Math.max(b - i, 0) + Math.ceil(r.tailFactor * (b - a)));
+    if (!black && robCap !== undefined) h = Math.min(h, Math.max(adMin, robCap));
+    return h;
+  };
+  const horizonSteps = (ai: number, i: number): number => (rob ? robustSteps(ai, i) : adaptiveSteps(ai, i));
+  /** Telemetri çarpanı (Aşama 10): telemetryMinFactor yoksa 1 (Aşama 4-9: telemetri kısılmaz). */
+  const ftOf = (f: number): number => (tmin === undefined ? 1 : tmin + (1 - tmin) * f);
+  /**
+   * Aşama 10 (separateRelays, çok rotalı araç): uydu tamponları birbirinin yerine kullanılamaz. Kaplar: araç tamponu aa, her rotanın uydu payı bb[j].
+   * aa, planlanan rotaya yüzey hattı açıkken (σ) akar; her bb[j] kendi hattıyla boşalır. Ölçüt, kapların kendi sınırlarına oranının tepesidir (≤ 1 olmalı; margin sınırlara dahildir).
+   * Ayrı bir işlevdir: varsayılan (tek havuz) yol projectThrottle'da Aşama 9 ile aynı kalır.
+   */
+  const projectSeparate = (ai: number, i: number, T: number, margin: number, minFactor: number, assetShare: number): number => {
+    const a = topo.assets[ai];
+    const rts = routes[ai];
+    const fr = rts.map((ri) => (routeTotal[ri] > 0 ? assetRate[ai].total / routeTotal[ri] : 0));
+    const lossFc = cfg.arq ? Math.min(100, Math.max(0, cfg.arq.earthLossPct * (1 + lossBias / 100))) : 0;
+    const dr = rts.map((ri, j) => ((cfg.relayDownlinkKbps[topo.relays[ri]] ?? 0) / 1000) * fr[j] * (cfg.arq ? 1 - lossFc / 100 : 1));
+    const fl = aFlips[ai];
+    while (aPtr[ai] < fl.length && fl[aPtr[ai]] <= i) aPtr[ai]++;
+    const asset0 = assetBuf[ai].usedMb;
+    const peakSep = (f: number) => {
+      const g = assetRate[ai].top * ftOf(f) + assetRate[ai].rest * f;
+      const sigS = ((cfg.surfaceLinkKbps[a.body] ?? 0) / 1000) * (cfg.arq ? 1 - cfg.arq.surfaceLossPct / 100 : 1);
+      const aLim = margin * assetShare * assetBuf[ai].capMb;
+      const bLim = rts.map((ri, j) => margin * relayBuf[ri].capMb * fr[j]);
+      let aa = asset0;
+      const bb = rts.map((ri, j) => Math.max(0, relayBuf[ri].usedMb * fr[j]));
+      const ratio = () => { let r = aLim > 0 ? aa / aLim : 0; for (let j = 0; j < bb.length; j++) { const x = bLim[j] > 0 ? bb[j] / bLim[j] : bb[j] > 0 ? Infinity : 0; if (x > r) r = x; } return r; };
+      let t = i, k = aPtr[ai], pk = ratio();
+      const db = new Array<number>(bb.length).fill(0);
+      while (t < T) {
+        const nx = k < fl.length && fl[k] < T ? fl[k] : T;
+        let left = (nx - t) * dt;
+        const rj = planRoute[ai][t], sg = fSurf[ai][t] ? sigS : 0;
+        while (left > 1e-9) {
+          const flowIn = sg > 0 ? (aa > 1e-12 ? sg : Math.min(g, sg)) : 0;
+          const da = g - flowIn;
+          for (let j = 0; j < bb.length; j++) {
+            const dn = projUp[rts[j]][t] ? dr[j] : 0, inflow = j === rj ? flowIn : 0;
+            db[j] = inflow - (bb[j] > 1e-12 ? dn : Math.min(dn, inflow));
+          }
+          let step = left;
+          if (aa > 1e-12 && da < 0) step = Math.min(step, aa / -da);
+          for (let j = 0; j < bb.length; j++) if (bb[j] > 1e-12 && db[j] < 0) step = Math.min(step, bb[j] / -db[j]);
+          step = Math.max(step, 1e-9);
+          aa = Math.max(0, aa + da * step);
+          for (let j = 0; j < bb.length; j++) bb[j] = Math.max(0, bb[j] + db[j] * step);
+          left -= step;
+          const r = ratio(); if (r > pk) pk = r;
+        }
+        if (nx === fl[k]) k++;
+        t = nx;
+      }
+      return pk;
+    };
+    if (peakSep(1) <= 1) return 1;
+    if (peakSep(minFactor) > 1) return minFactor;
+    let lo = minFactor, hi = 1;
+    for (let it = 0; it < 10; it++) { const mid = (lo + hi) / 2; if (peakSep(mid) <= 1) lo = mid; else hi = mid; }
+    return lo;
+  };
+
   /**
    * Havuz (araç tamponu payı + uydu tamponunun hız oranındaki payı) i adımından T adımına (T hariç) ileri izlenir; tepe doluluğu margin × kapasiteyi
    * aşmayan en büyük bilim verisi çarpanı döner (ikili arama). Dünya hattı AÇIK/KAPALI bilgisi tahmin takviminden (projUp), ortalama kayıp tahminden gelir.
@@ -484,6 +718,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
    * surfaceClosure: havuz iki aşamalı izlenir (araç tamponu a → uydu payı r → Dünya); a yalnızca yüzey hattı açıkken r'ye akar. Sınır yine toplam (a + r) üzerindedir.
    */
   const projectThrottle = (ai: number, i: number, T: number, margin: number, minFactor: number, assetShare: number): number => {
+    if (sepAsset[ai] && routes[ai].length > 1) return projectSeparate(ai, i, T, margin, minFactor, assetShare);
     const a = topo.assets[ai];
     const rts = routes[ai];
     const fr = rts.map((ri) => (routeTotal[ri] > 0 ? assetRate[ai].total / routeTotal[ri] : 0));
@@ -506,7 +741,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     const asset0 = assetBuf[ai].usedMb, relay0 = Math.max(0, used - asset0);
     // Tek havuz (varsayılan; Aşama 7-8 aritmetiği): havuz hattı açıkken boşalır, kapalıyken boşalmaz.
     const peakSingle = (f: number) => {
-      const g = assetRate[ai].top + assetRate[ai].rest * f;
+      const g = tmin === undefined ? assetRate[ai].top + assetRate[ai].rest * f : assetRate[ai].top * ftOf(f) + assetRate[ai].rest * f;
       let t = i, k = aPtr[ai], b = used, pk = used;
       while (t < T) {
         const nx = k < fl.length && fl[k] < T ? fl[k] : T;
@@ -519,7 +754,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
       return pk;
     };
     const peakMulti = (f: number) => {
-      const g = assetRate[ai].top + assetRate[ai].rest * f;
+      const g = tmin === undefined ? assetRate[ai].top + assetRate[ai].rest * f : assetRate[ai].top * ftOf(f) + assetRate[ai].rest * f;
       let t = i, k = aPtr[ai], b = used, pk = used;
       while (t < T) {
         const nx = k < fl.length && fl[k] < T ? fl[k] : T;
@@ -535,7 +770,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     const peakPool = single ? peakSingle : peakMulti;
     // İki aşamalı (surfaceClosure): aa = araç tamponu, rr = uydu payı. Aralık içinde akışlar sabit; aa ya da rr boşalınca rejim değişir.
     const peakTwo = (f: number) => {
-      const g = assetRate[ai].top + assetRate[ai].rest * f;
+      const g = tmin === undefined ? assetRate[ai].top + assetRate[ai].rest * f : assetRate[ai].top * ftOf(f) + assetRate[ai].rest * f;
       let t = i, k = aPtr[ai], pk = used, aa = asset0, rr = relay0;
       while (t < T) {
         const nx = k < fl.length && fl[k] < T ? fl[k] : T;
@@ -581,6 +816,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const earthBad = burst && arq ? topo.relays.map((_, ri) => genLinkStates(samples.length, dt, arq.earthLossPct, burst, burst.seed + 101 + ri)) : [];
   const surfRng = burst ? topo.assets.map((_, ai) => mulberry32(burst.seed + 211 + ai)) : [];
   const earthRng = burst ? topo.relays.map((_, ri) => mulberry32(burst.seed + 311 + ri)) : [];
+  const expd = new Array(nC).fill(0), expdMb = new Array(nC).fill(0);
   const aband = new Array(nC).fill(0), abandMb = new Array(nC).fill(0), txLost = new Array(nC).fill(0), retx = new Array(nC).fill(0);
   const surfAcc = topo.assets.map(() => 0), earthAcc = topo.relays.map(() => 0);
   const inflight: Held[][] = topo.relays.map(() => []);
@@ -602,6 +838,8 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     if (lost) { if (++run[idx] > maxLossRun) maxLossRun = run[idx]; } else run[idx] = 0;
     return lost;
   };
+  const islCredit = new Array((topo.isl?.length ?? 0) * 2).fill(0);
+  const maxPacketMb = Math.max(...classes.map((c) => c.packetMb));
   let seq = 0;
   let droppedCum = 0;
   const series: SeriesPoint[] = [];
@@ -611,26 +849,35 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const lose = (p: Pkt) => { drop[p.cls]++; dropMb[p.cls] += p.sizeMb; droppedCum++; };
 
   /** Daha düşük öncelikli sınıflardan atılabilecek hacim (yalnızca 'priority'). */
-  const evictable = (b: Buffer, cls: number) => {
+  const evictable = (b: Buffer, cls: number, sameClass = false) => {
     if (policy === 'fifo') return 0;
     let s = 0;
     for (let k = 0; k < nC; k++) if (rank[k] > rank[cls]) s += b.usedByClass[k] - b.held[k];
+    if (sameClass && evictOld && rank[cls] !== topRank) s += b.usedByClass[cls] - b.held[cls]; // Aşama 10: yeni (üretilen) veriye yer açmak için aynı sınıfın eski paketleri
     return s;
   };
   const canAccept = (b: Buffer, p: Pkt) => b.freeMb >= p.sizeMb - 1e-9 || b.freeMb + evictable(b, p.cls) >= p.sizeMb - 1e-9;
 
-  const put = (b: Buffer, p: Pkt) => {
+  /** fresh: araçta yeni üretilen paket (Aşama 10 evictOldest: tampon doluysa aynı sınıfın en eski paketi atılır; uydu/aktarma hopunda yalnızca daha düşük sınıflar atılır). */
+  const put = (b: Buffer, p: Pkt, fresh = false) => {
     if (b.freeMb < p.sizeMb - 1e-9) {
-      if (b.freeMb + evictable(b, p.cls) < p.sizeMb - 1e-9) { lose(p); return; }
+      if (b.freeMb + evictable(b, p.cls, fresh) < p.sizeMb - 1e-9) { lose(p); return; }
       // en düşük öncelikli sınıfın en yeni paketlerinden başlayarak yer aç
       const order = [...Array(nC).keys()].filter((k) => rank[k] > rank[p.cls]).sort((x, y) => rank[y] - rank[x]);
       for (const k of order) {
         while (b.freeMb < p.sizeMb - 1e-9) {
-          const v = b.q[k].pop();
+          const v = evictOld ? b.q[k].shift() : b.q[k].pop();
           if (!v) break;
           b.usedMb -= v.sizeMb; b.usedByClass[k] -= v.sizeMb; lose(v);
         }
         if (b.freeMb >= p.sizeMb - 1e-9) break;
+      }
+      if (fresh && evictOld && rank[p.cls] !== topRank) {
+        while (b.freeMb < p.sizeMb - 1e-9) {
+          const v = b.q[p.cls].shift();
+          if (!v) break;
+          b.usedMb -= v.sizeMb; b.usedByClass[p.cls] -= v.sizeMb; lose(v);
+        }
       }
     }
     p.seq = seq++;
@@ -638,14 +885,22 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     b.usedMb += p.sizeMb; b.usedByClass[p.cls] += p.sizeMb;
   };
 
+  /** Aşama 10 (en yeni önce): bilim sınıflarında sıradaki paket kuyruğun SONUNDAKİdir; diğer her durumda başı (Aşama 3-9). */
+  // Kural kapalıyken (Aşama 3-9) doğrudan eski çağrılar: sıcak döngüde ek maliyet yok.
+  const headOf: (b: Buffer, k: number) => Pkt | undefined = newest
+    ? (b, k) => (rank[k] !== topRank ? b.q[k].peekBack() : b.q[k].peek())
+    : (b, k) => b.q[k].peek();
+  const popHead: (b: Buffer, k: number) => Pkt | undefined = newest
+    ? (b, k) => (rank[k] !== topRank ? b.q[k].pop() : b.q[k].shift())
+    : (b, k) => b.q[k].shift();
   /** Sıradaki paketin sınıfı: FIFO'da en eski, öncelikliyse en önemli sınıfın başı. */
   const pick = (b: Buffer): number => {
     let best = -1;
     for (let k = 0; k < nC; k++) {
-      const h = b.q[k].peek();
+      const h = headOf(b, k);
       if (!h) continue;
       if (best < 0) { best = k; continue; }
-      const bh = b.q[best].peek()!;
+      const bh = headOf(b, best)!;
       const better = policy !== 'fifo'
         ? rank[k] < rank[best] || (rank[k] === rank[best] && h.seq < bh.seq)
         : h.seq < bh.seq;
@@ -653,8 +908,18 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     }
     return best;
   };
+  /** Yalnızca en önemli sınıflar arasından sıradaki paketin sınıfı (ayrılmış telemetri payı). */
+  const pickTop = (b: Buffer): number => {
+    let best = -1;
+    for (let k = 0; k < nC; k++) {
+      if (rank[k] !== topRank) continue;
+      const h = headOf(b, k);
+      if (h && (best < 0 || h.seq < headOf(b, best)!.seq)) best = k;
+    }
+    return best;
+  };
   const take = (b: Buffer, k: number): Pkt => {
-    const p = b.q[k].shift()!;
+    const p = popHead(b, k)!;
     b.usedMb -= p.sizeMb; b.usedByClass[k] -= p.sizeMb;
     if (b.usedMb < 1e-9) b.usedMb = 0;
     return p;
@@ -697,6 +962,18 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
       });
     }
 
+    // 0c) Aşama 10: değere duyarlı kuyruk kuralı: değeri eşiğin altına inmiş bilim paketleri tamponda atılır (taranma aralığı scanSec; gönderimdeki ya da ARQ'da tutulan kopyalar kuyrukta değildir)
+    if (va && expireAgeSec < Infinity && i % scanSteps === 0) {
+      for (const b of [...assetBuf, ...relayBuf]) {
+        for (let k = 0; k < nC; k++) {
+          if (rank[k] === topRank) continue;
+          const gone = b.q[k].removeIf((p) => now - p.createdSec > expireAgeSec);
+          for (const p of gone) { b.usedMb -= p.sizeMb; b.usedByClass[k] -= p.sizeMb; expd[k]++; expdMb[k] += p.sizeMb; }
+          if (gone.length && b.usedMb < 1e-9) b.usedMb = 0;
+        }
+      }
+    }
+
     // 1) Üretim (deterministik birikim). Strateji: en önemli sınıf dışındakiler kısılır; kısılan hiç üretilmez.
     topo.assets.forEach((a, ai) => {
       const mbPerSec = (a.dataRateKbps / 1000) * cfg.dutyCycle;
@@ -718,7 +995,8 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
       if (ad) {
         throttle = covThrottle[ai];
         if (assetRate[ai].rest > 0 && i % adRefresh === 0) {
-          throttle = covThrottle[ai] = projectThrottle(ai, i, Math.min(samples.length, i + adaptiveSteps(ai, i)), ad.margin, ad.minFactor, ad.assetBufferShare ?? 0);
+          const hs = horizonSteps(ai, i);
+          throttle = covThrottle[ai] = hs < 0 ? 1 : projectThrottle(ai, i, Math.min(samples.length, i + hs), ad.margin, ad.minFactor, ad.assetBufferShare ?? 0);
         }
       }
       if (st) {
@@ -732,9 +1010,10 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
           throttle = need > 0 ? Math.min(1, Math.max(st.minFactor, allowed / need)) : 1;
         }
       }
+      const fTop = ftOf(throttle); // telemetryMinFactor yoksa 1
       for (let k = 0; k < nC; k++) {
         const full = mbPerSec * (classes[k].share / shareSum) * dt;
-        const f = rank[k] === topRank ? 1 : throttle;
+        const f = rank[k] === topRank ? fTop : throttle;
         if (f < 1) {
           supAcc[ai][k] += full * (1 - f);
           supMb[k] += full * (1 - f);
@@ -745,21 +1024,37 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
           acc[ai][k] -= classes[k].packetMb;
           const p: Pkt = { cls: k, sizeMb: classes[k].packetMb, createdSec: now, sentMb: 0, seq: 0, propSec: 0, attempts: 0 };
           gen[k]++; genMb[k] += p.sizeMb;
-          put(assetBuf[ai], p);
+          put(assetBuf[ai], p, true);
         }
       }
     });
 
     // 2) Araç → uydu
     topo.assets.forEach((a, ai) => {
-      if (!s.surfaceUp[ai]) return;
+      let surfUp = s.surfaceUp[ai], dstIdx = s.assetRelay ? s.assetRelay[ai] : relayIndex.get(a.relay)!, surfDelay = s.surfaceDelaySec[ai];
+      // Aşama 10: dinamik uydu seçimi (yüzey hattı açık adaylar arasından tamponu en az dolu / önce Dünya hattı açık olan)
+      const cands = dyn ? s.cand?.[ai] : undefined;
+      if (cands && cands.length > 1) {
+        let best = -1, bestKey = Infinity;
+        for (let j = 0; j < cands.length; j++) {
+          const c = cands[j];
+          if (!c.up) continue;
+          const buf = relayBuf[c.relay];
+          const fill = buf.capMb > 0 ? buf.usedMb / buf.capMb : 1;
+          const key = cfg.routing!.select === 'openFirst' ? (s.earthUp[c.relay] ? 0 : 2) + fill : fill;
+          if (key < bestKey - 1e-12) { bestKey = key; best = j; }
+        }
+        surfUp = best >= 0;
+        if (best >= 0) { dstIdx = cands[best].relay; surfDelay = cands[best].delaySec; }
+      }
+      if (!surfUp) return;
       const src = assetBuf[ai];
-      const dst = relayBuf[s.assetRelay ? s.assetRelay[ai] : relayIndex.get(a.relay)!];
+      const dst = relayBuf[dstIdx];
       let budget = ((cfg.surfaceLinkKbps[a.body] ?? 0) / 1000) * dt;
       while (budget > 1e-12) {
         const k = pick(src);
         if (k < 0) break;
-        const p = src.q[k].peek()!;
+        const p = headOf(src, k)!;
         const need = p.sizeMb - p.sentMb;
         if (budget < need) { p.sentMb += budget; break; }
         if (!canAccept(dst, p)) break; // uydu tamponu dolu: araç gönderemez, kendi tamponunda tutar
@@ -771,32 +1066,63 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
           if (p.attempts >= arq.maxAttempts) { take(src, k); aband[k]++; abandMb[k] += p.sizeMb; abandSurface++; }
           else {
             retx[k]++;
-            if (surfRetry > 0) { src.q[k].shift(); src.held[k] += p.sizeMb; surfPend[ai].push({ p, k, at: now + surfRetry, ok: false }); }
+            if (surfRetry > 0) { popHead(src, k); src.held[k] += p.sizeMb; surfPend[ai].push({ p, k, at: now + surfRetry, ok: false }); }
           }
           continue;
         }
         take(src, k);
         p.sentMb = 0; p.attempts = 0;
-        p.propSec += s.surfaceDelaySec[ai];
+        p.propSec += surfDelay;
         put(dst, p);
       }
     });
+
+    // 2b) Aşama 10: uydular arası bağlantı: Dünya hattı kapalı uydudaki veri, hattı açık eşine aktarılır (paketin tamamı; kesirli aktarma ilerlemesi sonraki hatta devredilmez)
+    if (islKbps > 0 && topo.isl) {
+      topo.isl.forEach(([x, y], pi) => {
+        if (!s.islUp?.[pi]) return;
+        for (const [from, to] of [[x, y], [y, x]] as [number, number][]) {
+          const key = pi * 2 + (from === x ? 0 : 1);
+          if (s.earthUp[from] || !s.earthUp[to]) { islCredit[key] = 0; continue; }
+          const src = relayBuf[from], dst = relayBuf[to];
+          islCredit[key] = Math.min(islCredit[key] + (islKbps / 1000) * dt, 2 * maxPacketMb);
+          for (;;) {
+            const k = pick(src);
+            if (k < 0) { islCredit[key] = 0; break; }
+            const p = headOf(src, k)!;
+            const need = p.sizeMb - p.sentMb;
+            if (islCredit[key] < need - 1e-12 || !canAccept(dst, p)) break;
+            islCredit[key] -= need;
+            take(src, k);
+            p.sentMb = 0; p.attempts = 0;
+            p.propSec += s.islDelaySec?.[pi] ?? 0;
+            put(dst, p);
+          }
+        }
+      });
+    }
 
     // 3) Uydu → Dünya
     topo.relays.forEach((r, ri) => {
       if (!s.earthUp[ri]) return;
       const buf = relayBuf[ri];
       let budget = ((cfg.relayDownlinkKbps[r] ?? 0) / 1000) * dt;
+      // Aşama 10: ayrılmış telemetri payı: önce yalnızca en önemli sınıf, bu pay kadar bütçeyle (kullanılmayan kısım aşağıdaki genel döngüye devredilir)
+      let reserve = tShare > 0 ? budget * tShare : 0;
       while (budget > 1e-12) {
-        const k = pick(buf);
+        const k = reserve > 1e-12 ? pickTop(buf) : pick(buf);
+        if (reserve > 1e-12 && k < 0) { reserve = 0; continue; }
         if (k < 0) break;
-        const p = buf.q[k].peek()!;
+        const p = headOf(buf, k)!;
         const need = p.sizeMb - p.sentMb;
-        if (budget < need) { p.sentMb += budget; break; }
+        if (reserve > 1e-12) {
+          if (reserve < need) { const part = Math.min(reserve, budget); p.sentMb += part; budget -= part; reserve = 0; continue; }
+          reserve -= need;
+        } else if (budget < need) { p.sentMb += budget; break; }
         budget -= need;
         if (arq) {
           // gönderici kopyayı RTT boyunca tamponunda tutar: kuyruktan çıkar ama yer tutmaya devam eder
-          buf.q[k].shift(); p.sentMb = 0; p.attempts++; buf.held[k] += p.sizeMb;
+          popHead(buf, k); p.sentMb = 0; p.attempts++; buf.held[k] += p.sizeMb;
           const rtt = 2 * s.earthDelaySec[ri];
           att[k]++;
           if (attemptLost(true, ri, i)) { txLost[k]++; inflight[ri].push({ p, k, at: end + rtt, ok: false }); continue; }
@@ -839,6 +1165,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const mk = (k: number): ClassStats => {
     const l = Float64Array.from(lat[k]).sort(); // sayısal artan (Float64Array.sort karşılaştırıcısız ve çok daha hızlı; sonuç aynı)
     return {
+      expired: expd[k], expiredMb: expdMb[k],
       abandoned: aband[k], abandonedMb: abandMb[k], txLost: txLost[k], retransmissions: retx[k], attempts: att[k],
       generated: gen[k], delivered: deliv[k], dropped: drop[k], stored: stored[k], delayed: delayed[k], remaining: remaining[k],
       suppressed: sup[k], suppressedMb: supMb[k],
@@ -856,6 +1183,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const sum = (f: (c: ClassStats) => number) => all.reduce((x, c) => x + f(c), 0);
   const allLat = (() => { const a = new Float64Array(lat.reduce((n, x) => n + x.length, 0)); let o = 0; for (const x of lat) for (let i = 0; i < x.length; i++) a[o++] = x[i]; return a.sort(); })();
   const total: ClassStats = {
+    expired: sum((c) => c.expired), expiredMb: sum((c) => c.expiredMb),
     abandoned: sum((c) => c.abandoned), abandonedMb: sum((c) => c.abandonedMb), txLost: sum((c) => c.txLost), retransmissions: sum((c) => c.retransmissions), attempts: sum((c) => c.attempts),
     generated: sum((c) => c.generated), delivered: sum((c) => c.delivered), dropped: sum((c) => c.dropped),
     stored: sum((c) => c.stored), delayed: sum((c) => c.delayed), remaining: sum((c) => c.remaining),

@@ -1,4 +1,4 @@
-// VARSAYIMSAL DEĞERLER — Aşama 2, 3, 4, 5, 7, 8 ve 9'un tüm uydurma sayıları yalnızca bu dosyadadır.
+// VARSAYIMSAL DEĞERLER — Aşama 2, 3, 4, 5, 7, 8, 9 ve 10'un tüm uydurma sayıları yalnızca bu dosyadadır.
 // Buradaki araç, uydu, yörünge, veri hızı ve eşik değerleri gerçek bir göreve ait DEĞİLDİR;
 // sonuçlar gerçek bir görev sonucu sayılmamalıdır. Gerçek olan tek şey Horizons konumlarıdır.
 // (Cisim yarıçapı ve dönme dönemi gibi fiziksel sabitler src/network/network.ts içinde, gerçek değerlerle.)
@@ -347,4 +347,81 @@ export const HYPOTHETICAL = {
     moonStarts: ['2021-03-01', '2025-09-01', '2028-03-03', '2034-05-01', '2038-01-15'],
     moonDays: 60,
   },
+  /**
+   * Aşama 10, madde 1: değere duyarlı kuyruk politikası ('valueAware', 'valueAdaptive'). YALNIZCA azalan değer modeli seçiliyken (yarı ömür seçili) devreye girer; yoksa 'priority' ile birebir aynıdır.
+   * expireBelow: bilim paketinin değeri başlangıç değerinin bu oranının altına inince tamponda atılır (0,25 = iki yarı ömür sonra). newestFirst: bilim verisi en yeni önce gönderilir
+   * (üstel azalmada, kapasite kısıtlıyken toplam değeri en çok artıran sıra). evictOldest: tampon dolunca en eski bilim paketi atılıp yeni veriye yer açılır.
+   * Eşik ve kuralların kendisi UYDURMADIR; varsayılan "hepsi açık". Taranan değerler `scan`'dedir.
+   */
+  valueAware: {
+    expireBelow: 0.25,
+    newestFirst: true,
+    evictOldest: true,
+    scanSec: 3600,
+    scan: { expireBelow: [0, 0.5, 0.25, 0.1, 0.03] },
+  },
+
+  /**
+   * Aşama 10, madde 2: takvim hatasına dayanıklı uyarlamalı ufuk ('adaptiveRobust'). 'adaptive' ile aynı parametreler (adaptiveStrategy) + korumalar:
+   * capSec (ufuk üst sınırı, kavuşum içermeyen kapalı dönemler için), histFactor (kapalı dönem uzunluğu, gözlenen en uzun kapalı dönemin bu katını aşamaz; geçmişte kapalı dönem
+   * yoksa fallbackSec), trustMin/checkSec (son checkSec'te takvim gerçekte açık olan adımların bu oranından azını açık gösteriyorsa takvime güvenme, fallbackSec ufku).
+   * Değerler UYDURMADIR (ayarlama: README bölüm 2).
+   */
+  adaptiveRobust: {
+    /** Ufuk üst sınırı (gün; kavuşum içermeyen kapalı dönemler için); 0 = kapalı. Tek başına çöküşü gidermedi (README bölüm 2), bu yüzden varsayılan kapalı. */
+    capDays: 0,
+    histFactor: 2,
+    histDays: 7,
+    trustMin: 0.3,
+    checkDays: 2,
+    /** Geri çekilme ufku (gün); 0 = güvenilmeyen takvimde kısma yok (öncelikli kuralı). */
+    fallbackDays: 0,
+  },
+
+  /**
+   * Aşama 10, madde 3: gerçek çok uydulu yönlendirme. select: araç uydu seçimi ('timeline' = Aşama 9 çizelge seçimi; 'leastFilled' = görünen uydular arasında tamponu en az dolu; 'openFirst' =
+   * önce Dünya hattı açık olanlar). isl: uydular arası bağlantı (yalnızca ikinci Ay uydusu varken; iki uydu arasında Ay'ın engellemediği görüş hattı ve en çok maxKm mesafe; hız kbps).
+   * Menzil ve hız UYDURMADIR.
+   */
+  routing: { islMaxKm: 30000, islKbps: 100 },
+
+  /**
+   * Aşama 10, madde 4a: Ay yörüngesi için basit presesyon (SEÇENEK, varsayılan kapalı; yalnızca eliptik/eğimli yörüngede anlamlı). Düğüm (RAAN) ve periapsis argümanı, epochJD'den itibaren
+   * sabit hızla kayar (derece/gün). Hızlar UYDURMADIR (gerçek ELFO/NRHO presesyonu bu basit modelle bulunmaz). scan: B aracı kaybının duyarlılığı için taranan RAAN hızları (gün başına derece);
+   * −13,2 ≈ Ay'ın dönme hızı ters yönde (düzlem Ay yüzeyine göre yaklaşık sabit kalır).
+   */
+  moonPrecession: {
+    epochJD: Date.UTC(2028, 2, 3) / 86400000 + 2440587.5,
+    raanRateDegPerDay: -1,
+    argPeriRateDegPerDay: 0,
+    scan: [-13.2, -5, -2, -1, -0.5, 0, 0.5, 1, 2, 5, 13.2],
+  },
+
+  /**
+   * Aşama 10, madde 4b: Mars eksen eğikliği (SEÇENEK 'tilted', varsayılan 'parallel' = eksen ekliptiğe paralel). Eksen yönü (ICRS RA/Dec) bir VARSAYIMDIR (≈ gerçek değere yakın seçildi, doğrulanmadı;
+   * yaklaşık 25° eğiklik). Seçilince Mars aktarma uydusunun yörünge düzlemi ve yüzey araçlarının kutup ekseni bu eksene göre döner (tutarlı çerçeve: gölge, cisim arkası kapanma ve görüş birlikte değişir).
+   */
+  marsAxis: { raDeg: 317.68, decDeg: 52.89, obliquityDeg: 23.4392911 },
+
+  /**
+   * Aşama 10, madde 4c: çok basit güç modeli (SEÇENEK, marsEclipse = 'power'; varsayılan kapalı = "gölgede hat kapalı" modları). Batarya gölgede boşalır, güneşte dolar; yük = taban yük + (hat
+   * etkinse) hat yükü. Doluluk cutoffFrac'ın altına inince hat (yüzey + Dünya) kapanır, resumeFrac'ın üstüne çıkınca açılır. Tüm değerler UYDURMADIR (gerçek bir uydunun güç bütçesi değildir).
+   */
+  marsPower: {
+    batteryWh: 700,
+    solarW: 700,
+    baseLoadW: 300,
+    linkLoadW: 350,
+    cutoffFrac: 0.2,
+    resumeFrac: 0.5,
+    initialFrac: 1,
+    scanBatteryWh: [450, 550, 700, 900, 1500],
+  },
+
+  /**
+   * Aşama 10, madde 5: telemetri denemesi. packetMb: daha küçük/sık telemetri paketi taraması (varsayılan 0,8). reservedShare: telemetri için ayrılmış Dünya hattı payı
+   * (SchedConfig.telemetryShare; hız oranı; kullanılmayan pay bilim verisine geçer, yani işi bırakmaz): öncelikli kuyrukta telemetri zaten önce gittiği için etkisi yok beklenir, FIFO'da
+   * anlamlıdır. minFactor: telemetri de kısılırsa çarpanın alt sınırı (SchedConfig.telemetryMinFactor; 1 = kısma yok). Değerler UYDURMADIR.
+   */
+  telemetry: { packetMb: [0.8, 0.4, 0.2, 0.1], reservedShare: [0, 0.1, 0.25, 0.5], minFactor: [1, 0.75, 0.5, 0.25, 0] },
 };

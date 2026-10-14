@@ -13,6 +13,9 @@ import type { SchedulerPanel } from './ui/schedulerPanel';
 import { NetworkLayer } from './map/networkLayer';
 import { computeNetwork, findBlackoutWindows } from './network/network';
 
+/** Sayfa başlatma birkaç görevde yapılır (her aşama arasında tarayıcıya nefes aldırılır): tek bir ≈ 120–175 ms'lik uzun görev yerine birkaç kısa görev. */
+const yieldTask = () => new Promise<void>((r) => setTimeout(r, 0));
+
 async function start() {
   const info = document.getElementById('info')!;
   let tracks;
@@ -52,6 +55,8 @@ async function start() {
     onView: (m) => map.setMode(m),
   });
 
+  await yieldTask();
+
   // Seçim tek yerden yönetilir: haritada tıklama ve sol panelde satır tıklama aynı işlevi çağırır.
   const infoPanel = createInfoPanel(info, tracks);
   const bodies = createBodiesPanel(document.getElementById('left')!, {
@@ -76,6 +81,8 @@ async function start() {
   map.onSelect = select;
   select('earth');
 
+  await yieldTask();
+
   // Aşama 2: veri ağı katmanı (tüm sayılar src/config/hypothetical.ts içinde, varsayımsal)
   const layer = new NetworkLayer();
   const windows = findBlackoutWindows(tracks);
@@ -95,6 +102,7 @@ async function start() {
     if (w) controls.jumpTo(w.startJD - 3);
   });
   let lastPanel = 0;
+  await yieldTask();
 
   // Dar ekranda (≤700 px) bilgi/ağ paneli katlanır (başlangıçta kapalı); geniş ekranda düğme gizli, panel her zaman açık (CSS).
   const side = document.getElementById('side')!;

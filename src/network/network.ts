@@ -22,12 +22,21 @@ export type LinkState = 'up' | 'horizon' | 'occulted' | 'blackout' | 'nostation'
  * moonSecond: ikinci Ay aktarma uydusu ('none'; 'best' = araç uyduyu gören(ler) arasında önce Dünya hattı açık olanı, sonra en yüksek yükseklikte olanı kullanır; 'order' = hat sırası).
  * marsEclipse: Mars aktarma uydusu gölgesi ('none'; 'earth' = gölgede yalnız uydu → Dünya hattı kapalı; 'both' = yüzey hattı da kapalı). Güç modeli yok.
  * moonPolarAsset: HYPOTHETICAL.moonPolarAsset araç olarak eklenir.
+ * Aşama 10 (hepsi seçenek, varsayılan kapalı): moonPrecession = eliptik Ay yörüngesinde düğüm/periapsis kayması (HYPOTHETICAL.moonPrecession); marsAxis = 'tilted': Mars ekseni eğik
+ * (HYPOTHETICAL.marsAxis; yörünge düzlemi ve yüzey araçları bu eksene göre döner); marsEclipse = 'power': gölgede hemen kapanma yerine basit batarya modeli (MarsPower; zaman çizelgesinde uygulanır);
+ * moonIsl = ikinci Ay uydusu varken uydular arası bağlantı durumu hesaplanır (NetworkState.isl).
  */
 export interface NetOptions {
   moonOrbit?: 'equatorial' | 'elliptical';
   moonSecond?: 'none' | 'best' | 'order';
-  marsEclipse?: 'none' | 'earth' | 'both';
+  marsEclipse?: 'none' | 'earth' | 'both' | 'power';
   moonPolarAsset?: boolean;
+  /** true: HYPOTHETICAL.moonPrecession hızları; nesne: hızları geçersiz kılar (derece/gün; tarama için). */
+  moonPrecession?: boolean | { raanRateDegPerDay?: number; argPeriRateDegPerDay?: number };
+  marsAxis?: 'parallel' | 'tilted';
+  moonIsl?: boolean;
+  /** Aşama 10: güç modelinde batarya kapasitesi (Wh) geçersiz kılma (tarama için); yoksa HYPOTHETICAL.marsPower.batteryWh. */
+  marsPowerBatteryWh?: number;
 }
 
 /** Seçeneklere göre aktarma uyduları: varsayılan HYPOTHETICAL.relays; eliptik seçilirse Ay uydusunun yörüngesi değişir; ikinci uydu sona eklenir. */
@@ -78,7 +87,12 @@ export interface RelayState {
   eclipsed: boolean;
 }
 
+/** Aşama 10: iki aktarma uydusu arasındaki bağlantı (Ay'ın engellemediği görüş hattı ve en çok islMaxKm mesafe). */
+export interface IslState { a: string; b: string; up: boolean; km: number }
+
 export interface NetworkState {
+  /** Aşama 10: uydular arası bağlantılar (yalnızca moonIsl seçiliyken). */
+  isl: IslState[];
   statuses: AssetStatus[];
   /** Aşama 9: her aktarma uydusu için Dünya hattı durumu (effectiveRelays sırasında). */
   relayStates: RelayState[];
@@ -140,20 +154,50 @@ export function keplerPosition(o: OrbitElements, mu: number, jd: number): { pos:
   };
 }
 
-function relayPosition(r: RelayConfig, jd: number): { pos: Vec3; phase: number } {
+/**
+ * Aşama 10: Mars ekvator çerçevesinden (z = dönme ekseni) ekliptik çerçeveye dönüş matrisi (satır sıralı 3×3). Eksen yönü HYPOTHETICAL.marsAxis (ICRS RA/Dec; VARSAYIM).
+ * x ekseni çıkış düğümü yönü (ekliptik kutbu × eksen), y = z × x.
+ */
+let marsFrameCache: number[] | null = null;
+function marsFrame(): number[] {
+  if (marsFrameCache) return marsFrameCache;
+  const D2R = Math.PI / 180, ax = HYPOTHETICAL.marsAxis;
+  const x = Math.cos(ax.decDeg * D2R) * Math.cos(ax.raDeg * D2R), y = Math.cos(ax.decDeg * D2R) * Math.sin(ax.raDeg * D2R), z = Math.sin(ax.decDeg * D2R);
+  const ce = Math.cos(ax.obliquityDeg * D2R), se = Math.sin(ax.obliquityDeg * D2R);
+  const k: Vec3 = [x, y * ce + z * se, -y * se + z * ce]; // eksen, ekliptik çerçevede
+  const nx = Math.hypot(k[1], k[0]);
+  const i: Vec3 = [-k[1] / nx, k[0] / nx, 0]; // ẑ_ekliptik × k, normalize
+  const j: Vec3 = [k[1] * i[2] - k[2] * i[1], k[2] * i[0] - k[0] * i[2], k[0] * i[1] - k[1] * i[0]];
+  marsFrameCache = [i[0], j[0], k[0], i[1], j[1], k[1], i[2], j[2], k[2]];
+  return marsFrameCache;
+}
+const rotMars = (v: Vec3): Vec3 => { const m = marsFrame(); return [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]]; };
+/** Mars ekseninin ekliptik kutbuna göre eğikliği (derece) — çerçeve doğrulaması için. */
+export function marsAxisTiltDeg(): number { const m = marsFrame(); return (Math.acos(Math.min(1, Math.max(-1, m[8]))) * 180) / Math.PI; }
+
+export function relayPosition(r: RelayConfig, jd: number, o: NetOptions = {}): { pos: Vec3; phase: number } {
   const b = BODY[r.body];
-  if (r.orbit) return keplerPosition(r.orbit, b.mu, jd);
+  if (r.orbit) {
+    let orbit = r.orbit;
+    if (o.moonPrecession && r.body === 'moon') {
+      const pr = HYPOTHETICAL.moonPrecession, dd = jd - pr.epochJD, ov = typeof o.moonPrecession === 'object' ? o.moonPrecession : {};
+      orbit = { ...orbit, raanDeg: orbit.raanDeg + (ov.raanRateDegPerDay ?? pr.raanRateDegPerDay) * dd, argPeriDeg: orbit.argPeriDeg + (ov.argPeriRateDegPerDay ?? pr.argPeriRateDegPerDay) * dd };
+    }
+    return keplerPosition(orbit, b.mu, jd);
+  }
   const a = b.radiusKm + r.altitudeKm;
   const periodDays = (2 * Math.PI * Math.sqrt((a * a * a) / b.mu)) / 86400;
   const phase = ((jd - 2451545) / periodDays) * 2 * Math.PI;
-  return { pos: [a * Math.cos(phase), a * Math.sin(phase), 0], phase };
+  const pos: Vec3 = [a * Math.cos(phase), a * Math.sin(phase), 0];
+  return { pos: r.body === 'mars' && o.marsAxis === 'tilted' ? rotMars(pos) : pos, phase };
 }
 
-function surfacePosition(a: AssetConfig, jd: number): { pos: Vec3; normal: Vec3 } {
+function surfacePosition(a: AssetConfig, jd: number, o: NetOptions = {}): { pos: Vec3; normal: Vec3 } {
   const b = BODY[a.body];
   const lon = (a.lonDeg * Math.PI) / 180 + ((jd - 2451545) / b.rotDays) * 2 * Math.PI;
   const lat = (a.latDeg * Math.PI) / 180;
-  const n: Vec3 = [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)];
+  let n: Vec3 = [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)];
+  if (a.body === 'mars' && o.marsAxis === 'tilted') n = rotMars(n);
   return { pos: [n[0] * b.radiusKm, n[1] * b.radiusKm, n[2] * b.radiusKm], normal: n };
 }
 
@@ -195,7 +239,7 @@ export function computeNetwork(tracks: Record<string, Track>, jd: number, statio
   const rinfo = new Map<string, { rp: { pos: Vec3; phase: number }; earthKm: number; earthLink: LinkState; station: { name: string; elevDeg: number } | null; eclipsed: boolean }>();
   const relayStates: RelayState[] = [];
   for (const relay of relays) {
-    const rp = relayPosition(relay, jd);
+    const rp = relayPosition(relay, jd, opts);
     relayPhase[relay.id] = rp.phase;
     const R = BODY[relay.body].radiusKm;
     const earthVec = earthRelative(tracks, relay.body, jd); // cisim merkezli Dünya konumu
@@ -207,7 +251,7 @@ export function computeNetwork(tracks: Record<string, Track>, jd: number, statio
     const gs = stations.length ? bestStation(stations, jd, relayFromEarth, HYPOTHETICAL.groundStations.minElevationDeg) : null;
     const station = gs ? { name: gs.station.name, elevDeg: gs.elevDeg } : null;
     const eclipsed = relay.body === 'mars' && !!sunFromMars && inCylinderShadow(rp.pos, sunFromMars, R);
-    const earthLink: LinkState = relay.body === 'mars' && marsBlackout ? 'blackout' : occulted ? 'occulted' : eclipsed ? 'eclipse' : stations.length && !gs ? 'nostation' : 'up';
+    const earthLink: LinkState = relay.body === 'mars' && marsBlackout ? 'blackout' : occulted ? 'occulted' : eclipsed && eclipseMode !== 'power' ? 'eclipse' : stations.length && !gs ? 'nostation' : 'up';
     rinfo.set(relay.id, { rp, earthKm, earthLink, station, eclipsed });
     relayStates.push({ relay, earthLink, earthKm, station, eclipsed });
   }
@@ -215,7 +259,7 @@ export function computeNetwork(tracks: Record<string, Track>, jd: number, statio
   // 2) Araçlar (ana uyduya göre gruplu: eski sıra korunur). İkinci uydu varsa araç adaylar arasından seçer.
   for (const home of relays) {
     for (const asset of assets.filter((a) => a.relay === home.id)) {
-      const s = surfacePosition(asset, jd);
+      const s = surfacePosition(asset, jd, opts);
       const candidates = relayCandidates(asset, opts).map((rid) => {
         const ri = rinfo.get(rid)!;
         const toRelay = sub(ri.rp.pos, s.pos);
@@ -243,7 +287,54 @@ export function computeNetwork(tracks: Record<string, Track>, jd: number, statio
       });
     }
   }
-  return { statuses, relayStates, marsSepDeg, marsBlackout, relayPhase, stationCount: stations.length };
+  // Aşama 10: uydular arası bağlantı (yalnızca ikinci Ay uydusu varken; Ay'ın engellemediği görüş hattı, en çok islMaxKm)
+  const isl: IslState[] = [];
+  if (opts.moonIsl && opts.moonSecond && opts.moonSecond !== 'none') {
+    const aId = HYPOTHETICAL.relays.find((r) => r.body === 'moon')!.id, bId = HYPOTHETICAL.moonRelay2.id;
+    const ra = rinfo.get(aId), rb = rinfo.get(bId);
+    if (ra && rb) {
+      const km = norm(sub(ra.rp.pos, rb.rp.pos));
+      isl.push({ a: aId, b: bId, km, up: km <= HYPOTHETICAL.routing.islMaxKm && !segmentHitsSphere(ra.rp.pos, rb.rp.pos, BODY.moon.radiusKm) });
+    }
+  }
+  return { isl, statuses, relayStates, marsSepDeg, marsBlackout, relayPhase, stationCount: stations.length };
+}
+
+/** Aşama 10: Mars aktarma uydusu için çok basit güç modeli (parametreler: HYPOTHETICAL.marsPower; UYDURMA). Durumludur: zaman çizelgesi adımlarında sırayla çağrılır. */
+export interface PowerParams { batteryWh: number; solarW: number; baseLoadW: number; linkLoadW: number; cutoffFrac: number; resumeFrac: number; initialFrac: number }
+export class MarsPower {
+  soc: number;
+  on = true;
+  /** Hat kapalı geçen adım sayısı (yalnızca güç nedeniyle). */
+  offSteps = 0;
+  constructor(readonly p: PowerParams = HYPOTHETICAL.marsPower) { this.soc = p.initialFrac * p.batteryWh; }
+  /** Bir adım (dtSec) ilerletir; dönüş: bu adımdaki hat durumu (açık mı). eclipsed: uydu gölgede; linkWanted: hat jeometrik olarak açık (yük çeker). */
+  step(eclipsed: boolean, linkWanted: boolean, dtSec: number): boolean {
+    const { p } = this;
+    const load = p.baseLoadW + (this.on && linkWanted ? p.linkLoadW : 0);
+    const gen = eclipsed ? 0 : p.solarW;
+    this.soc = Math.min(p.batteryWh, Math.max(0, this.soc + ((gen - load) * dtSec) / 3600));
+    if (this.on && this.soc < p.cutoffFrac * p.batteryWh) this.on = false;
+    else if (!this.on && this.soc >= p.resumeFrac * p.batteryWh) this.on = true;
+    if (!this.on) this.offSteps++;
+    return this.on;
+  }
+}
+
+/** Aşama 10: güç modeli kapalıysa ('power' modunda) Mars aktarma uydusunun yüzey ve Dünya hatlarını 'eclipse' durumuna alır (computeNetwork çıktısını yerinde değiştirir). */
+export function applyPower(net: NetworkState, pw: MarsPower, dtSec: number): boolean {
+  const rs = net.relayStates.find((r) => r.relay.body === 'mars');
+  if (!rs) return true;
+  const on = pw.step(rs.eclipsed, rs.earthLink === 'up', dtSec);
+  if (on) return true;
+  if (rs.earthLink === 'up') rs.earthLink = 'eclipse';
+  for (const st of net.statuses) {
+    if (st.relay.id !== rs.relay.id) continue;
+    st.earthLink = rs.earthLink;
+    if (st.surfaceLink === 'up') st.surfaceLink = 'eclipse';
+    st.connected = false;
+  }
+  return false;
 }
 
 export interface BlackoutWindow { startJD: number; endJD: number; peakJD: number; minSepDeg: number }
