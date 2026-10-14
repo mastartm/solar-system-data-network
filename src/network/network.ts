@@ -87,6 +87,7 @@ export interface RelayState {
   eclipsed: boolean;
 }
 
+const NO_ISL: IslState[] = [];
 /** Aşama 10: iki aktarma uydusu arasındaki bağlantı (Ay'ın engellemediği görüş hattı ve en çok islMaxKm mesafe). */
 export interface IslState { a: string; b: string; up: boolean; km: number }
 
@@ -288,7 +289,7 @@ export function computeNetwork(tracks: Record<string, Track>, jd: number, statio
     }
   }
   // Aşama 10: uydular arası bağlantı (yalnızca ikinci Ay uydusu varken; Ay'ın engellemediği görüş hattı, en çok islMaxKm)
-  const isl: IslState[] = [];
+  const isl: IslState[] = opts.moonIsl ? [] : NO_ISL; // varsayılanda ortak boş dizi (her çağrıda yeni dizi ayırma)
   if (opts.moonIsl && opts.moonSecond && opts.moonSecond !== 'none') {
     const aId = HYPOTHETICAL.relays.find((r) => r.body === 'moon')!.id, bId = HYPOTHETICAL.moonRelay2.id;
     const ra = rinfo.get(aId), rb = rinfo.get(bId);
