@@ -90,7 +90,8 @@ if (!only || only === 'dayanikli') {
     ['geri çekilme (eşik 0,5)', { ...NONE, trustMin: 0.5, checkSec: chk }],
     ['geri çekilme (0,3) → sabit 3 g ufuk', { ...NONE, trustMin: 0.3, checkSec: chk, fallbackSec: 3 * DAY }],
     ['yalnız güven aralığı (×2)', { ...NONE, histFactor: R.histFactor, histSec: R.histDays * DAY }],
-    ['yalnız ufku kırpma (6 g)', { ...NONE, capSec: R.capDays * DAY }],
+    ['yalnız ufku kırpma (6 g)', { ...NONE, capSec: 6 * DAY }],
+    ['yalnız ufku kırpma (1 g = en küçük ufuk)', { ...NONE, capSec: 1 * DAY }],
     ['geri çekilme (0,3) + güven aralığı', { ...NONE, trustMin: 0.3, checkSec: chk, histFactor: R.histFactor, histSec: R.histDays * DAY }],
     ['geri çekilme (0,3) + güven aralığı + kırpma (6 g)', { ...NONE, trustMin: 0.3, checkSec: chk, histFactor: R.histFactor, histSec: R.histDays * DAY, capSec: 6 * DAY }],
     ['varsayılan (hypothetical.ts: geri çekilme 0,3 + güven aralığı ×2)', {}],
@@ -165,12 +166,13 @@ if (!only || only === 'yonlendirme') {
       }
     }
   }
-  // kontrol: tek ekvatoral uydu, 2× kapasite
-  for (const n of [1, 2, 3]) {
-    const sc = moonScn();
+  // kontrol: tek ekvatoral uydu, 2× kapasite (kutup aracı varsa onu hiç göremez: kapsama değil kapasite kontrolü)
+  for (const withPolar of [false, true]) for (const n of [1, 2, 3]) {
+    const net: NetOptions = withPolar ? { moonPolarAsset: true } : {};
+    const sc = moonScn(undefined, undefined, net);
     const p = HYPOTHETICAL.scheduler;
     const par = { relayBufferMb: 2 * p.relayBufferMb['ay-aktarma'], relayDownlinkKbps: 2 * p.relayDownlinkKbps['ay-aktarma'] };
-    console.log(`### kontrol: tek ekvatoral uydu, hat hızı ve tampon 2×, ${n} ist.: ` + (['priority', 'rolling', 'adaptive'] as Policy[]).map((pol) => `${pol} ${cell(run(sc, n, pol, { params: par }).m)}`).join(' | '));
+    console.log(`### kontrol: tek ekvatoral uydu${withPolar ? ' + kutup aracı' : ''}, hat hızı ve tampon 2×, ${n} ist.: ` + (['priority', 'rolling', 'adaptive'] as Policy[]).map((pol) => `${pol} ${cell(run(sc, n, pol, { params: par }).m)}`).join(' | '));
   }
 }
 

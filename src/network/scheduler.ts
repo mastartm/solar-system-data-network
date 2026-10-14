@@ -656,89 +656,19 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   /** Telemetri çarpanı (Aşama 10): telemetryMinFactor yoksa 1 (Aşama 4-9: telemetri kısılmaz). */
   const ftOf = (f: number): number => (tmin === undefined ? 1 : tmin + (1 - tmin) * f);
   /**
-   * Havuz (araç tamponu payı + uydu tamponunun hız oranındaki payı) i adımından T adımına (T hariç) ileri izlenir; tepe doluluğu margin × kapasiteyi
-   * aşmayan en büyük bilim verisi çarpanı döner (ikili arama). Dünya hattı AÇIK/KAPALI bilgisi tahmin takviminden (projUp), ortalama kayıp tahminden gelir.
-   * 'coverage', 'rolling' ve 'adaptive' aynı fonksiyonu kullanır (varsayılan seçeneklerle aritmetik Aşama 7/8 ile aynı).
-   * surfaceClosure: havuz iki aşamalı izlenir (araç tamponu a → uydu payı r → Dünya); a yalnızca yüzey hattı açıkken r'ye akar. Sınır yine toplam (a + r) üzerindedir.
+   * Aşama 10 (separateRelays, çok rotalı araç): uydu tamponları birbirinin yerine kullanılamaz. Kaplar: araç tamponu aa, her rotanın uydu payı bb[j].
+   * aa, planlanan rotaya yüzey hattı açıkken (σ) akar; her bb[j] kendi hattıyla boşalır. Ölçüt, kapların kendi sınırlarına oranının tepesidir (≤ 1 olmalı; margin sınırlara dahildir).
+   * Ayrı bir işlevdir: varsayılan (tek havuz) yol projectThrottle'da Aşama 9 ile aynı kalır.
    */
-  const projectThrottle = (ai: number, i: number, T: number, margin: number, minFactor: number, assetShare: number): number => {
+  const projectSeparate = (ai: number, i: number, T: number, margin: number, minFactor: number, assetShare: number): number => {
     const a = topo.assets[ai];
     const rts = routes[ai];
     const fr = rts.map((ri) => (routeTotal[ri] > 0 ? assetRate[ai].total / routeTotal[ri] : 0));
-    let used = assetBuf[ai].usedMb;
-    rts.forEach((ri, j) => { used += relayBuf[ri].usedMb * fr[j]; });
-    used = Math.max(0, used);
-    // Beklenen boşaltma hızı (rota başına): hat hızı × payı × ortalama başarı oranı (ARQ'da kayıp tekrar gönderilir)
     const lossFc = cfg.arq ? Math.min(100, Math.max(0, cfg.arq.earthLossPct * (1 + lossBias / 100))) : 0;
     const dr = rts.map((ri, j) => ((cfg.relayDownlinkKbps[topo.relays[ri]] ?? 0) / 1000) * fr[j] * (cfg.arq ? 1 - lossFc / 100 : 1));
-    // Üst sınır uydu tamponunun payıdır (araç tamponu değil): uydu tamponu dolunca telemetri paketi daha düşük sınıfı atarak girer
-    // (öncelikli kural), yani doygun uydu tamponu kayıp demektir. Araç tamponu yalnızca geçici (yüzey hattı kapalıyken) biriktirir.
-    let relayCap = 0;
-    rts.forEach((ri, j) => { relayCap += relayBuf[ri].capMb * fr[j]; });
-    const limit = margin * (relayCap + assetShare * assetBuf[ai].capMb);
     const fl = aFlips[ai];
     while (aPtr[ai] < fl.length && fl[aPtr[ai]] <= i) aPtr[ai]++;
-    const single = rts.length === 1, up0 = projUp[rts[0]], d0 = dr[0];
-    const drainAt = (t: number) => { let d = 0; for (let j = 0; j < rts.length; j++) if (projUp[rts[j]][t]) d += dr[j]; return d; };
-    const sigma = surfClose ? ((cfg.surfaceLinkKbps[a.body] ?? 0) / 1000) * (cfg.arq ? 1 - cfg.arq.surfaceLossPct / 100 : 1) : 0;
-    const asset0 = assetBuf[ai].usedMb, relay0 = Math.max(0, used - asset0);
-    // Tek havuz (varsayılan; Aşama 7-8 aritmetiği): havuz hattı açıkken boşalır, kapalıyken boşalmaz.
-    const peakSingle = (f: number) => {
-      const g = assetRate[ai].top * ftOf(f) + assetRate[ai].rest * f;
-      let t = i, k = aPtr[ai], b = used, pk = used;
-      while (t < T) {
-        const nx = k < fl.length && fl[k] < T ? fl[k] : T;
-        const len = (nx - t) * dt;
-        b = up0[t] ? Math.max(0, b + (g - d0) * len) : b + g * len;
-        if (b > pk) pk = b;
-        if (nx === fl[k]) k++;
-        t = nx;
-      }
-      return pk;
-    };
-    const peakMulti = (f: number) => {
-      const g = assetRate[ai].top * ftOf(f) + assetRate[ai].rest * f;
-      let t = i, k = aPtr[ai], b = used, pk = used;
-      while (t < T) {
-        const nx = k < fl.length && fl[k] < T ? fl[k] : T;
-        const len = (nx - t) * dt;
-        const dn = drainAt(t);
-        b = dn > 0 ? Math.max(0, b + (g - dn) * len) : b + g * len;
-        if (b > pk) pk = b;
-        if (nx === fl[k]) k++;
-        t = nx;
-      }
-      return pk;
-    };
-    const peakPool = single ? peakSingle : peakMulti;
-    // İki aşamalı (surfaceClosure): aa = araç tamponu, rr = uydu payı. Aralık içinde akışlar sabit; aa ya da rr boşalınca rejim değişir.
-    const peakTwo = (f: number) => {
-      const g = assetRate[ai].top * ftOf(f) + assetRate[ai].rest * f;
-      let t = i, k = aPtr[ai], pk = used, aa = asset0, rr = relay0;
-      while (t < T) {
-        const nx = k < fl.length && fl[k] < T ? fl[k] : T;
-        let left = (nx - t) * dt;
-        const sg = fSurf[ai][t] ? sigma : 0, dn = drainAt(t);
-        while (left > 1e-9) {
-          const flowIn = sg > 0 ? (aa > 1e-12 ? sg : Math.min(g, sg)) : 0;
-          const da = g - flowIn;
-          const dd = rr > 1e-12 ? dn : Math.min(dn, flowIn);
-          const dR = flowIn - dd;
-          let step = left;
-          if (aa > 1e-12 && da < 0) step = Math.min(step, aa / -da);
-          if (rr > 1e-12 && dR < 0) step = Math.min(step, rr / -dR);
-          step = Math.max(step, 1e-9);
-          aa = Math.max(0, aa + da * step); rr = Math.max(0, rr + dR * step);
-          left -= step;
-          if (aa + rr > pk) pk = aa + rr;
-        }
-        if (nx === fl[k]) k++;
-        t = nx;
-      }
-      return pk;
-    };
-    // Aşama 10 (separateRelays, çok rotalı araç): uydu tamponları birbirinin yerine kullanılamaz. Kaplar: araç tamponu aa, her rotanın uydu payı bb[j].
-    // aa, planlanan rotaya yüzey hattı açıkken (σ) akar; her bb[j] kendi hattıyla boşalır. Ölçüt, kapların kendi sınırlarına oranının tepesidir (≤ 1 olmalı; margin sınırlara dahildir).
+    const asset0 = assetBuf[ai].usedMb;
     const peakSep = (f: number) => {
       const g = assetRate[ai].top * ftOf(f) + assetRate[ai].rest * f;
       const sigS = ((cfg.surfaceLinkKbps[a.body] ?? 0) / 1000) * (cfg.arq ? 1 - cfg.arq.surfaceLossPct / 100 : 1);
@@ -774,13 +704,101 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
       }
       return pk;
     };
-    const sepNow = sepAsset[ai] && rts.length > 1;
-    const peak = sepNow ? peakSep : surfClose ? peakTwo : peakPool;
-    const lim = sepNow ? 1 : limit;
-    if (peak(1) <= lim) return 1;
-    if (peak(minFactor) > lim) return minFactor;
+    if (peakSep(1) <= 1) return 1;
+    if (peakSep(minFactor) > 1) return minFactor;
     let lo = minFactor, hi = 1;
-    for (let it = 0; it < 10; it++) { const mid = (lo + hi) / 2; if (peak(mid) <= lim) lo = mid; else hi = mid; }
+    for (let it = 0; it < 10; it++) { const mid = (lo + hi) / 2; if (peakSep(mid) <= 1) lo = mid; else hi = mid; }
+    return lo;
+  };
+
+  /**
+   * Havuz (araç tamponu payı + uydu tamponunun hız oranındaki payı) i adımından T adımına (T hariç) ileri izlenir; tepe doluluğu margin × kapasiteyi
+   * aşmayan en büyük bilim verisi çarpanı döner (ikili arama). Dünya hattı AÇIK/KAPALI bilgisi tahmin takviminden (projUp), ortalama kayıp tahminden gelir.
+   * 'coverage', 'rolling' ve 'adaptive' aynı fonksiyonu kullanır (varsayılan seçeneklerle aritmetik Aşama 7/8 ile aynı).
+   * surfaceClosure: havuz iki aşamalı izlenir (araç tamponu a → uydu payı r → Dünya); a yalnızca yüzey hattı açıkken r'ye akar. Sınır yine toplam (a + r) üzerindedir.
+   */
+  const projectThrottle = (ai: number, i: number, T: number, margin: number, minFactor: number, assetShare: number): number => {
+    if (sepAsset[ai] && routes[ai].length > 1) return projectSeparate(ai, i, T, margin, minFactor, assetShare);
+    const a = topo.assets[ai];
+    const rts = routes[ai];
+    const fr = rts.map((ri) => (routeTotal[ri] > 0 ? assetRate[ai].total / routeTotal[ri] : 0));
+    let used = assetBuf[ai].usedMb;
+    rts.forEach((ri, j) => { used += relayBuf[ri].usedMb * fr[j]; });
+    used = Math.max(0, used);
+    // Beklenen boşaltma hızı (rota başına): hat hızı × payı × ortalama başarı oranı (ARQ'da kayıp tekrar gönderilir)
+    const lossFc = cfg.arq ? Math.min(100, Math.max(0, cfg.arq.earthLossPct * (1 + lossBias / 100))) : 0;
+    const dr = rts.map((ri, j) => ((cfg.relayDownlinkKbps[topo.relays[ri]] ?? 0) / 1000) * fr[j] * (cfg.arq ? 1 - lossFc / 100 : 1));
+    // Üst sınır uydu tamponunun payıdır (araç tamponu değil): uydu tamponu dolunca telemetri paketi daha düşük sınıfı atarak girer
+    // (öncelikli kural), yani doygun uydu tamponu kayıp demektir. Araç tamponu yalnızca geçici (yüzey hattı kapalıyken) biriktirir.
+    let relayCap = 0;
+    rts.forEach((ri, j) => { relayCap += relayBuf[ri].capMb * fr[j]; });
+    const limit = margin * (relayCap + assetShare * assetBuf[ai].capMb);
+    const fl = aFlips[ai];
+    while (aPtr[ai] < fl.length && fl[aPtr[ai]] <= i) aPtr[ai]++;
+    const single = rts.length === 1, up0 = projUp[rts[0]], d0 = dr[0];
+    const drainAt = (t: number) => { let d = 0; for (let j = 0; j < rts.length; j++) if (projUp[rts[j]][t]) d += dr[j]; return d; };
+    const sigma = surfClose ? ((cfg.surfaceLinkKbps[a.body] ?? 0) / 1000) * (cfg.arq ? 1 - cfg.arq.surfaceLossPct / 100 : 1) : 0;
+    const asset0 = assetBuf[ai].usedMb, relay0 = Math.max(0, used - asset0);
+    // Tek havuz (varsayılan; Aşama 7-8 aritmetiği): havuz hattı açıkken boşalır, kapalıyken boşalmaz.
+    const peakSingle = (f: number) => {
+      const g = tmin === undefined ? assetRate[ai].top + assetRate[ai].rest * f : assetRate[ai].top * ftOf(f) + assetRate[ai].rest * f;
+      let t = i, k = aPtr[ai], b = used, pk = used;
+      while (t < T) {
+        const nx = k < fl.length && fl[k] < T ? fl[k] : T;
+        const len = (nx - t) * dt;
+        b = up0[t] ? Math.max(0, b + (g - d0) * len) : b + g * len;
+        if (b > pk) pk = b;
+        if (nx === fl[k]) k++;
+        t = nx;
+      }
+      return pk;
+    };
+    const peakMulti = (f: number) => {
+      const g = tmin === undefined ? assetRate[ai].top + assetRate[ai].rest * f : assetRate[ai].top * ftOf(f) + assetRate[ai].rest * f;
+      let t = i, k = aPtr[ai], b = used, pk = used;
+      while (t < T) {
+        const nx = k < fl.length && fl[k] < T ? fl[k] : T;
+        const len = (nx - t) * dt;
+        const dn = drainAt(t);
+        b = dn > 0 ? Math.max(0, b + (g - dn) * len) : b + g * len;
+        if (b > pk) pk = b;
+        if (nx === fl[k]) k++;
+        t = nx;
+      }
+      return pk;
+    };
+    const peakPool = single ? peakSingle : peakMulti;
+    // İki aşamalı (surfaceClosure): aa = araç tamponu, rr = uydu payı. Aralık içinde akışlar sabit; aa ya da rr boşalınca rejim değişir.
+    const peakTwo = (f: number) => {
+      const g = tmin === undefined ? assetRate[ai].top + assetRate[ai].rest * f : assetRate[ai].top * ftOf(f) + assetRate[ai].rest * f;
+      let t = i, k = aPtr[ai], pk = used, aa = asset0, rr = relay0;
+      while (t < T) {
+        const nx = k < fl.length && fl[k] < T ? fl[k] : T;
+        let left = (nx - t) * dt;
+        const sg = fSurf[ai][t] ? sigma : 0, dn = drainAt(t);
+        while (left > 1e-9) {
+          const flowIn = sg > 0 ? (aa > 1e-12 ? sg : Math.min(g, sg)) : 0;
+          const da = g - flowIn;
+          const dd = rr > 1e-12 ? dn : Math.min(dn, flowIn);
+          const dR = flowIn - dd;
+          let step = left;
+          if (aa > 1e-12 && da < 0) step = Math.min(step, aa / -da);
+          if (rr > 1e-12 && dR < 0) step = Math.min(step, rr / -dR);
+          step = Math.max(step, 1e-9);
+          aa = Math.max(0, aa + da * step); rr = Math.max(0, rr + dR * step);
+          left -= step;
+          if (aa + rr > pk) pk = aa + rr;
+        }
+        if (nx === fl[k]) k++;
+        t = nx;
+      }
+      return pk;
+    };
+    const peak = surfClose ? peakTwo : peakPool;
+    if (peak(1) <= limit) return 1;
+    if (peak(minFactor) > limit) return minFactor;
+    let lo = minFactor, hi = 1;
+    for (let it = 0; it < 10; it++) { const mid = (lo + hi) / 2; if (peak(mid) <= limit) lo = mid; else hi = mid; }
     return lo;
   };
 
