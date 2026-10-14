@@ -7,7 +7,7 @@ import type { Req, SimOut, TlSpec } from '../network/compute';
 import type { NetOptions } from '../network/network';
 import type { Policy, ProjectionOptions, SchedConfig } from '../network/scheduler';
 import { valuePct, type Metrics } from '../network/sweep';
-import { adaptiveRobustConfig, routingConfig, valueAwareConfig } from '../network/timeline';
+import { adaptiveRobustConfig, correctConfig, routingConfig, valueAwareConfig } from '../network/timeline';
 import type { ExtrasCtx } from './schedulerExtras';
 import { NAME, fmt, signed, valueModel, type Scen } from './schedShared';
 
@@ -86,18 +86,20 @@ export function mountStage10(ctx: Stage10Ctx) {
   const run2 = () => guarded('m2', async (_my, st) => {
     const c = ctx.cur(), s = c.s!, n = c.stations, net = s.net, step = HYPOTHETICAL.forecastScan.stepSec;
     const grid = [-240, -120, 0, 120, 240];
-    const pols: [Policy, string][] = [['rolling', `${NAME.rolling} (${fmt(c.rollingDays, c.rollingDays < 1 ? 1 : 0)} g)`], ['adaptive', NAME.adaptive], ['adaptiveRobust', NAME.adaptiveRobust]];
+    const withCor = !!(document.querySelector('#m2-cor') as HTMLInputElement | null)?.checked;
+    const pols: [Policy, string, boolean?][] = [['rolling', `${NAME.rolling} (${fmt(c.rollingDays, c.rollingDays < 1 ? 1 : 0)} g)`], ['adaptive', NAME.adaptive], ['adaptiveRobust', NAME.adaptiveRobust], ...(withCor ? [['adaptiveRobust', `${NAME.adaptiveRobust} + takvim düzeltmesi (Aşama 11)`, true] as [Policy, string, boolean]] : [])];
     const tick = count(st, 1 + grid.length * pols.length);
     const t = <T,>(p: Promise<T>) => p.then((x) => { tick(); return x; });
     const pr = await t(sim(s, net, n, step, 'priority', clean(base(s, net, { step }))));
-    const cells = await Promise.all(grid.map((e) => Promise.all(pols.map(([p]) => {
+    const cells = await Promise.all(grid.map((e) => Promise.all(pols.map(([p, , cor]) => {
       const b = base(s, net, { step, forecast: { edgeShiftSec: e * 60 } });
-      return t(sim(s, net, n, step, p, clean(b, p === 'adaptiveRobust' ? { adaptiveRobust: adaptiveRobustConfig() } : {})));
+      return t(sim(s, net, n, step, p, clean(b, p === 'adaptiveRobust' ? { adaptiveRobust: adaptiveRobustConfig(cor ? { correct: correctConfig() } : {}) } : {})));
     }))));
     const ar = HYPOTHETICAL.adaptiveRobust;
     return `<p class="hint"><b>${s.relayName} hattı, ${n} istasyon, adım ${fmt(step)} sn.</b> Öncelikli: ${cellOf(pr)}. Hücre: düşen+hatta / toplam kayıp / teslim [üretilmeyen] ve toplam kayıp farkı (puan, öncelikliye göre). Hata: strateji bildiği takvimde her açık pencerenin başını/sonunu bu kadar dakika kaydırır (− kötümser: pencereler kısalır, + iyimser); gerçek bağlantılar değişmez.</p>`
       + table(['Takvim hatası', ...pols.map((p) => p[1])], grid.map((e, i) => [`${e > 0 ? '+' : e < 0 ? '−' : ''}${Math.abs(e)} dk`, ...cells[i].map((m) => `${cellOf(m)}<br><small>toplam kayıp farkı ${signed(m.lossPct - pr.lossPct, 2)}</small>`)]))
-      + `<p class="hint">Dayanıklı ufuk: güven aralığı (kapalı dönem uzunluğu, gözlenen en uzun kapalı dönemin ×${fmt(ar.histFactor)}'ini aşamaz) ve geri çekilme (son ${fmt(ar.checkDays)} günde takvim, gerçekte açık adımların %${fmt(ar.trustMin * 100)}'inden azını açık gösteriyorsa kısma yapılmaz = öncelikli kuralı); ufuk kırpma ${ar.capDays > 0 ? `${fmt(ar.capDays)} gün` : 'kapalı'}. Ay (kavuşumsuz) hatlarında −240 dk'da uyarlamalı çöker; dayanıklı sürüm öncelikliye döner (kısmanın kazancını da bırakır).</p>`;
+      + `<p class="hint">Dayanıklı ufuk: güven aralığı (kapalı dönem uzunluğu, gözlenen en uzun kapalı dönemin ×${fmt(ar.histFactor)}'ini aşamaz) ve geri çekilme (son ${fmt(ar.checkDays)} günde takvim, gerçekte açık adımların %${fmt(ar.trustMin * 100)}'inden azını açık gösteriyorsa kısma yapılmaz = öncelikli kuralı); ufuk kırpma ${ar.capDays > 0 ? `${fmt(ar.capDays)} gün` : 'kapalı'}. Ay (kavuşumsuz) hatlarında −240 dk'da uyarlamalı çöker; dayanıklı sürüm öncelikliye döner (kısmanın kazancını da bırakır).</p>`
+      + (withCor ? `<p class="hint">Takvim düzeltmesi (Aşama 11): strateji gerçekleşen pencere başlarından/bitişlerinden kaymayı öğrenir (son ${fmt(ar.correct.learnDays)} gün, en az ${fmt(ar.correct.minWindows)} eşleşme, |kayma| ≤ ${fmt(ar.correct.maxShiftHours)} sa). Silinmiş pencereler (ör. −240 dk) düzeltilemez; orada sonuç değişmez. Değerler uydurmadır.</p>` : '');
   });
 
   // m3 ------------------------------------------------------------------------------------------------------------------------------------------

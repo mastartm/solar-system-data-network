@@ -53,6 +53,12 @@ export const adaptiveRobustConfig = (over: Partial<AdaptiveRobustConfig> = {}): 
   return { ...adaptiveConfig(), ...(r.capDays > 0 ? { capSec: r.capDays * 86400 } : {}), histFactor: r.histFactor, histSec: r.histDays * 86400, trustMin: r.trustMin, checkSec: r.checkDays * 86400, fallbackSec: r.fallbackDays * 86400, ...over };
 };
 
+/** Aşama 11: takvim hatasını gözlemden düzeltme seçeneği (HYPOTHETICAL.adaptiveRobust.correct); adaptiveRobustConfig({ correct: correctConfig() }) ile verilir. */
+export const correctConfig = (): NonNullable<AdaptiveRobustConfig['correct']> => {
+  const c = HYPOTHETICAL.adaptiveRobust.correct;
+  return { learnSec: c.learnDays * 86400, minWindows: c.minWindows, maxShiftSec: c.maxShiftHours * 3600 };
+};
+
 /** Aşama 10: çok uydulu yönlendirme (HYPOTHETICAL.routing). isl: uydular arası bağlantı kullanılsın mı. */
 export const routingConfig = (select: RoutingConfig['select'], isl = false): RoutingConfig => ({ select, ...(isl ? { isl: { kbps: HYPOTHETICAL.routing.islKbps } } : {}) });
 

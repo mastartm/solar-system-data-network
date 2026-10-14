@@ -376,6 +376,11 @@ export const HYPOTHETICAL = {
     checkDays: 2,
     /** Geri çekilme ufku (gün); 0 = güvenilmeyen takvimde kısma yok (öncelikli kuralı). */
     fallbackDays: 0,
+    /**
+     * Aşama 11: takvim hatasını gözlemden düzeltme (varsayılan KAPALI; seçenek). Strateji geçmişte tamamlanmış gerçek pencereleri tahmin pencereleriyle karşılaştırıp kaymayı tahmin eder.
+     * learnDays: öğrenme penceresi (gün); minWindows: en az gözlenen pencere sayısı; maxShiftHours: bundan büyük tahmin edilen kayma uydurma sayılır, düzeltilmez. Değerler UYDURMADIR.
+     */
+    correct: { learnDays: 7, minWindows: 3, maxShiftHours: 6 },
   },
 
   /**
