@@ -186,6 +186,14 @@ export interface ValueAwareConfig {
  * Kavuşum kesintisi içeren kapalı dönemlerde (astronomik, öngörülebilir) 'adaptive' kuralı aynen uygulanır.
  */
 export interface AdaptiveRobustConfig extends AdaptiveConfig {
+  /**
+   * Aşama 11: takvim hatasını gözlemden düzeltme (yoksa Aşama 10 ile birebir aynı). Strateji, GEÇMİŞTE gerçekleşmiş (gözlenen: hata yok) Dünya hattı pencere başlarını ve bitişlerini bildiği
+   * tahmin pencerelerinin başlarıyla ve bitişleriyle ayrı ayrı eşler (karşılıklı en yakın komşu, en çok maxShiftSec uzaklıkta; birleşmiş/silinmiş pencerelerin kenarları eşleşmez). Başlar için
+   * fark ds, bitişler için de (medyanlar, tüm uydular, adıma yuvarlı) bulunur; genişleme e = (de − ds)/2 ve öteleme o = (de + ds)/2 olarak gelecek takvim (Dünya hattı, yüzey hattı) geri
+   * ötelenir. Başlar ya da bitişler için en az minWindows eşleşme yoksa ya da |e|, |o| maxShiftSec'i aşarsa düzeltme yapılmaz. Tahminden SİLİNMİŞ pencereler düzeltilemez.
+   * Kavuşum (cisim arkası) takvimine dokunulmaz. learnSec: yalnız son learnSec içinde gerçekleşen kenarlar kullanılır.
+   */
+  correct?: { learnSec: number; minWindows: number; maxShiftSec: number };
   capSec?: number;
   histFactor?: number;
   histSec?: number;
@@ -497,13 +505,12 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   // arqHold: ARQ kopyası RTT boyunca tamponda yer tutar, yani havuz Dünya hattı AÇIKKEN değil, RTT sonra (ACK) boşalır. Simülasyonda kopya, gönderim adımından
   // 1 + ceil(RTT/adım) adım sonra bırakılır (adım başında işlenir): sürekli zamanlı projeksiyonda bu, açık/kapalı bayrağının ceil(RTT/adım) adım ötelenmesidir.
   // (Ay'da RTT ~3 sn < adım: öteleme 1 adımdır; adımın ayrıklaştırma sonucudur.) Başlangıçtan önce gönderim olmadığı için ilk adımlarda boşalma yoktur.
-  const projUp = arqHold
-    ? fUp.map((u, ri) => {
-        const out = new Uint8Array(u.length);
-        for (let t = 0; t < u.length; t++) { const lag = Math.max(1, Math.ceil((2 * samples[t].earthDelaySec[ri]) / dt)); out[t] = t - lag >= 0 ? u[t - lag] : 0; }
-        return out;
-      })
-    : fUp;
+  const lagUp = (u: Uint8Array, ri: number) => {
+    const out = new Uint8Array(u.length);
+    for (let t = 0; t < u.length; t++) { const lag = Math.max(1, Math.ceil((2 * samples[t].earthDelaySec[ri]) / dt)); out[t] = t - lag >= 0 ? u[t - lag] : 0; }
+    return out;
+  };
+  const projUp = arqHold ? fUp.map(lagUp) : fUp;
   // surfaceClosure: yüzey hattı (araç → uydu) takvimi (tahmin hatası aynı kuralla uygulanır).
   // Aşama 10: separateRelays (çok rotalı araçlar) da yüzey hattı takvimine ve planlanan uydu rotasına ihtiyaç duyar.
   const sepAsset = topo.assets.map((a) => sepOpt && (a.alt?.length ?? 0) > 0);
@@ -541,7 +548,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     for (let t = 0; t < o.length; t++) o[t] = Math.max(0, routes[ai].indexOf(samples[t].assetRelay ? samples[t].assetRelay![ai] : routes[ai][0]));
     return o;
   });
-  if (proj) {
+  const buildAFlips = () => {
     const relFlips = projUp.map(flipsOf);
     topo.assets.forEach((_, ai) => {
       const set = new Set<number>();
@@ -550,7 +557,8 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
       if (sepAsset[ai]) for (const f of flipsOf(planRoute[ai])) set.add(f);
       aFlips[ai] = [...set].sort((x, y) => x - y);
     });
-  }
+  };
+  if (proj) buildAFlips();
   if (cv) {
     const L = Math.ceil(cv.lookaheadSec / dt), R = Math.ceil(cv.recoverySec / dt);
     topo.relays.forEach((_, ri) => {
@@ -633,10 +641,73 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     if (ut > 0) trustMem[ai] = uf >= rob!.trustMin! * ut;
     return trustMem[ai];
   };
+  // ---- Aşama 11: takvim hatasını gözlemden düzeltme (AdaptiveRobustConfig.correct). Yoksa hiçbir şey çalışmaz. ----
+  const cor = rob?.correct;
+  const fUp0 = cor ? fUp.map((u) => u.slice()) : [];
+  const fSurf0 = cor ? fSurf.map((u) => u.slice()) : [];
+  const edgesOf = (get: (t: number) => boolean) => {
+    const st: number[] = [], en: number[] = [];
+    for (let t = 1; t < samples.length; t++) { const a = get(t - 1), b = get(t); if (!a && b) st.push(t); else if (a && !b) en.push(t); }
+    return { st, en };
+  };
+  const truthEdges = cor ? topo.relays.map((_, ri) => edgesOf((t) => !!samples[t].earthUp[ri])) : [];
+  const fcEdges = cor ? fUp0.map((u) => edgesOf((t) => !!u[t])) : [];
+  let corE = 0, corO = 0, corLast = -1;
+  const median = (v: number[]) => { const s2 = [...v].sort((x, y) => x - y); return s2[Math.floor((s2.length - 1) / 2)]; };
+  /** i adımına kadar tamamlanmış gerçek pencerelerden (son learnSec) kayma tahmini; yetersizse düzeltme yok. Düzeltme değişince takvim yapıları yeniden kurulur. */
+  const learnCalendar = (i: number) => {
+    if (!cor || i === corLast) return;
+    corLast = i;
+    const lo = i - Math.max(1, Math.ceil(cor.learnSec / dt));
+    const maxD = Math.max(1, Math.ceil(cor.maxShiftSec / dt));
+    const dsA: number[] = [], deA: number[] = [];
+    /** Gerçek kenarları (i adımına kadar gerçekleşmiş, son learnSec) tahmin kenarlarıyla karşılıklı en yakın komşu olarak eşler; fark = tahmin − gerçek. */
+    const match = (tr: number[], fc: number[], out: number[]) => {
+      const nearest = (arr: number[], x: number) => {
+        let lo2 = 0, hi = arr.length;
+        while (lo2 < hi) { const m = (lo2 + hi) >> 1; if (arr[m] < x) lo2 = m + 1; else hi = m; }
+        let best = -1;
+        for (const j of [lo2 - 1, lo2]) if (j >= 0 && j < arr.length && (best < 0 || Math.abs(arr[j] - x) < Math.abs(arr[best] - x))) best = j;
+        return best;
+      };
+      for (const t of tr) {
+        if (t >= i || t < lo) continue;
+        const j = nearest(fc, t);
+        if (j < 0 || Math.abs(fc[j] - t) > maxD) continue;
+        const back = nearest(tr, fc[j]);
+        if (back < 0 || tr[back] !== t) continue; // karşılıklı değil
+        out.push(fc[j] - t);
+      }
+    };
+    truthEdges.forEach((te, ri) => { match(te.st, fcEdges[ri].st, dsA); match(te.en, fcEdges[ri].en, deA); });
+    const es: number[] = [], os: number[] = [];
+    if (dsA.length >= cor.minWindows && deA.length >= cor.minWindows) {
+      const ds = median(dsA), de = median(deA);
+      es.push((de - ds) / 2); os.push((de + ds) / 2);
+    }
+    let e = 0, o = 0;
+    if (es.length > 0) {
+      e = Math.round(es[0]); o = Math.round(os[0]);
+      if (Math.abs(e) * dt > cor.maxShiftSec || Math.abs(o) * dt > cor.maxShiftSec) { e = 0; o = 0; }
+    }
+    if (e === corE && o === corO) return;
+    corE = e; corO = o;
+    for (let ri = 0; ri < fUp.length; ri++) {
+      fUp[ri] = e === 0 && o === 0 ? fUp0[ri].slice() : forecastFlags(fUp0[ri], -e, -o, false);
+      if (arqHold) projUp[ri] = lagUp(fUp[ri], ri); else projUp[ri] = fUp[ri];
+    }
+    topo.assets.forEach((_, ai) => {
+      if (fSurf0[ai].length) fSurf[ai] = e === 0 && o === 0 ? fSurf0[ai].slice() : forecastFlags(fSurf0[ai], -e, -o, false);
+      spellUp[ai] = routes[ai].length === 1 ? fUp[routes[ai][0]] : (() => { const out = new Uint8Array(samples.length); for (let t = 0; t < out.length; t++) for (const r of routes[ai]) if (fUp[r][t]) { out[t] = 1; break; } return out; })();
+    });
+    buildAFlips();
+    topo.assets.forEach((_, ai) => { aPtr[ai] = 0; });
+  };
   const clampH = (h: number) => Math.min(adMax, Math.max(adMin, h));
   const retreat = () => (robFb > 0 ? clampH(robFb) : -1);
   const robustSteps = (ai: number, i: number): number => {
     const r = rob!;
+    learnCalendar(i);
     const sp = closedSpell(ai, i);
     const black = !!sp && spellHasBlackout(ai, sp[0], sp[1]);
     if (r.trustMin !== undefined && !calendarTrusted(ai, i)) return retreat(); // güvenilmeyen takvim: kavuşum içeren dönemlerde de

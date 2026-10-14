@@ -1131,6 +1131,49 @@ Aşama 10 politikaları açık ve çok seçenekli akışlarda **tek tek ≥ 50 m
 
 **Doğrulama:** `npm test` 192 test geçti; `asama7/8/9` çıktıları ve `asama10-sonuclar.ts` çıktıları (deger, golge, telemetri, yonlendirme) değişiklikten sonra önceki çıktılarla **bayt bayt aynı** (asama7/8: süre notları hariç).
 
+## Aşama 11 (devam): takvim hatasını gözlemden düzeltme
+
+> Kapsam: README "Sonraki aşamalar"daki **tek madde** (takvim hatasını gözlemden düzeltmek). Diğer adaylar (değer modeli, kapasite maliyet-fayda, gerçekçi yörünge/güç, kalan ≈ %4–5 hız farkı) **yapılmadı**. Tüm değerler **varsayımsaldır**; sonuçlar gerçek bir görev sonucu değildir (konumlar ve ışık gecikmeleri gerçek Horizons verisidir, geri kalanı uydurmadır). Yeni şey **seçenektir**; varsayılan kapalıdır.
+
+**Sorun (Aşama 10):** `'adaptiveRobust'` takvim hatası belli bir düzeyi aşınca (geri çekilme) kısmayı bırakıp öncelikli çizelgeye döner (Mars −120 dk: düşen+hatta 44,8 = öncelikli; Ay −120 dk: 13,2). Strateji geçmişte takvimin **ne kadar yanlış çıktığını gözlemleyebilir**; hata bir kayma ise telafi edilebilir.
+
+**Yöntem** (`AdaptiveRobustConfig.correct`; `learnSec`, `minWindows`, `maxShiftSec`; varsayılanlar `HYPOTHETICAL.adaptiveRobust.correct`: 7 gün, 3, 6 sa; `correctConfig()`):
+1. Her adımda yalnızca **o ana kadar gerçekleşmiş** Dünya hattı pencere **başları** ve **bitişleri** (gözlem: hata yok) bilinen (hatalı) tahmin kenarlarıyla **ayrı ayrı** eşlenir: karşılıklı en yakın komşu, en çok `maxShiftSec` uzaklıkta. Birleşmiş ya da silinmiş pencerelerin kenarları eşleşmez (bu önemliydi: pencere çiftini eşlemek iyimser hatada komşu pencereler birleşince 6 yerine 30 adım gibi yanlış kayma buluyordu; ilk sürüm buydu, düzeltildi).
+2. Başlar için fark *ds*, bitişler için *de* (medyan, tüm uydular, adıma yuvarlı); genişleme *e* = (*de* − *ds*)/2, öteleme *o* = (*de* + *ds*)/2. Başlar ve bitişler için en az `minWindows` eşleşme yoksa ya da |*e*|, |*o*| `maxShiftSec`i aşıyorsa **düzeltme yapılmaz**.
+3. Gelecek takvim (Dünya hattı ve yüzey hattı; projeksiyon ve kapalı dönem hesabı, ARQ gecikmesi dahil) `forecastFlags(tahmin, −e, −o)` ile geri ötelenir; değişen kenarlar için takvim yapıları yeniden kurulur (yalnızca tahmin değişince). **Kavuşum (cisim arkası) takvimine dokunulmaz.** Geri çekilme ve güven aralığı düzeltilmiş takvimle çalışır.
+4. `correct` yoksa kod yolu **aynıdır** (Aşama 10 ile birebir; testli). Gerçek simülasyon (bağlantılar, kayıplar) hiç değişmez; yalnızca stratejinin bildiği takvim.
+
+Arayüz: Çizelgeleyici → (m2) "Takvim hatasını gözlemden düzelt (Aşama 11)" onay kutusu tabloya **yeni bir sütun** ekler; "Varsayımsal değerler" tablosunda satırı vardır.
+
+**Sonuçlar** (`npx vite-node scripts/asama11-sonuclar.ts`; gerçek Horizons verisi; 600 sn adım, 1 istasyon, hatalı hat + yeniden iletim [periyodik]; Ay 5 başlangıç tarihi, Mars 9 kavuşum penceresi; hücre: toplam kayıp farkı medyanı [puan, öncelikliye göre] / düşen+hatta % medyanı; öncelikli düşen+hatta: Ay 24,8, Mars 44,8; hata yokken dayanıklı: Ay +0,21 / 7,5, Mars +1,92 / 3,6):
+
+| hata (dk) | Ay: dayanıklı (Aşama 10) | Ay: + düzeltme | Mars: dayanıklı (Aşama 10) | Mars: + düzeltme |
+|---|---|---|---|---|
+| kenar −240 | +0,00 / 24,8 | +0,00 / 24,8 (**etki yok**) | +0,15 / 44,8 | +0,15 / 44,8 (**etki yok**) |
+| kenar −120 | +0,26 / 13,2 | +0,28 / 8,2 | +0,00 / 44,8 | +2,09 / 24,6 |
+| kenar −60 | +0,40 / 7,1 | +0,21 / 7,5 | +2,15 / 25,9 | +1,97 / 3,8 |
+| kenar +60 / +120 | +0,20 / 7,5 | +0,21 / 7,5 | +1,88 / 4,6 ; +1,42 / 5,2 | +1,90 / 3,9 ; +1,90 / 4,0 |
+| öteleme −120 | +0,26 / 7,5 | +0,21 / 7,2 | +2,00 / 26,3 | +1,92 / 3,9 |
+| öteleme −60 | +0,22 / 7,5 | +0,21 / 7,5 | +1,96 / 26,3 | +1,92 / 3,6 |
+| öteleme +60 / +120 | +0,21 / 7,5 ; +0,23 / 7,5 | +0,21 / 7,5 ; +0,26 / 7,6 | +1,89 / 3,6 ; +1,90 / 3,5 | +1,92 / 3,5 ; +1,89 / 3,6 |
+
+**Okuma:**
+- **−60 ve −120 dk (pencereler kısalır) ve Mars'ta öteleme:** düzeltme, hatalı takvimin kaybettirdiği kısmayı geri getirir; sonuç "hata yok" satırına yaklaşır (Mars kenar −60: düşen+hatta 25,9 → 3,8; Mars öteleme −60: 26,3 → 3,6 [hata yok 3,6]; Ay kenar −120: 13,2 → 8,2 [hata yok 7,5]). **Mars kenar −120 dk'da kısmen**: 44,8 (öncelikli) → 24,6; "hata yok" 3,6'ya **varmaz**, çünkü −120 dk'da en kısa pencereler tümüyle silinir (4 saatten kısa pencere kalmaz) ve silinmiş pencere düzeltilemez; geri çekilme (0,3) hâlâ kısmen tetiklenir. (Geri çekilme ve güven aralığı olmadan yalnız düzeltme: düşen+hatta 1,0, toplam kayıp +2,20; yani **fazla** kısıyor, hata yokta +1,92 / 3,6'dan sapıyor.)
+- **−240 dk: etki yok.** Pencereler tamamen silindiği için eşlenecek tahmin kenarı yoktur, hiç düzeltme öğrenilmez; sonuç Aşama 10 ile aynıdır (Ay 24,8, Mars 44,8 = öncelikli). Bu, Aşama 10'un belirttiği sınır; aşılmadı.
+- **İyimser kenar (+60/+120) ve Ay'da öteleme: pratikte etki yok** (Ay ≤ 0,05 puan). Mars'ta iyimser kenarda düzeltme hatasız sonuca yaklaştırır: toplam kayıp biraz **artar** (+1,42 → +1,90), düşen+hatta düşer (5,2 → 4,0); yani iyimser hatanın "ucuz" ek kazancı da düzeltmeyle kaybolur (hata yoksa +1,92).
+- **Öncelikliden kötü** (düşen+hatta) senaryo sayısı Aşama 10 varsayılanıyla aynı (Mars −240: 1/9, Ay 0/5); düzeltme bunu artırmadı.
+- Gerçek veriyle Chromium'da (Mars, 3 istasyon, adım 600 sn, (m2) onay kutusu açık): konsol hatası yok; yeni sütun çalışır (−120 dk: düşen+hatta 20,4 [geri çekilme = öncelikli] → 18,1; ±240 dk: aynı). Ekran görüntüleri gerçek verilidir: `docs/asama11-takvim-duzeltme-genis.png`, `docs/asama11-takvim-duzeltme-dar.png` (600 px).
+
+**Testler** (`npm test`; hepsi **sentetik**: uydurma tek uydulu topoloji ve periyodik hat boşlukları, testte yazılı; `src/network/stage11.test.ts`): `correct` yok ya da hata yok ⇒ Aşama 10 ile **birebir**; −100 sn kenar kısalması toplam kaybı > 5 puan artırır, düzeltme hatasız takvimin < 1 puan yakınına indirir; kenar, öteleme ve ikisi birden düzeltilir; silinen pencerelerde (−250 sn) düzeltme yok ⇒ `correct` yokkenle aynı; `maxShiftSec` ve `minWindows` sınırları; komşu pencerelerin birleştiği iyimser hatada (boşluk < 2 × kayma) yanlış kayma öğrenilmez; **korunum denklemleri** (üretilen = teslim + düşen + hatta kayıp + atılan + kalan; talep = üretilen + üretilmeyen) düzeltmeli yollarda (kayıpsız, ARQ, yüzey kapalılığı + ARQ tutma + ayrı tamponlar × dört takvim hatası); belirleyicilik. Hesap Worker havuzunda çalışır (ayrı bir kod yolu eklenmedi; `correct` yapılandırmayla işleyiciye gider).
+
+**Doğrulama:** `asama7/8/9/10-sonuclar.ts` çıktıları değişiklikten önce ve sonra **bayt bayt aynı** (asama7/8: süre notları hariç; önce referanslar kaydedildi). `npm test`: **200 test** (önce 192; yeni 8, hepsi `stage11.test.ts`); `npm run build` geçti.
+
+**Sınırlar (bilinmeyenler):**
+- Düzeltici, simülasyonun hata modelinin (sabit kenar kayması ve/veya sabit öteleme) **aynı ailesini** varsayar; bu ölçümde hata da bu ailedendir, yani sonuçlar **iyimser** olabilir. Zamanla değişen, pencereye göre farklı ya da kısmen silinmiş hatalar, gerçek istasyon bakım belirsizlikleri denenmedi.
+- **Ortalama kayıp sapması** hatası ve cisim arkası (kavuşum) takvim hatası düzeltilmedi; taranmadı.
+- Parametreler (7 gün, 3 eşleşme, 6 sa, karşılıklı en yakın komşu kuralı) uydurmadır; ayarlanmadı. Hata türü yalnızca pencere kayması.
+- Düzeltmenin ne zaman "yeterince" öğrendiği (kaç pencerede) taranmadı; öğrenme süresi içinde strateji hatalı takvimle çalışır.
+
 ## Veri kaynağı ve kararlar
 
 - **Kaynak:** NASA/JPL Horizons API (`ssd.jpl.nasa.gov/api/horizons.api`), anahtar gerektirmez. Güneş merkezli, ekliptik düzlemde konum ve hız vektörleri (gezegenler 2 günde bir, Ay Dünya merkezli günde bir).
@@ -1193,6 +1236,8 @@ docs/        gerçek veriyle alınmış ekran görüntüleri
 30. **Presesyon** yalnızca düğümü (RAAN) sabit hızla kaydırır; periapsis argümanı ve eğim sabit; hızlar uydurmadır. Üçüncü cisim etkisiyle gerçekçi bir yörünge yayılımı denenmedi.
 31. **Telemetri denemesi:** paket boyutu, ayrılmış pay ve kısma değerleri uydurmadır; telemetri en önemli sınıf olduğundan etkisiz çıktı. Telemetrinin kendi hat/öncelik yapısı (ör. ayrı düşük hızlı bir telemetri hattı, ARQ'suz telemetri) denenmedi.
 32. **Performans:** Aşama 10 çizelgeleyici sekmesi akışı `main`'e göre ≈ %7 daha yavaş ölçülmüştü; Aşama 11'de nedeni (Worker'daki simülasyon çekirdeği) bulundu ve kısmen giderildi, kalan ≈ %4–5 açıklanamadı (bölüm "Aşama 11").
+33. **Takvim düzeltmesi hata ailesini bilir:** düzeltici, sabit kenar kayması + sabit ötelemeyi varsayar; ölçümdeki hata da bu ailedendir (sonuçlar iyimser olabilir). Gerçek takvim belirsizlikleri (bakım, değişken kayma) farklı davranabilir.
+34. **Silinen pencereler düzeltilemez** (kenar −240 dk, Mars −120 dk'da en kısa pencereler): eşlenecek tahmin kenarı olmadığından düzeltme öğrenilmez ya da eksik kalır; geri çekilme hâlâ gereklidir. Düzeltme parametreleri (7 g, 3 eşleşme, 6 sa) uydurmadır, ayarlanmadı.
 
 ## Kullanılan dış kaynaklar
 
@@ -1204,7 +1249,7 @@ docs/        gerçek veriyle alınmış ekran görüntüleri
 ## Sonraki aşamalar
 
 Aşama 11 adayları (değerler **varsayımsal** kalır; sonuçlar gerçek bir görev sonucu değildir):
-- **Takvim hatasını gözlemden düzeltmek:** geçmişteki gerçek pencerelerden pencere başı/sonu kaymasını tahmin edip gelecek takvimi düzeltmek (−120 dk'da kısmanın faydasını korumalı; −240 dk'da pencereler silindiğinden yetmez), öteleme ve kayıp sapması hatalarını da taramak.
+- **Takvim hatasını gözlemden düzeltmek:** **Aşama 11'de yapıldı** (bölüm "Aşama 11 (devam)"): kenar kayması ve öteleme düzeltilir (Mars kenar −120 dk'da kısmen; −240 dk'da etki yok). Kalan: **ortalama kayıp sapması** ve kavuşum takvimi hataları, zamanla değişen/pencereye göre farklı hatalar, parametre ayarı.
 - **Değer modelini sorgulamak:** kuyruk kuralının kazancı "üstel azalan, yeni veri değerli" varsayımına bağlı; başka modeller (basamak azalma, gecikmeye duyarlı sınıflar, bazı verinin eskiyince bile değerli kalması) ve eski verinin akıbetinin değer ölçütüne yansıtılması.
 - **Kapasiteyi artıran ilkeler:** toplam kayıp tüm çabalara rağmen hat/tampon kapasitesine bağlı kalıyor (kısma, kuyruk kuralı, telemetri, yönlendirme toplam kaybı artırmıyor ya da azaltmıyor); ikinci uydu ve istasyon sayısı kontrolleri kaldıraç. Kapasiteyi pahalılaştıran seçimlerin (ör. iki uydu + uydular arası bağlantı) maliyet-fayda analizi.
 - **Daha gerçekçi yörünge ve güç:** üçüncü cisim etkili Ay yörüngeleri (NRHO/ELFO), Mars eksen yönünün doğrulanması ve yarıgölge, güneş paneli yönelimi ve bataryanın ısıl/yaşlanma modeli; güç modelinde yük paylaşımı (hat yerine veri biriktirme).
