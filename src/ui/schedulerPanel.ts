@@ -268,7 +268,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       </section>
 
       <section>
-        <h3>(m) Aşama 10 deneyleri <small>(değere duyarlı kuyruk · dayanıklı ufuk · çok uydulu yönlendirme · yörünge/güç · telemetri · ${HYPOTHETICAL_LABEL})</small></h3>
+        <h3>(m) Aşama 10–11 deneyleri <small>(değere duyarlı kuyruk · dayanıklı ufuk · çok uydulu yönlendirme · yörünge/güç · telemetri · değer modeli · ${HYPOTHETICAL_LABEL})</small></h3>
         <p class="hint">Her deney seçili hat, istasyon sayısı, hat modu ve kaydırıcılarla, düğmeyle ve Web Worker havuzunda çalışır. Sonuçlar <b>gerçek bir görev sonucu değildir</b>; ağırlıklar, eşikler, yörünge/güç değerleri ve eksen yönü varsayımdır. Beklenmedik: bazı deneylerde “etki yok” çıkar ve bu açıkça yazılır.</p>
         <h4>(m1) Değere duyarlı kuyruk politikası <small>(azalan değer seçiliyken)</small></h4>
         <div class="row"><button type="button" id="m1-run">Kuyruk politikasını kısmayla karşılaştır</button><span class="legend" id="m1-status" role="status"></span></div>
@@ -285,6 +285,9 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
         <h4>(m5) Telemetri tarafı</h4>
         <div class="row"><button type="button" id="m5-run">Telemetri denemesini hesapla</button><span class="legend" id="m5-status" role="status"></span></div>
         <div id="m5-body"></div>
+        <h4>(m6) Değer modelini sorgula <small>(Aşama 11)</small></h4>
+        <div class="row"><button type="button" id="m6-run">Alternatif değer modelleriyle karşılaştır</button><span class="legend" id="m6-status" role="status"></span></div>
+        <div id="m6-body"></div>
       </section>
 
       <section>
@@ -328,6 +331,7 @@ export function mountScheduler(root: HTMLElement, tracks: Record<string, Track>,
       ${row('Değere duyarlı kuyruk (Aşama 10)', `yalnızca azalan değer modeli seçiliyken: bilim verisinde en yeni önce gönderilir · değeri başlangıcın %${fmt(HYPOTHETICAL.valueAware.expireBelow * 100)}'ine inen paket tamponda atılır · tampon dolunca en eski bilim paketi atılır · eşik/kurallar uydurmadır; seçim yoksa 'öncelikli' ile birebir aynı`)}
       ${row('Dayanıklı uyarlamalı ufuk (Aşama 10)', `güven aralığı: kapalı dönem, gözlenen en uzun kapalı dönemin ×${fmt(HYPOTHETICAL.adaptiveRobust.histFactor)}'ini aşamaz · geri çekilme: son ${fmt(HYPOTHETICAL.adaptiveRobust.checkDays)} günde takvim gerçekte açık adımların %${fmt(HYPOTHETICAL.adaptiveRobust.trustMin * 100)}'inden azını açık gösteriyorsa kısma yok · ufuk kırpma ${HYPOTHETICAL.adaptiveRobust.capDays > 0 ? `${fmt(HYPOTHETICAL.adaptiveRobust.capDays)} gün` : 'kapalı'}`)}
       ${row('Takvim hatasını gözlemden düzeltme (Aşama 11, seçenek)', `son ${fmt(HYPOTHETICAL.adaptiveRobust.correct.learnDays)} günde gerçekleşen pencere başlarıyla/bitişleriyle bildiği takvimin başlarını/bitişlerini eşleyip kaymayı bulur (en az ${fmt(HYPOTHETICAL.adaptiveRobust.correct.minWindows)} eşleşme, |kayma| ≤ ${fmt(HYPOTHETICAL.adaptiveRobust.correct.maxShiftHours)} sa) ve gelecek takvimi geri öteler · silinmiş pencereler düzeltilemez (uydurma değerler)`)}
+      ${row('Alternatif değer modelleri (Aşama 11, seçenek)', `bilim verisi için son tarih (3/14/30 g, sonra 0 ya da yarı değer) · tabanlı üstel (taban %30/%60) · doğrusal (30 günde 0) · telemetri son tarihi (1/3 g); yalnızca ölçüt, hepsi uydurma`)}
       ${row('Yönlendirme ve uydular arası bağlantı (Aşama 10)', `araç uydu seçimi: çizelge / en az dolu tamponlu / önce Dünya hattı açık · uydular arası bağlantı: menzil ${fmt(HYPOTHETICAL.routing.islMaxKm)} km, ${fmt(HYPOTHETICAL.routing.islKbps)} kbit/sn (uydurma)`)}
       ${row('Presesyon, Mars ekseni, güç (Aşama 10)', `Ay RAAN hızı ${fmt(HYPOTHETICAL.moonPrecession.raanRateDegPerDay, 1)} °/gün (uydurma) · Mars ekseni RA ${fmt(HYPOTHETICAL.marsAxis.raDeg, 2)}°, Dec ${fmt(HYPOTHETICAL.marsAxis.decDeg, 2)}° (varsayım) · güç: batarya ${fmt(HYPOTHETICAL.marsPower.batteryWh)} Wh, güneş ${fmt(HYPOTHETICAL.marsPower.solarW)} W, taban yük ${fmt(HYPOTHETICAL.marsPower.baseLoadW)} W, hat yükü ${fmt(HYPOTHETICAL.marsPower.linkLoadW)} W, hat %${fmt(HYPOTHETICAL.marsPower.cutoffFrac * 100)} altında kapanır, %${fmt(HYPOTHETICAL.marsPower.resumeFrac * 100)} üstünde açılır (uydurma)`)}
       ${row('Tahmin hatası taraması (Aşama 8)', `adım ${fmt(HYPOTHETICAL.forecastScan.stepSec)} sn · pencere başı/sonu kayması (dk): ${HYPOTHETICAL.forecastScan.edgeShiftMin.join(', ')} · pencere ötelemesi (dk): ${HYPOTHETICAL.forecastScan.offsetMin.join(', ')} · ortalama kayıp sapması (%): ${HYPOTHETICAL.forecastScan.lossBiasPct.join(', ')}`)}

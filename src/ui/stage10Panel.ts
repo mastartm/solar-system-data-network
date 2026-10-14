@@ -7,13 +7,13 @@ import type { Req, SimOut, TlSpec } from '../network/compute';
 import type { NetOptions } from '../network/network';
 import type { Policy, ProjectionOptions, SchedConfig } from '../network/scheduler';
 import { valuePct, type Metrics } from '../network/sweep';
-import { adaptiveRobustConfig, correctConfig, routingConfig, valueAwareConfig } from '../network/timeline';
+import { adaptiveRobustConfig, correctConfig, routingConfig, valueAwareConfig, valueHalfLivesSec, valueModelsConfig } from '../network/timeline';
 import type { ExtrasCtx } from './schedulerExtras';
 import { NAME, fmt, signed, valueModel, type Scen } from './schedShared';
 
 export type Stage10Ctx = Pick<ExtrasCtx, '$' | 'call' | 'cur' | 'cfgFor'>;
 
-const IDS = ['m1', 'm2', 'm3', 'm4', 'm5'] as const;
+const IDS = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6'] as const;
 type Id = (typeof IDS)[number];
 
 const cellOf = (m: Metrics) => `${fmt(m.dropPct + m.abandonedPct, 1)} / ${fmt(m.lossPct, 1)} / ${fmt(m.deliveredPct, 1)} [${fmt((100 * m.suppressedMb) / (m.demandMb || 1), 1)}]`;
@@ -179,7 +179,29 @@ export function mountStage10(ctx: Stage10Ctx) {
       + '<p class="hint">Telemetri zaten en yüksek öncelikli olduğundan paket boyutu ve ayrılmış pay öncelikli kuyrukta etkisizdir; telemetriyi kısmak “düşen”i azaltır ama aynı miktar “üretilmeyen”e dönüşür ve (telemetri değeri yüksek olduğundan) değer ölçütünü düşürür.</p>';
   });
 
-  const runs: Record<Id, () => Promise<void>> = { m1: run1, m2: run2, m3: run3, m4: run4, m5: run5 };
+  // m6 (Aşama 11) -------------------------------------------------------------------------------------------------------------------------------
+  const run6 = () => guarded('m6', async (_my, st) => {
+    const c = ctx.cur(), s = c.s!, n = c.stations, net = s.net, step = HYPOTHETICAL.scheduler.stepSec;
+    const specs = HYPOTHETICAL.value.models, models = valueModelsConfig(), H0 = valueHalfLivesSec().length;
+    const deadlines = [...new Set(specs.map((m) => (m.decay.kind === 'step' ? m.decay.deadlineDays : 0)).filter((d) => d > 0))];
+    const tick = count(st, 4 + deadlines.length);
+    const go = (p: Policy, over: Partial<SchedConfig> = {}) => sim(s, net, n, step, p, clean(base(s, net), { valueModels: models, ...over })).then((m) => { tick(); return m; });
+    const hl = 14 * 86400;
+    const [pr, ad, A, B] = await Promise.all([go('priority'), go('adaptive'), go('valueAware', { valueAware: valueAwareConfig(hl) }), go('valueAware', { valueAware: valueAwareConfig(hl, { expireBelow: 0, evictOldest: false }) })]);
+    const C = await Promise.all(deadlines.map((d) => go('valueAware', { valueAware: valueAwareConfig(hl, { expireBelow: 0, expireAfterSec: d * 86400 }) })));
+    const tw = { weightOf: (p: { id: string; weight: number }) => p.weight };
+    const rows = specs.map((sp, j) => {
+      const o = { ...tw, halfLifeIdx: H0 + j, topDecays: !!sp.top };
+      const g = (m: Metrics) => gain(valuePct(m, o) - valuePct(pr, o));
+      const di = sp.decay.kind === 'step' ? deadlines.indexOf(sp.decay.deadlineDays) : -1;
+      return [`${sp.label} <small>(öncelikli ${fmt(valuePct(pr, o), 1)}%)</small>`, g(ad), g(A), g(B), di >= 0 ? g(C[di]) : '—'];
+    });
+    return `<p class="hint"><b>${s.relayName} hattı, ${n} istasyon, adım ${fmt(step)} sn.</b> Öncelikli: ${cellOf(pr)}. Hücre: değer kazancı (puan; politika − öncelikli, satırın KENDİ gerçek değer modeliyle; telemetri ve bilim verisi config birim değerleri). Kural A: en yeni önce + eşik altı atma + en eskiyi at (üstel 14 g varsayar); B: yalnız en yeni önce; C: gerçek son tarihte atma + en yeni önce + en eskiyi at (yalnız basamak modelleri).</p>`
+      + table(['Gerçek değer modeli', NAME.adaptive + ' (kısma)', 'Kural A', 'Kural B', 'Kural C (son tarihe uyan)'], rows)
+      + `<p class="hint">Alternatif modeller uydurmadır (${HYPOTHETICAL_LABEL}) ve yalnızca ölçüttür; çizelgeleme kararlarını etkilemez. Atılan: A ${fmt(A.expiredPct, 1)}%; teslim farkı (puan): A ${signed(A.deliveredPct - pr.deliveredPct, 1)}, B ${signed(B.deliveredPct - pr.deliveredPct, 1)}. Kural kazancı kapasite kıtsa görünür (Ay 2+ istasyon: kayıp ≈ 0, “etki yok”).</p>`;
+  });
+
+  const runs: Record<Id, () => Promise<void>> = { m1: run1, m2: run2, m3: run3, m4: run4, m5: run5, m6: run6 };
   for (const id of IDS) $(`#${id}-run`).addEventListener('click', () => void runs[id]());
   void HYPOTHETICAL_LABEL;
   return { reset };

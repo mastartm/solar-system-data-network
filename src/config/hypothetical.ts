@@ -5,6 +5,14 @@
 
 export const HYPOTHETICAL_LABEL = 'Varsayımsal değerler';
 
+/** Aşama 11: alternatif değer modeli tanımı (gün cinsinden; timeline.ts `valueModelsConfig` saniyeye çevirir). */
+export type ValueCurveSpec =
+  | { kind: 'exp'; halfLifeDays: number }
+  | { kind: 'step'; deadlineDays: number; after?: number }
+  | { kind: 'floor'; halfLifeDays: number; floor: number }
+  | { kind: 'linear'; zeroAtDays: number };
+export interface ValueModelSpec { id: string; label: string; decay: ValueCurveSpec; top?: ValueCurveSpec }
+
 export interface AssetConfig {
   id: string;
   name: string;
@@ -280,6 +288,23 @@ export const HYPOTHETICAL = {
     decayOptionsDays: [3, 7, 14, 30, 90],
     /** Telemetri değerinin bilim verisi değerine oranı taraması (bilim verisi = 1). */
     telemetryWeightScan: [1, 2, 4, 8, 16, 32],
+    /**
+     * Aşama 11, madde 2: alternatif değer modelleri (hepsi UYDURMA; gerçek bir bilimsel değer ölçüsü değildir). Teslim yaşına (gün) göre değer çarpanı, bilim verisi için:
+     * 'exp' = 2^(−yaş/yarı ömür); 'step' = son tarihe kadar 1, sonra `after`; 'floor' = taban + (1 − taban) × üstel (eski veri de değerli kalır); 'linear' = 1'den `zeroAt` günde 0'a.
+     * `top`: telemetri de azalır (yoksa sabit değer, Aşama 9-10). Çizelgeleme kararlarını etkilemez, yalnızca ölçüttür.
+     */
+    models: [
+      { id: 'exp14', label: 'üstel, yarı ömür 14 g (kontrol: Aşama 9-10)', decay: { kind: 'exp', halfLifeDays: 14 } },
+      { id: 'step3', label: 'son tarih 3 g (sonra 0)', decay: { kind: 'step', deadlineDays: 3, after: 0 } },
+      { id: 'step14', label: 'son tarih 14 g (sonra 0)', decay: { kind: 'step', deadlineDays: 14, after: 0 } },
+      { id: 'step30', label: 'son tarih 30 g (sonra 0)', decay: { kind: 'step', deadlineDays: 30, after: 0 } },
+      { id: 'step14half', label: 'son tarih 14 g (sonra yarı değer)', decay: { kind: 'step', deadlineDays: 14, after: 0.5 } },
+      { id: 'floor14-30', label: 'üstel 14 g, taban %30 (eskiyince de değerli)', decay: { kind: 'floor', halfLifeDays: 14, floor: 0.3 } },
+      { id: 'floor14-60', label: 'üstel 14 g, taban %60', decay: { kind: 'floor', halfLifeDays: 14, floor: 0.6 } },
+      { id: 'linear30', label: 'doğrusal, 30 günde 0', decay: { kind: 'linear', zeroAtDays: 30 } },
+      { id: 'tel1', label: 'üstel 14 g + telemetri son tarih 1 g', decay: { kind: 'exp', halfLifeDays: 14 }, top: { kind: 'step', deadlineDays: 1, after: 0 } },
+      { id: 'tel3', label: 'üstel 14 g + telemetri son tarih 3 g', decay: { kind: 'exp', halfLifeDays: 14 }, top: { kind: 'step', deadlineDays: 3, after: 0 } },
+    ] as ValueModelSpec[],
   },
 
   /**

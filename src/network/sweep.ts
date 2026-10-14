@@ -73,6 +73,8 @@ export interface ValueOpts {
   weightOf?: (p: ValuePart) => number;
   /** valueHalfLivesSec içindeki sıra; verilirse bilim verisi (decays) zamanla azalan değerle sayılır. Yoksa sabit değer. */
   halfLifeIdx?: number;
+  /** Aşama 11: true ise en önemli sınıf (telemetri) da zamanla azalan değerle sayılır (yalnızca alternatif değer modelinin `top` eğrisi için anlamlı). */
+  topDecays?: boolean;
 }
 
 /** Değer ağırlıklı fayda ölçütü (%) = teslim edilen değer / talep edilen değer. Sabit değerde yalnızca ağırlıklı hacim oranı; yarı ömürle bilim verisi 2^(−yaş/yarı ömür) çarpanını alır. */
@@ -80,7 +82,7 @@ export function valuePct(m: Pick<Metrics, 'valueParts'>, o: ValueOpts = {}): num
   let num = 0, den = 0;
   for (const p of m.valueParts) {
     const w = o.weightOf ? o.weightOf(p) : p.weight;
-    num += w * (p.decays && o.halfLifeIdx !== undefined && o.halfLifeIdx >= 0 && o.halfLifeIdx < p.decayMb.length ? p.decayMb[o.halfLifeIdx] : p.deliveredMb);
+    num += w * ((p.decays || o.topDecays) && o.halfLifeIdx !== undefined && o.halfLifeIdx >= 0 && o.halfLifeIdx < p.decayMb.length ? p.decayMb[o.halfLifeIdx] : p.deliveredMb);
     den += w * p.demandMb;
   }
   return den > 0 ? (100 * num) / den : 0;

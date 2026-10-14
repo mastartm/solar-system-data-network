@@ -1,8 +1,8 @@
-import { HYPOTHETICAL } from '../config/hypothetical';
+import { HYPOTHETICAL, type ValueCurveSpec } from '../config/hypothetical';
 import type { Track } from '../data/types';
 import { C_KM_S, dist, sample, trackEndJD } from '../map/ephemeris';
 import { MarsPower, applyPower, computeNetwork, effectiveAssets, effectiveRelays, relayCandidates, type NetOptions } from './network';
-import type { AdaptiveConfig, AdaptiveRobustConfig, ArqConfig, CoverageConfig, LinkSample, ProjectionOptions, RollingConfig, RoutingConfig, SchedAsset, SchedConfig, SchedTopology, StrategyConfig, ValueAwareConfig } from './scheduler';
+import type { AdaptiveConfig, AdaptiveRobustConfig, ArqConfig, CoverageConfig, LinkSample, ProjectionOptions, RollingConfig, RoutingConfig, SchedAsset, SchedConfig, SchedTopology, StrategyConfig, ValueAwareConfig, ValueCurve, ValueModel } from './scheduler';
 
 /** net (Aşama 9): ağ seçenekleri; varsayılan = Aşama 2-8 topolojisi. Ay araçları ikinci uydu seçilince `alt` olarak ikinci uyduyu da listeler. */
 export const schedTopology = (net: NetOptions = {}): SchedTopology => {
@@ -52,6 +52,17 @@ export const adaptiveRobustConfig = (over: Partial<AdaptiveRobustConfig> = {}): 
   const r = HYPOTHETICAL.adaptiveRobust;
   return { ...adaptiveConfig(), ...(r.capDays > 0 ? { capSec: r.capDays * 86400 } : {}), histFactor: r.histFactor, histSec: r.histDays * 86400, trustMin: r.trustMin, checkSec: r.checkDays * 86400, fallbackSec: r.fallbackDays * 86400, ...over };
 };
+
+/** Aşama 11: alternatif değer modelleri (HYPOTHETICAL.value.models; gün → sn). Sıra, decayMb'de valueHalfLivesSec girdilerinden sonraki sıradır. */
+const curveOf = (c: ValueCurveSpec): ValueCurve => {
+  switch (c.kind) {
+    case 'exp': return { kind: 'exp', halfLifeSec: c.halfLifeDays * 86400 };
+    case 'step': return { kind: 'step', deadlineSec: c.deadlineDays * 86400, ...(c.after !== undefined ? { after: c.after } : {}) };
+    case 'floor': return { kind: 'floor', halfLifeSec: c.halfLifeDays * 86400, floor: c.floor };
+    case 'linear': return { kind: 'linear', zeroAtSec: c.zeroAtDays * 86400 };
+  }
+};
+export const valueModelsConfig = (): ValueModel[] => HYPOTHETICAL.value.models.map((m) => ({ id: m.id, decay: curveOf(m.decay), ...(m.top ? { top: curveOf(m.top) } : {}) }));
 
 /** Aşama 11: takvim hatasını gözlemden düzeltme seçeneği (HYPOTHETICAL.adaptiveRobust.correct); adaptiveRobustConfig({ correct: correctConfig() }) ile verilir. */
 export const correctConfig = (): NonNullable<AdaptiveRobustConfig['correct']> => {
