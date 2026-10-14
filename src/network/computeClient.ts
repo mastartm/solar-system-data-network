@@ -2,6 +2,7 @@
 // Aktarım (Transport) soyutlanmıştır: tarayıcıda gerçek Worker'lar, testte/Worker yokken ana iş parçacığında satır içi işleyici (aynı kod).
 import type { Track } from '../data/types';
 import { createHandler, type Req } from './compute';
+import { t } from '../i18n';
 
 export interface Transport {
   post(msg: { id: number; req: Req }): void;
@@ -49,7 +50,7 @@ export class ComputePool {
     const job = cur.job;
     if (job.gen !== -1 && job.gen !== this.gen) this.dropped++; // iptal edilmiş iş: sonuç atılır, söz hiç sonuçlanmaz
     else if (m.ok) job.resolve(m.res as never);
-    else job.reject(new Error(m.error ?? 'Hesap hatası'));
+    else job.reject(new Error(t(m.error ?? 'Hesap hatası'))); // işçi Türkçe ileti üretir (sayfa dili yalnızca ana iş parçacığında çözülür); çeviri burada yapılır
     this.pump();
   }
 

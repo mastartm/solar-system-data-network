@@ -10,6 +10,7 @@ import type { ForecastError, Policy, ProjectionOptions, SchedConfig } from '../n
 import { valuePct, type Metrics } from '../network/sweep';
 import type { LinkMode, SweepParams } from '../network/timeline';
 import { NAME, day, fmt, signed, valueModel, valueModelLabel, valueOpts, type Scen } from './schedShared';
+import { t } from '../i18n';
 
 export interface Current { s: Scen | null; stations: number; mode: LinkMode; rollingDays: number; projection: ProjectionOptions }
 
@@ -43,15 +44,15 @@ export function mountExtras(ctx: ExtrasCtx) {
 
   const sim = (tl: TlSpec, policy: Policy, cfg: SchedConfig) => ctx.call<SimOut>({ op: 'sim', tl, policy, cfg }).then((o) => o.metrics);
   const spec = (s: Pick<Scen, 'startJD' | 'endJD' | 'relayId'>, step: number, n: number, net: NetOptions): TlSpec => ({ startJD: s.startJD, endJD: s.endJD, stepSec: step, stations: n, relayId: s.relayId, ...(Object.keys(net).length ? { net } : {}) });
-  const stationLabel = (n: number) => (n === 0 ? 'istasyon modeli kapalı' : `${n} istasyon`);
+  const stationLabel = (n: number) => (n === 0 ? t('istasyon modeli kapalı') : t('{n} istasyon', { n }));
 
   // ------------------------------------------------------------------------------------------------------------------ (i) Değer
   let lastValue: { s: Scen; met: Partial<Record<Policy, Metrics>>; rows: { n: number; open: number; m: Record<Policy, Metrics> }[] | null } | null = null;
   const hls = HYPOTHETICAL.value.decayOptionsDays;
 
   function fillValueControls() {
-    $<HTMLSelectElement>('#v-tw').innerHTML = HYPOTHETICAL.value.telemetryWeightScan.map((w) => `<option value="${w}"${w === valueModel.telemetryWeight ? ' selected' : ''}>${fmt(w)}× bilim verisi</option>`).join('');
-    $<HTMLSelectElement>('#v-hl').innerHTML = `<option value="">sabit değer</option>${hls.map((d, i) => `<option value="${i}"${i === valueModel.halfLifeIdx ? ' selected' : ''}>yarı ömür ${fmt(d)} gün</option>`).join('')}`;
+    $<HTMLSelectElement>('#v-tw').innerHTML = HYPOTHETICAL.value.telemetryWeightScan.map((w) => `<option value="${w}"${w === valueModel.telemetryWeight ? ' selected' : ''}>${t('{w}× bilim verisi', { w: fmt(w) })}</option>`).join('');
+    $<HTMLSelectElement>('#v-hl').innerHTML = `<option value="">${t('sabit değer')}</option>${hls.map((d, i) => `<option value="${i}"${i === valueModel.halfLifeIdx ? ' selected' : ''}>${t('yarı ömür {g} gün', { g: fmt(d) })}</option>`).join('')}`;
   }
 
   function renderValue() {
@@ -62,9 +63,9 @@ export function mountExtras(ctx: ExtrasCtx) {
     const flat = { weightOf: vo.weightOf };
     const pr = met.priority!;
     const gridPol = $<HTMLSelectElement>('#v-pol').value as Policy;
-    $('#v-def').innerHTML = `<b>Seçili model:</b> ${valueModelLabel()}. Değer % = teslim edilen değer / talep edilen değer (talep = üretilen + üretilmeyen, yaşı 0). Zamanla azalan değerde teslim edilen paketin değeri 2<sup>−yaş/yarı ömür</sup> ile çarpılır (yaş = teslim anı − üretim anı); telemetri azalmaz. <b>Ağırlıklar uydurmadır</b>, gerçek bir bilimsel değeri temsil etmez; sonucun onlara duyarlılığı aşağıda taranır.`;
+    $('#v-def').innerHTML = `<b>${t('Seçili model:')}</b> ${valueModelLabel()}. ${t('Değer % = teslim edilen değer / talep edilen değer (talep = üretilen + üretilmeyen, yaşı 0). Zamanla azalan değerde teslim edilen paketin değeri 2<sup>−yaş/yarı ömür</sup> ile çarpılır (yaş = teslim anı − üretim anı); telemetri azalmaz.')} ${t('<b>Ağırlıklar uydurmadır</b>, gerçek bir bilimsel değeri temsil etmez; sonucun onlara duyarlılığı aşağıda taranır.')}`;
     $('#v-table').innerHTML = table(
-      ['Çizelgeleyici', 'Teslim % (hacim)', 'Değer % (sabit)', 'Değer % (seçili model)', 'Kazanç: sabit (puan, öncelikliye göre)', 'Kazanç: seçili model (puan)', 'Düşen + hatta kayıp %', 'Üretilmeyen %'],
+      [t('Çizelgeleyici'), t('Teslim % (hacim)'), t('Değer % (sabit)'), t('Değer % (seçili model)'), t('Kazanç: sabit (puan, öncelikliye göre)'), t('Kazanç: seçili model (puan)'), t('Düşen + hatta kayıp %'), t('Üretilmeyen %')],
       pols.map((p) => {
         const m = met[p]!;
         return [NAME[p], fmt(m.deliveredPct, 1), fmt(valuePct(m, flat), 1), `<b>${fmt(valuePct(m, vo), 1)}</b>`, p === 'priority' ? '—' : gainCell(valuePct(m, flat) - valuePct(pr, flat)), p === 'priority' ? '—' : gainCell(valuePct(m, vo) - valuePct(pr, vo)), fmt(dropOf(m), 1), fmt((100 * m.suppressedMb) / (m.demandMb || 1), 1)];
@@ -72,8 +73,8 @@ export function mountExtras(ctx: ExtrasCtx) {
     );
     // İstasyon sayısına göre (d) bölümündeki hesaplardan; ek hesap yok
     $('#v-st').innerHTML = rows
-      ? `<h4>İstasyon sayısına göre (seçili model)</h4>` + table(
-        ['İstasyon', 'Hat açık %', 'Çizelgeleyici', 'Teslim %', 'Değer %', 'Kazanç (puan, öncelikliye göre)'],
+      ? `<h4>${t('İstasyon sayısına göre (seçili model)')}</h4>` + table(
+        [t('İstasyon'), t('Hat açık %'), t('Çizelgeleyici'), t('Teslim %'), t('Değer %'), t('Kazanç (puan, öncelikliye göre)')],
         rows.flatMap((r) => pols.filter((p) => r.m[p]).map((p, i) => [i === 0 ? String(r.n) : '', i === 0 ? fmt(r.open * 100, 1) : '', NAME[p], fmt(r.m[p].deliveredPct, 1), fmt(valuePct(r.m[p], vo), 1), p === 'priority' ? '—' : gainCell(valuePct(r.m[p], vo) - valuePct(r.m.priority, vo))])),
       )
       : '';
@@ -82,13 +83,17 @@ export function mountExtras(ctx: ExtrasCtx) {
     if (m && gridPol !== 'priority') {
       const tws = HYPOTHETICAL.value.telemetryWeightScan;
       const gain = (tw: number, hi: number | undefined) => { const o = { weightOf: (p: { decays: boolean; weight: number }) => (p.decays ? p.weight : tw), halfLifeIdx: hi }; return valuePct(m, o) - valuePct(pr, o); };
-      const body = [undefined, ...hls.map((_, i) => i)].map((hi) => [hi === undefined ? 'sabit değer' : `yarı ömür ${fmt(hls[hi])} gün`, ...tws.map((tw) => { return gainCell(gain(tw, hi)); })]);
-      $('#v-grid').innerHTML = `<h4>Değer yapısına duyarlılık: ${NAME[gridPol]} − öncelikli (puan)</h4>` + table(['Bilim verisi değeri', ...tws.map((w) => `telemetri ${fmt(w)}×`)], body)
-        + `<p class="hint">Hücre = ${NAME[gridPol]} değer % − öncelikli değer %. Yeşil: kısma değerce <b>kazandırıyor</b>; kırmızı: <b>kaybettiriyor</b>. Seçili senaryo: ${s.relayName} hattı, ${stationLabel(lastStations())}.</p>`;
+      const body = [undefined, ...hls.map((_, i) => i)].map((hi) => [hi === undefined ? t('sabit değer') : t('yarı ömür {g} gün', { g: fmt(hls[hi]) }), ...tws.map((tw) => { return gainCell(gain(tw, hi)); })]);
+      $('#v-grid').innerHTML = `<h4>${t('Değer yapısına duyarlılık: {pol} − öncelikli (puan)', { pol: NAME[gridPol] })}</h4>` + table([t('Bilim verisi değeri'), ...tws.map((w) => t('telemetri {w}×', { w: fmt(w) }))], body)
+        + `<p class="hint">${t('Hücre = {pol} değer % − öncelikli değer %. Yeşil: kısma değerce <b>kazandırıyor</b>; kırmızı: <b>kaybettiriyor</b>. Seçili senaryo: {hat} hattı, {ist}.', { pol: NAME[gridPol], hat: s.relayName, ist: stationLabel(lastStations()) })}</p>`;
       const flatG = tws.map((tw) => gain(tw, undefined)), decG = hls.flatMap((_, hi) => tws.map((tw) => gain(tw, hi)));
       const best = Math.max(...decG), worst = Math.min(...decG);
-      $('#v-verdict').innerHTML = `<b>Okuma (${NAME[gridPol]}, seçili senaryo):</b> sabit değerde kazanç ${fmt(Math.min(...flatG), 2)} … ${fmt(Math.max(...flatG), 2)} puan (${Math.max(...flatG) > 0.05 ? 'kayda değer bir kazanç var' : 'telemetri ağırlığı ne olursa olsun fayda yok: hat kapasitesi sınırlayıcı, kısma hacmi artırmaz, yalnızca neyin kaybolduğunu değiştirir'}). Zamanla azalan değerde kazanç ${fmt(worst, 2)} … ${fmt(best, 2)} puan: ${best > 0.05 ? `kısma, birikmiş eski veriyi azaltıp yeni veriyi öne aldığı için ${worst < -0.05 ? 'yarı ömür kısa/orta iken kazandırır, yeterince uzun yarı ömürde (değer neredeyse hiç azalmazken) tekrar kaybettirir' : 'tüm taranan yapılarda kazandırır'}; kazanç küçüktür (en çok ${fmt(best, 1)} puan).` : 'bu senaryoda da fayda yok.'}`;
-    } else { $('#v-grid').innerHTML = ''; $('#v-verdict').innerHTML = '<span class="hint">Izgara için “öncelikli” dışında bir politika seçin.</span>'; }
+      const flatTxt = Math.max(...flatG) > 0.05 ? t('kayda değer bir kazanç var') : t('telemetri ağırlığı ne olursa olsun fayda yok: hat kapasitesi sınırlayıcı, kısma hacmi artırmaz, yalnızca neyin kaybolduğunu değiştirir');
+      const decTxt = best > 0.05
+        ? t('kısma, birikmiş eski veriyi azaltıp yeni veriyi öne aldığı için {durum}; kazanç küçüktür (en çok {en} puan).', { durum: worst < -0.05 ? t('yarı ömür kısa/orta iken kazandırır, yeterince uzun yarı ömürde (değer neredeyse hiç azalmazken) tekrar kaybettirir') : t('tüm taranan yapılarda kazandırır'), en: fmt(best, 1) })
+        : t('bu senaryoda da fayda yok.');
+      $('#v-verdict').innerHTML = t('<b>Okuma ({pol}, seçili senaryo):</b> sabit değerde kazanç {a} … {b} puan ({sabit}). Zamanla azalan değerde kazanç {c} … {d} puan: {azalan}', { pol: NAME[gridPol], a: fmt(Math.min(...flatG), 2), b: fmt(Math.max(...flatG), 2), sabit: flatTxt, c: fmt(worst, 2), d: fmt(best, 2), azalan: decTxt });
+    } else { $('#v-grid').innerHTML = ''; $('#v-verdict').innerHTML = `<span class="hint">${t('Izgara için “öncelikli” dışında bir politika seçin.')}</span>`; }
   }
   let stationsNow = 3;
   const lastStations = () => stationsNow;
@@ -112,7 +117,7 @@ export function mountExtras(ctx: ExtrasCtx) {
   $('#v-pol').addEventListener('change', renderValue);
 
   // ------------------------------------------------------------------------------------------------------------------ (j) İyimser varsayımların etkisi
-  const PJ_OPTS: [string, ProjectionOptions][] = [['varsayılan (Aşama 8)', {}], ['yüzey hattı kapalılığı', { surfaceClosure: true }], ['ARQ kopyası RTT tamponda', { arqHold: true }], ['ikisi birden', { surfaceClosure: true, arqHold: true }]];
+  const PJ_OPTS: [string, ProjectionOptions][] = [[t('varsayılan (Aşama 8)'), {}], [t('yüzey hattı kapalılığı'), { surfaceClosure: true }], [t('ARQ kopyası RTT tamponda'), { arqHold: true }], [t('ikisi birden'), { surfaceClosure: true, arqHold: true }]];
   async function runProjection() {
     const c = ctx.cur(), s = c.s;
     if (!s) return;
@@ -123,7 +128,7 @@ export function mountExtras(ctx: ExtrasCtx) {
     const stationsList = [1, 2, 3];
     const total = stationsList.length * (1 + pols.length * PJ_OPTS.length);
     let done = 0;
-    const prog = () => { st.textContent = `Hesaplanıyor… ${done}/${total}`; };
+    const prog = () => { st.textContent = t('Hesaplanıyor… {done}/{total}', { done, total }); };
     prog();
     const step = HYPOTHETICAL.scheduler.stepSec;
     const run = async (n: number, p: Policy, projection: ProjectionOptions) => { const m = await sim(spec(s, step, n, s.net), p, { ...ctx.cfgFor(s.relayId, s.net, { projection, step }), valueHalfLivesSec: [] }); done++; prog(); return m; };
@@ -133,7 +138,7 @@ export function mountExtras(ctx: ExtrasCtx) {
       by: Object.fromEntries(await Promise.all(pols.map(async (p) => [p, await Promise.all(PJ_OPTS.map(([, o]) => run(n, p, o)))]))) as Record<string, Metrics[]>,
     })));
     if (my !== tok) return;
-    st.textContent = `Tamam (${fmt(step)} sn adım, ${s.relayName} hattı, ${LINK_LABEL(c.mode)}).`;
+    st.textContent = t('Tamam ({adim} sn adım, {hat} hattı, {mod}).', { adim: fmt(step), hat: s.relayName, mod: LINK_LABEL(c.mode) });
     let maxD = 0;
     const parts = pols.map((p) => {
       const rows = res.map((r) => [String(r.n), ...r.by[p].map((m, j) => {
@@ -142,30 +147,30 @@ export function mountExtras(ctx: ExtrasCtx) {
         if (j > 0) maxD = Math.max(maxD, d);
         return cell(m);
       }), cell(r.prio)]);
-      return `<h4>${NAME[p]}</h4>` + table(['İstasyon', ...PJ_OPTS.map(([n]) => n), 'öncelikli (referans)'], rows);
+      return `<h4>${NAME[p]}</h4>` + table([t('İstasyon'), ...PJ_OPTS.map(([n]) => n), t('öncelikli (referans)')], rows);
     });
-    body.innerHTML = parts.join('') + `<p class="hint"><b>Okuma:</b> hücre = düşen + hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen %]. Varsayılana göre en büyük mutlak fark (düşen, toplam kayıp, teslim, üretilmeyen; tüm hücreler): <b>${fmt(maxD, 3)} puan</b> — ${maxD < 0.1 ? '<b>etki yok</b> (0,1 puanın altında; Aşama 7–8 sonuçları bu iki iyimser varsayımdan etkilenmiyor)' : 'etki <b>var</b> (0,1 puan üzerinde)'}. Neden: tepe doluluk, kapalı dönemin sonunda (veri birikmişken) belirlenir; yüzey hattı (araç → uydu) hızı üretimden çok yüksektir ve sık açılır, ARQ kopyaları ise kapalı dönem sonunda çoktan bırakılmıştır (RTT ≪ kapalı dönem).</p>`;
+    body.innerHTML = parts.join('') + `<p class="hint">${t('<b>Okuma:</b> hücre = düşen + hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen %]. Varsayılana göre en büyük mutlak fark (düşen, toplam kayıp, teslim, üretilmeyen; tüm hücreler): <b>{fark} puan</b> — {sonuc}. Neden: tepe doluluk, kapalı dönemin sonunda (veri birikmişken) belirlenir; yüzey hattı (araç → uydu) hızı üretimden çok yüksektir ve sık açılır, ARQ kopyaları ise kapalı dönem sonunda çoktan bırakılmıştır (RTT ≪ kapalı dönem).', { fark: fmt(maxD, 3), sonuc: maxD < 0.1 ? t('<b>etki yok</b> (0,1 puanın altında; Aşama 7–8 sonuçları bu iki iyimser varsayımdan etkilenmiyor)') : t('etki <b>var</b> (0,1 puan üzerinde)') })}</p>`;
   }
-  const LINK_LABEL = (m: LinkMode) => ({ ideal: 'kayıpsız hat', loss: 'hatalı hat, yeniden iletimsiz', arq: 'hatalı hat + yeniden iletim', burst: 'kümelenmiş hata + yeniden iletim' })[m];
+  const LINK_LABEL = (m: LinkMode) => ({ ideal: t('kayıpsız hat'), loss: t('hatalı hat, yeniden iletimsiz'), arq: t('hatalı hat + yeniden iletim'), burst: t('kümelenmiş hata + yeniden iletim') })[m];
 
   // ------------------------------------------------------------------------------------------------------------------ (k) Yörünge / ikinci uydu / Mars gölgesi
   interface OrbCfg { name: string; net: NetOptions; control?: boolean }
   const moonCfgs = (polar: boolean): OrbCfg[] => {
     const p = polar ? { moonPolarAsset: true } : {};
     return [
-      { name: 'ekvatoral dairesel (mevcut)', net: { ...p } },
-      { name: 'eğimli/eliptik (kutupsal, apolün güneyde)', net: { ...p, moonOrbit: 'elliptical' } },
-      { name: 'ekvatoral + 2. uydu (en iyi görünen)', net: { ...p, moonSecond: 'best' } },
-      { name: 'ekvatoral + 2. uydu (hat sırası)', net: { ...p, moonSecond: 'order' } },
-      { name: 'eliptik + 2. uydu (en iyi görünen)', net: { ...p, moonOrbit: 'elliptical', moonSecond: 'best' } },
-      { name: 'eliptik + 2. uydu (hat sırası)', net: { ...p, moonOrbit: 'elliptical', moonSecond: 'order' } },
-      { name: '(kontrol) tek ekvatoral uydu, hat hızı ve tampon 2×', net: { ...p }, control: true },
+      { name: t('ekvatoral dairesel (mevcut)'), net: { ...p } },
+      { name: t('eğimli/eliptik (kutupsal, apolün güneyde)'), net: { ...p, moonOrbit: 'elliptical' } },
+      { name: t('ekvatoral + 2. uydu (en iyi görünen)'), net: { ...p, moonSecond: 'best' } },
+      { name: t('ekvatoral + 2. uydu (hat sırası)'), net: { ...p, moonSecond: 'order' } },
+      { name: t('eliptik + 2. uydu (en iyi görünen)'), net: { ...p, moonOrbit: 'elliptical', moonSecond: 'best' } },
+      { name: t('eliptik + 2. uydu (hat sırası)'), net: { ...p, moonOrbit: 'elliptical', moonSecond: 'order' } },
+      { name: t('(kontrol) tek ekvatoral uydu, hat hızı ve tampon 2×'), net: { ...p }, control: true },
     ];
   };
   const marsCfgs: OrbCfg[] = [
-    { name: 'gölge yok (mevcut)', net: {} },
-    { name: 'gölgede yalnız Dünya hattı kapalı', net: { marsEclipse: 'earth' } },
-    { name: 'gölgede yüzey + Dünya hattı kapalı', net: { marsEclipse: 'both' } },
+    { name: t('gölge yok (mevcut)'), net: {} },
+    { name: t('gölgede yalnız Dünya hattı kapalı'), net: { marsEclipse: 'earth' } },
+    { name: t('gölgede yüzey + Dünya hattı kapalı'), net: { marsEclipse: 'both' } },
   ];
   async function runOrbit() {
     const c = ctx.cur(), s = c.s;
@@ -180,7 +185,7 @@ export function mountExtras(ctx: ExtrasCtx) {
     const step = HYPOTHETICAL.scheduler.stepSec;
     const total = stationsList.length * cfgs.length * (pols.length + 1);
     let done = 0;
-    const prog = () => { st.textContent = `Hesaplanıyor… ${done}/${total}`; };
+    const prog = () => { st.textContent = t('Hesaplanıyor… {done}/{total}', { done, total }); };
     prog();
     const p0 = ctx.cfgFor(s.relayId, {}).relayBufferMb[s.relayId];
     const dl0 = ctx.cfgFor(s.relayId, {}).relayDownlinkKbps[s.relayId];
@@ -192,7 +197,7 @@ export function mountExtras(ctx: ExtrasCtx) {
       return { oc, cov, ms };
     }))));
     if (my !== tok) return;
-    st.textContent = `Tamam (${fmt(step)} sn adım, ${s.relayName} hattı, ${LINK_LABEL(c.mode)}).`;
+    st.textContent = t('Tamam ({adim} sn adım, {hat} hattı, {mod}).', { adim: fmt(step), hat: s.relayName, mod: LINK_LABEL(c.mode) });
     const assetsOf = (cov: CoverageRow) => Object.keys(cov.surf).filter((a) => (moon ? a.startsWith('ay-') : a.startsWith('mars-')));
     const relOf = (cov: CoverageRow) => Object.keys(cov.up).filter((r) => (moon ? r.startsWith('ay-') : r.startsWith('mars-')));
     body.innerHTML = out.map((rowsN, ni) => {
@@ -207,10 +212,10 @@ export function mountExtras(ctx: ExtrasCtx) {
           cov ? assetsOf(cov).map((a) => pc(cov.pathUp[a])).join(' / ') : '—',
           ...ms.map(cell)];
       });
-      return `<h4>${n} istasyon</h4>` + table(['Yapılandırma', 'uyduyu gören ist. %', rowsN[0].cov && relOf(rowsN[0].cov).length > 0 ? 'Dünya hattı açık % (uydu başına' + (moon ? ' / herhangi' : '') + ')' : 'Dünya hattı açık %', 'yüzey görüşü % (araç başına)', 'araç → Dünya yolu açık %', ...pols.map((p) => NAME[p])], rows);
+      return `<h4>${t('{n} istasyon', { n })}</h4>` + table([t('Yapılandırma'), t('uyduyu gören ist. %'), rowsN[0].cov && relOf(rowsN[0].cov).length > 0 ? t('Dünya hattı açık % (uydu başına') + (moon ? ` / ${t('herhangi')}` : '') + ')' : t('Dünya hattı açık %'), t('yüzey görüşü % (araç başına)'), t('araç → Dünya yolu açık %'), ...pols.map((p) => NAME[p])], rows);
     }).join('') + (moon
-      ? `<p class="hint"><b>Okuma:</b> hücre = düşen + hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen %]. Uydu sırası: birinci / ikinci uydu; araçlar: ${HYPOTHETICAL.assets.filter((a) => a.body === 'moon').map((a) => a.name).join(', ')}${s.net.moonPolarAsset ? `, ${HYPOTHETICAL.moonPolarAsset.name}` : ''}. “Kontrol” satırı, ikinci uydunun faydasının <i>kapsamadan mı kapasiteden mi</i> geldiğini ayırır: tek uydunun hat hızı ve tamponu iki katı. Yörünge elemanları ve ikinci uydunun kapasitesi uydurmadır; düzlem eylemsiz sabit (presesyon yok).</p>`
-      : `<p class="hint"><b>Okuma:</b> hücre = düşen + hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen %]. Silindirik gölge, güç modeli yok. Kavuşum penceresinde Dünya ile Güneş Mars'tan neredeyse aynı yönde göründüğü için gölgenin büyük bölümü zaten “Mars'ın arkasında” kapanmasıyla örtüşür: etki küçüktür. Kavuşumdan uzak bir aralık için “Hat” seçicisinden <i>Mars aktarma hattı (tarih aralığı, kavuşumsuz)</i> seçin.</p>`);
+      ? `<p class="hint">${t('<b>Okuma:</b> hücre = düşen + hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen %]. Uydu sırası: birinci / ikinci uydu; araçlar: {araclar}. “Kontrol” satırı, ikinci uydunun faydasının <i>kapsamadan mı kapasiteden mi</i> geldiğini ayırır: tek uydunun hat hızı ve tamponu iki katı. Yörünge elemanları ve ikinci uydunun kapasitesi uydurmadır; düzlem eylemsiz sabit (presesyon yok).', { araclar: `${HYPOTHETICAL.assets.filter((a) => a.body === 'moon').map((a) => a.name).join(', ')}${s.net.moonPolarAsset ? `, ${HYPOTHETICAL.moonPolarAsset.name}` : ''}` })}</p>`
+      : `<p class="hint">${t('<b>Okuma:</b> hücre = düşen + hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen %]. Silindirik gölge, güç modeli yok. Kavuşum penceresinde Dünya ile Güneş Mars\'tan neredeyse aynı yönde göründüğü için gölgenin büyük bölümü zaten “Mars\'ın arkasında” kapanmasıyla örtüşür: etki küçüktür. Kavuşumdan uzak bir aralık için “Hat” seçicisinden <i>Mars aktarma hattı (tarih aralığı, kavuşumsuz)</i> seçin.')}</p>`);
   }
 
   // ------------------------------------------------------------------------------------------------------------------ (l) Genelleme
@@ -234,7 +239,7 @@ export function mountExtras(ctx: ExtrasCtx) {
     const n = c.stations;
     const total = cases.length * (pols.length + 1 + 1 + errPols.length * (1 + errs.length));
     let done = 0;
-    const prog = () => { st.textContent = `Hesaplanıyor… ${done}/${total}`; };
+    const prog = () => { st.textContent = t('Hesaplanıyor… {done}/{total}', { done, total }); };
     prog();
     const mk = (cs: { startJD: number; endJD: number }, stepSec: number, p: Policy, forecast?: ForecastError) => {
       const sc = { ...cs, relayId: s.relayId };
@@ -253,7 +258,7 @@ export function mountExtras(ctx: ExtrasCtx) {
       return { cs, m, open: info.openFracAny, e0, err };
     }));
     if (my !== tok) return;
-    st.textContent = `Tamam (${cases.length} ${moonLike ? 'tarih aralığı' : 'kavuşum penceresi'}, ${s.relayName} hattı, ${stationLabel(n)}, ${LINK_LABEL(c.mode)}).`;
+    st.textContent = t('Tamam ({kapsam}, {hat} hattı, {ist}, {mod}).', { kapsam: moonLike ? t('{n} tarih aralığı', { n: cases.length }) : t('{n} kavuşum penceresi', { n: cases.length }), hat: s.relayName, ist: stationLabel(n), mod: LINK_LABEL(c.mode) });
     const hl = hls.indexOf(HYPOTHETICAL.value.decayHalfLifeDays);
     const vo = valueOpts();
     const rows = res.map((r) => [r.cs.label, fmt(r.open * 100, 1), ...pols.map((p) => cell(r.m[p])), `${fmt(valuePct(r.m.priority, vo), 1)} → ${fmt(valuePct(r.m.adaptive, vo), 1)} / ${fmt(valuePct(r.m.priority, { ...vo, halfLifeIdx: hl }), 1)} → ${fmt(valuePct(r.m.adaptive, { ...vo, halfLifeIdx: hl }), 1)}`]);
@@ -266,15 +271,15 @@ export function mountExtras(ctx: ExtrasCtx) {
     }));
     // en kötü toplam kayıp farkı (öncelikliye göre), |hata| ≤ 120 dk
     // err[p] = [hata yok, −240, −120, +120, +240]; |hata| ≤ 120 dk içindeki en kötü toplam kayıp farkı ve ayrıca −240 dk
-    const worst = errPols.map((p) => `${NAME[p]}: ${mmm(res.map((r) => Math.max(...[r.err[p][0], r.err[p][2], r.err[p][3]].map((m) => m.lossPct - r.e0.lossPct))), 2)} (−240 dk: ${mmm(res.map((r) => r.err[p][1].lossPct - r.e0.lossPct), 2)})`);
+    const worst = errPols.map((p) => `${NAME[p]}: ${mmm(res.map((r) => Math.max(...[r.err[p][0], r.err[p][2], r.err[p][3]].map((m) => m.lossPct - r.e0.lossPct))), 2)} (${t('−240 dk:')} ${mmm(res.map((r) => r.err[p][1].lossPct - r.e0.lossPct), 2)})`);
     const dropWorse = errPols.map((p) => `${NAME[p]}: ${res.filter((r) => r.err[p].some((m) => dropOf(m) - dropOf(r.e0) > 0.1)).length}/${res.length}`);
-    body.innerHTML = `<h4>Hata yokken karşılaştırma (${moonLike ? 'her tarih aralığı' : 'her kavuşum penceresi'})</h4>`
-      + table([moonLike ? 'Başlangıç' : 'Pencere', 'Hat açık %', ...pols.map((p) => NAME[p]), 'Değer %: öncelikli → uyarlamalı (seçili model / 14 gün yarı ömür)'], rows)
-      + `<h4>Öncelikliye göre fark: ${res.length} senaryo üzerinde en küçük / medyan / en büyük (puan)</h4>`
-      + `<table class="stats"><thead><tr><th>Çizelgeleyici</th><th>Düşen + hatta kayıp</th><th>Toplam kayıp</th><th>Teslim</th><th>Değer % (seçili model, sabit)</th><th>Değer % (bilim verisi 14 gün yarı ömür)</th></tr></thead><tbody>${summary}</tbody></table>`
-      + `<h4>Tahmin hatası (pencere başı/sonu kayması −240 … +240 dk; ${fmt(errStep)} sn adım; + iyimser, − kötümser)</h4>`
-      + table([moonLike ? 'Başlangıç' : 'Pencere', 'öncelikli (referans)', 'Çizelgeleyici', 'hata yok', '−240 dk', '−120 dk', '+120 dk', '+240 dk'], errRows)
-      + `<p class="hint"><b>Okuma:</b> hücre = düşen + hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen %]. Tahmin hatasında toplam kayıp farkı, |hata| ≤ 120 dk içindeki en kötü değerin öncelikliye göre farkıdır (min / medyan / maks, puan; parantezde −240 dk): ${worst.join(' · ')}. Düşen + hatta kayıp öncelikliden (0,1 puandan fazla) <i>kötüleşen</i> senaryo sayısı: ${dropWorse.join(' · ')}. Tek bir senaryodan genelleme yapılmaz: sonuçların aralığa göre değişimi yukarıdaki en küçük / en büyük değerlerdedir.</p>`;
+    body.innerHTML = `<h4>${moonLike ? t('Hata yokken karşılaştırma (her tarih aralığı)') : t('Hata yokken karşılaştırma (her kavuşum penceresi)')}</h4>`
+      + table([moonLike ? t('Başlangıç') : t('Pencere'), t('Hat açık %'), ...pols.map((p) => NAME[p]), t('Değer %: öncelikli → uyarlamalı (seçili model / 14 gün yarı ömür)')], rows)
+      + `<h4>${t('Öncelikliye göre fark: {n} senaryo üzerinde en küçük / medyan / en büyük (puan)', { n: res.length })}</h4>`
+      + `<table class="stats"><thead><tr><th>${t('Çizelgeleyici')}</th><th>${t('Düşen + hatta kayıp')}</th><th>${t('Toplam kayıp')}</th><th>${t('Teslim')}</th><th>${t('Değer % (seçili model, sabit)')}</th><th>${t('Değer % (bilim verisi 14 gün yarı ömür)')}</th></tr></thead><tbody>${summary}</tbody></table>`
+      + `<h4>${t('Tahmin hatası (pencere başı/sonu kayması −240 … +240 dk; {adim} sn adım; + iyimser, − kötümser)', { adim: fmt(errStep) })}</h4>`
+      + table([moonLike ? t('Başlangıç') : t('Pencere'), t('öncelikli (referans)'), t('Çizelgeleyici'), t('hata yok'), t('−240 dk'), t('−120 dk'), t('+120 dk'), t('+240 dk')], errRows)
+      + `<p class="hint">${t('<b>Okuma:</b> hücre = düşen + hatta kayıp % / toplam kayıp % / teslim % [üretilmeyen %]. Tahmin hatasında toplam kayıp farkı, |hata| ≤ 120 dk içindeki en kötü değerin öncelikliye göre farkıdır (min / medyan / maks, puan; parantezde −240 dk): {kotu}. Düşen + hatta kayıp öncelikliden (0,1 puandan fazla) <i>kötüleşen</i> senaryo sayısı: {kotulesen}. Tek bir senaryodan genelleme yapılmaz: sonuçların aralığa göre değişimi yukarıdaki en küçük / en büyük değerlerdedir.', { kotu: worst.join(' · '), kotulesen: dropWorse.join(' · ') })}</p>`;
   }
 
   $('#pj-run').addEventListener('click', () => void runProjection());
@@ -284,12 +289,12 @@ export function mountExtras(ctx: ExtrasCtx) {
   /** Senaryo türüne göre bölüm başlıklarını ve düğme metinlerini ayarlar. */
   function applyKind(s: Scen) {
     const moon = s.kind === 'moon';
-    $('#ob-title').textContent = moon ? '(k) Ay aktarma uydusu yörüngesi ve ikinci uydu' : '(k) Mars aktarma uydusu gölgesi';
-    $('#ob-run').textContent = moon ? 'Yörünge karşılaştırmasını hesapla' : 'Gölge karşılaştırmasını hesapla';
+    $('#ob-title').textContent = moon ? t('(k) Ay aktarma uydusu yörüngesi ve ikinci uydu') : t('(k) Mars aktarma uydusu gölgesi');
+    $('#ob-run').textContent = moon ? t('Yörünge karşılaştırmasını hesapla') : t('Gölge karşılaştırmasını hesapla');
     $('#ob-hint').innerHTML = moon
-      ? `Ay aktarma uydusunun yörüngesi seçilebilir: <b>ekvatoral dairesel</b> (3000 km, mevcut) ya da <b>eğimli/eliptik</b> (kutupsal, yarı büyük eksen ${fmt(HYPOTHETICAL.moonOrbits.elliptical.semiMajorKm)} km, dışmerkezlik ${fmt(HYPOTHETICAL.moonOrbits.elliptical.ecc, 1)}, apolün güney kutbu üzerinde; <b>uydurma elemanlar</b>), ayrıca isteğe bağlı <b>ikinci Ay uydusu</b> (apolünü kuzey kutbu üzerinde; araçlar <i>en iyi görüneni</i> ya da <i>hat sırasını</i> kullanır) ve <b>kutup aracı</b> (${fmt(HYPOTHETICAL.moonPolarAsset.latDeg)}° enlem). Kapsama: uyduyu gören yer istasyonu, Dünya hattı açık %, yüzey görüşü; ve teslim/kayıp, 1/2/3 istasyonda. Ayarlar yukarıdaki “Ay yörüngesi / İkinci Ay uydusu / Kutup aracı” seçicilerinden de ana senaryoya uygulanır. Düğmeyle başlar.`
-      : `Mars aktarma uydusunun Mars gölgesinde (tutulma) geçirdiği zamanda hat kapanır (<b>güç modeli yok</b>): yalnız uydu → Dünya hattı ya da yüzey hattı da. Ayarlar yukarıdaki “Mars uydusu gölgesi” seçicisinden de ana senaryoya uygulanır. Düğmeyle başlar.`;
-    $('#gn-run').textContent = moon ? 'Genellemeyi hesapla (5 tarih aralığı)' : 'Genellemeyi hesapla (9 kavuşum penceresi)';
+      ? t('Ay aktarma uydusunun yörüngesi seçilebilir: <b>ekvatoral dairesel</b> (3000 km, mevcut) ya da <b>eğimli/eliptik</b> (kutupsal, yarı büyük eksen {a} km, dışmerkezlik {e}, apolün güney kutbu üzerinde; <b>uydurma elemanlar</b>), ayrıca isteğe bağlı <b>ikinci Ay uydusu</b> (apolünü kuzey kutbu üzerinde; araçlar <i>en iyi görüneni</i> ya da <i>hat sırasını</i> kullanır) ve <b>kutup aracı</b> ({enlem}° enlem). Kapsama: uyduyu gören yer istasyonu, Dünya hattı açık %, yüzey görüşü; ve teslim/kayıp, 1/2/3 istasyonda. Ayarlar yukarıdaki “Ay yörüngesi / İkinci Ay uydusu / Kutup aracı” seçicilerinden de ana senaryoya uygulanır. Düğmeyle başlar.', { a: fmt(HYPOTHETICAL.moonOrbits.elliptical.semiMajorKm), e: fmt(HYPOTHETICAL.moonOrbits.elliptical.ecc, 1), enlem: fmt(HYPOTHETICAL.moonPolarAsset.latDeg) })
+      : t('Mars aktarma uydusunun Mars gölgesinde (tutulma) geçirdiği zamanda hat kapanır (<b>güç modeli yok</b>): yalnız uydu → Dünya hattı ya da yüzey hattı da. Ayarlar yukarıdaki “Mars uydusu gölgesi” seçicisinden de ana senaryoya uygulanır. Düğmeyle başlar.');
+    $('#gn-run').textContent = moon ? t('Genellemeyi hesapla (5 tarih aralığı)') : t('Genellemeyi hesapla (9 kavuşum penceresi)');
   }
 
   return { reset, setValueInputs, setValueStations, applyKind, renderValue, fillValueControls };
