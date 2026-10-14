@@ -6,7 +6,7 @@ import { ComputePool, inlineTransport } from './computeClient';
 import { simulate } from './scheduler';
 import { hasBlackout, metricsOf, runPolicy } from './sweep';
 import { HYPOTHETICAL } from '../config/hypothetical';
-import { buildLinkTimeline, defaultParams, MARS_RELAY, MOON_RELAY, restrictToRelay, restrictToRelays, routingConfig, schedConfig, schedTopology, valueAwareConfig, withParams } from './timeline';
+import { buildLinkTimeline, defaultParams, MARS_RELAY, MOON_RELAY, restrictToRelay, restrictToRelays, routingConfig, schedConfig, schedTopology, valueAwareConfig, valueModelsConfig, withParams } from './timeline';
 
 // BU TESTLER SENTETİKTİR: uydurma dairesel yörüngeli konum izleri (gerçek Horizons verisi değil). Hesap işleyicisinin doğrudan çağrıyla aynı
 // sonucu verdiğini, havuzun işleri sıralayıp dağıttığını ve iptal belirtecinin bekleyen işleri hiç başlatmadığını doğrular.
@@ -155,6 +155,25 @@ describe('Aşama 10: yeni politikalar ve ağ seçenekleri Worker işleyicisinde 
       const direct = simulate(topo, samples, policy, cfg);
       expect(out.result).toEqual(direct);
       expect(out.metrics).toEqual(metricsOf(direct, cfg));
+      const t = direct.total;
+      expect(t.generated).toBe(t.delivered + t.dropped + t.abandoned + t.expired + t.remaining);
+    }
+  });
+
+  it("işleyici (Aşama 11): alternatif değer modelleri ve son tarihe göre atma doğrudan çağrıyla birebir aynı sonucu verir, korunum tutar", () => {
+    const h = createHandler();
+    h({ op: 'init', tracks });
+    const base = withParams(schedConfig('arq'), defaultParams(MOON_RELAY), MOON_RELAY, [HYPOTHETICAL.moonRelay2.id]);
+    const cfg = { ...base, stepSec: 1800, valueAware: valueAwareConfig(7 * 86400, { expireAfterSec: 3 * 86400 }), valueModels: valueModelsConfig() };
+    const topo0 = schedTopology(net);
+    const full = buildLinkTimeline(tracks, tlMoon.startJD, tlMoon.endJD, tlMoon.stepSec, topo0, tlMoon.stations, net);
+    const { topo, samples } = restrictToRelays(topo0, full, relayIdsOf(MOON_RELAY, net));
+    for (const policy of ['valueAware', 'priority'] as const) {
+      const out = h({ op: 'sim', tl: { ...tlMoon, net }, policy, cfg, full: true }) as SimOut;
+      const direct = simulate(topo, samples, policy, cfg);
+      expect(out.result).toEqual(direct);
+      expect(out.metrics).toEqual(metricsOf(direct, cfg));
+      expect(direct.total.decayMb.length).toBe(cfg.valueHalfLivesSec!.length + HYPOTHETICAL.value.models.length);
       const t = direct.total;
       expect(t.generated).toBe(t.delivered + t.dropped + t.abandoned + t.expired + t.remaining);
     }

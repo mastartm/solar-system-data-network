@@ -167,6 +167,8 @@ export interface ValueAwareConfig {
   halfLifeSec: number;
   /** 0–1: değeri başlangıç değerinin bu oranının altına inen bilim paketi tamponda atılır (atılan = `expired`; düşen değildir). 0 / yok: atma yok. */
   expireBelow?: number;
+  /** Aşama 11: verilirse yaşı bu süreyi (sn) aşan bilim paketi atılır (expireBelow'dan bağımsız; "son tarih" modeline uyan atma). Yok: Aşama 10 davranışı. */
+  expireAfterSec?: number;
   /** Bilim verisini en yeni önce gönder (üstel azalmada, kapasite kısıtlıyken toplam değeri en çok artıran sıra); gönderimi süren paket bitirilir. */
   newestFirst?: boolean;
   /** Tampon doluyken yeni veriye yer açmak için en ESKİ bilim paketini at (bu bir `dropped` sayılır); yoksa eski kural (yeni paket ya da en yeni düşük sınıf atılır). */
@@ -214,6 +216,28 @@ export interface RoutingConfig {
   isl?: { kbps: number };
 }
 
+/**
+ * Aşama 11: değer eğrisi (teslim yaşına göre değer çarpanı, 0–1). Yalnızca ÖLÇÜT hesabıdır (çizelgeleme kararını etkilemez).
+ * 'exp': 2^(−yaş/halfLifeSec); 'step': deadlineSec'e kadar 1, sonra `after` (varsayılan 0); 'floor': floor + (1 − floor) × 2^(−yaş/halfLifeSec) (eski veri de değerli kalır); 'linear': 1'den zeroAtSec'te 0'a.
+ */
+export type ValueCurve =
+  | { kind: 'exp'; halfLifeSec: number }
+  | { kind: 'step'; deadlineSec: number; after?: number }
+  | { kind: 'floor'; halfLifeSec: number; floor: number }
+  | { kind: 'linear'; zeroAtSec: number };
+
+/** Aşama 11: alternatif değer modeli. decay: bilim verisinin (en önemli sınıf dışındakiler) eğrisi; top: verilirse en önemli sınıf da (telemetri) bu eğriyle azalır (yoksa değeri sabit sayılır, Aşama 9-10). */
+export interface ValueModel { id: string; decay: ValueCurve; top?: ValueCurve }
+
+export const curveValue = (c: ValueCurve, age: number): number => {
+  switch (c.kind) {
+    case 'exp': return Math.exp((-age * Math.LN2) / c.halfLifeSec);
+    case 'step': return age <= c.deadlineSec ? 1 : (c.after ?? 0);
+    case 'floor': return c.floor + (1 - c.floor) * Math.exp((-age * Math.LN2) / c.halfLifeSec);
+    case 'linear': return Math.max(0, 1 - age / c.zeroAtSec);
+  }
+};
+
 export interface SchedClass {
   id: string; priority: number; share: number; packetMb: number;
   /** Aşama 9: varsayımsal bilimsel değer (birim değer / Mb); yoksa 1. Zamanla azalma yalnızca ölçüt hesabındadır (SchedConfig.valueHalfLivesSec), çizelgeleme kararını etkilemez. */
@@ -247,6 +271,11 @@ export interface SchedConfig {
    * (ölçüt hesabı; çizelgeleme kararını ETKİLEMEZ). Yoksa decayMb boştur.
    */
   valueHalfLivesSec?: number[];
+  /**
+   * Aşama 11: alternatif değer modelleri (ölçüt hesabı; çizelgeleme kararını ETKİLEMEZ). Her sınıfın decayMb dizisine, valueHalfLivesSec girdilerinden SONRA, modeller sırasıyla eklenir
+   * (decayMb[valueHalfLivesSec.length + j] = j. model). Yoksa Aşama 9-10 ile birebir aynı.
+   */
+  valueModels?: ValueModel[];
   /** Yoksa hatlar kayıpsızdır ve gönderici paketi gönderir göndermez bırakır (Aşama 3-4 davranışı). */
   arq?: ArqConfig;
   /** Aşama 10: 'valueAware' / 'valueAdaptive' için kuyruk kuralı; yoksa bu politikalar 'priority' / 'adaptive' ile birebir aynıdır. */
@@ -483,7 +512,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   const va = policy === 'valueAware' || policy === 'valueAdaptive' ? cfg.valueAware : undefined;
   const newest = !!va?.newestFirst, evictOld = !!va?.evictOldest;
   const expireBelow = va && va.expireBelow !== undefined ? Math.min(0.999999, Math.max(0, va.expireBelow)) : 0;
-  const expireAgeSec = va && expireBelow > 0 ? va.halfLifeSec * Math.log2(1 / expireBelow) : Infinity;
+  const expireAgeSec = va && va.expireAfterSec !== undefined && va.expireAfterSec > 0 ? va.expireAfterSec : va && expireBelow > 0 ? va.halfLifeSec * Math.log2(1 / expireBelow) : Infinity;
   const scanSteps = Math.max(1, Math.round((va?.scanSec ?? 3600) / dt));
   const tmin = cfg.telemetryMinFactor;
   const dyn = !!cfg.routing && cfg.routing.select !== 'timeline';
@@ -1236,11 +1265,18 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
 
   // Zamanla azalan değer: Σ paket boyutu × 2^(−yaş / yarı ömür) = Σ boyut × exp(−yaş × ln2 / yarı ömür) (döngü + exp, reduce + pow'dan ~7 kat hızlı)
   const decayCoef = (cfg.valueHalfLivesSec ?? []).map((h) => Math.LN2 / h);
-  const decaySum = (ages: number[], packetMb: number): number[] => {
+  const decaySum = (ages: number[], packetMb: number, isTop = false): number[] => {
     const acc = new Array<number>(decayCoef.length).fill(0);
-    if (!decayCoef.length) return acc;
-    for (let i = 0; i < ages.length; i++) for (let j = 0; j < decayCoef.length; j++) acc[j] += Math.exp(-ages[i] * decayCoef[j]);
-    return acc.map((x) => x * packetMb);
+    if (decayCoef.length) for (let i = 0; i < ages.length; i++) for (let j = 0; j < decayCoef.length; j++) acc[j] += Math.exp(-ages[i] * decayCoef[j]);
+    const out = acc.map((x) => x * packetMb);
+    // Aşama 11: alternatif değer modelleri (valueHalfLivesSec girdilerinden sonra)
+    for (const m of cfg.valueModels ?? []) {
+      const curve = isTop ? (m.top ?? m.decay) : m.decay;
+      let a = 0;
+      for (let i = 0; i < ages.length; i++) a += curveValue(curve, ages[i]);
+      out.push(a * packetMb);
+    }
+    return out;
   };
   const mk = (k: number): ClassStats => {
     const l = Float64Array.from(lat[k]).sort(); // sayısal artan (Float64Array.sort karşılaştırıcısız ve çok daha hızlı; sonuç aynı)
@@ -1249,7 +1285,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
       abandoned: aband[k], abandonedMb: abandMb[k], txLost: txLost[k], retransmissions: retx[k], attempts: att[k],
       generated: gen[k], delivered: deliv[k], dropped: drop[k], stored: stored[k], delayed: delayed[k], remaining: remaining[k],
       suppressed: sup[k], suppressedMb: supMb[k],
-      decayMb: decaySum(lat[k], classes[k].packetMb),
+      decayMb: decaySum(lat[k], classes[k].packetMb, rank[k] === topRank),
       generatedMb: genMb[k], deliveredMb: delivMb[k], droppedMb: dropMb[k],
       latencyMeanSec: l.length ? l.reduce((x, y) => x + y, 0) / l.length : 0,
       latencyP95Sec: l.length ? l[Math.min(l.length - 1, Math.floor(0.95 * l.length))] : 0,
@@ -1268,7 +1304,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     generated: sum((c) => c.generated), delivered: sum((c) => c.delivered), dropped: sum((c) => c.dropped),
     stored: sum((c) => c.stored), delayed: sum((c) => c.delayed), remaining: sum((c) => c.remaining),
     suppressed: sum((c) => c.suppressed), suppressedMb: sum((c) => c.suppressedMb),
-    decayMb: (cfg.valueHalfLivesSec ?? []).map((_, j) => sum((c) => c.decayMb[j])),
+    decayMb: Array.from({ length: (cfg.valueHalfLivesSec ?? []).length + (cfg.valueModels ?? []).length }, (_, j) => sum((c) => c.decayMb[j])),
     generatedMb: sum((c) => c.generatedMb), deliveredMb: sum((c) => c.deliveredMb), droppedMb: sum((c) => c.droppedMb),
     latencyMeanSec: allLat.length ? allLat.reduce((x, y) => x + y, 0) / allLat.length : 0,
     latencyP95Sec: allLat.length ? allLat[Math.min(allLat.length - 1, Math.floor(0.95 * allLat.length))] : 0,

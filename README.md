@@ -1174,6 +1174,87 @@ Arayüz: Çizelgeleyici → (m2) "Takvim hatasını gözlemden düzelt (Aşama 1
 - Parametreler (7 gün, 3 eşleşme, 6 sa, karşılıklı en yakın komşu kuralı) uydurmadır; ayarlanmadı. Hata türü yalnızca pencere kayması.
 - Düzeltmenin ne zaman "yeterince" öğrendiği (kaç pencerede) taranmadı; öğrenme süresi içinde strateji hatalı takvimle çalışır.
 
+## Aşama 11 (devam 2): değer modelini sorgulamak
+
+> Kapsam: README "Sonraki aşamalar"daki **tek madde** (değer modelini sorgulamak). Diğer adaylar (kapasite maliyet-fayda, gerçekçi yörünge/güç, kalan ≈ %4–5 hız farkı) **yapılmadı**. Tüm değerler **varsayımsaldır**; alternatif değer modelleri uydurmadır ve gerçek bir bilimsel değer ölçüsü değildir. Yeni şey **seçenektir**; varsayılan davranış değişmedi.
+
+**Soru:** Aşama 10'da değere duyarlı kuyruk kuralının kazancı ("en yeni önce + eşik altı atma + en eskiyi at") yalnızca *üstel azalan, yeni veri değerli* varsayımıyla ölçülmüştü (Aşama 10 yalnızca yarı ömrü değiştirdi: kural yarı ömrü ≠ gerçek yarı ömür). Gerçek değer **başka biçimde** azalırsa (son tarih, taban, doğrusal, telemetri son tarihi) kural hâlâ kazandırır mı?
+
+**Yapılanlar (hepsi seçenek):**
+1. `SchedConfig.valueModels` (`ValueModel`: `decay` + isteğe bağlı `top`; eğriler `ValueCurve`): **ölçüt** için alternatif değer eğrileri: `exp`, `step` (son tarihe kadar 1, sonra `after`), `floor` (taban + (1 − taban) × üstel: eski veri de değerli kalır), `linear`. `top` verilirse telemetri de azalır (gecikmeye duyarlı sınıf). `decayMb` dizisine `valueHalfLivesSec` girdilerinden **sonra** eklenir; `valuePct(..., { halfLifeIdx, topDecays })`. Çizelgeleme kararını **etkilemez**; verilmezse sonuçlar Aşama 9–10 ile birebir aynıdır (testli). Modeller `HYPOTHETICAL.value.models`'tedir (`valueModelsConfig()`).
+2. `ValueAwareConfig.expireAfterSec`: yaşı bu süreyi aşan bilim paketini atar (**son tarih** modeline uyan atma; yoksa `expireBelow` davranışı). `expireBelow` ile eşdeğer yaşta aynı sonucu verir (testli).
+3. Arayüz: Çizelgeleyici → (m6) "Alternatif değer modelleriyle karşılaştır" (düğme, Web Worker havuzu); "Varsayımsal değerler" satırı.
+
+**Ölçüm** (`npx vite-node scripts/asama11-sonuclar.ts deger`; gerçek Horizons verisi; 300 sn, hatalı hat + yeniden iletim [periyodik]; telemetri ağırlığı 4; hücre: **değer kazancı, puan** = politika − öncelikli, her satırın **kendi** gerçek modeline göre). Kurallar: **A** = Aşama 10 "hepsi" (kural üstel 14 g varsayar), **B** = yalnız en yeni önce, **C** = son tarihe uyan kural (gerçek son tarihte atma + en yeni önce + en eskiyi at; yalnız basamak modelleri), **D** = yalnız son tarihte atma. Kontrol: "üstel 14 g" satırı Aşama 10 sonuçlarını yeniden üretir (Ay 1 ist.: A +3,66, kısma +0,31).
+
+**Ay 2028-03-03 (60 g), 1 istasyon — öncelikli: düşen+hatta / toplam / teslim [üretilmeyen] = 23,9 / 23,9 / 73,2 [0,0]**
+
+| gerçek değer modeli | kısma | A: hepsi (üstel 14 g varsayar) | B: yalnız en yeni önce | C: son tarihe uyan kural | D: yalnız son tarihte atma |
+| üstel, yarı ömür 14 g (kontrol: Aşama 9-10) (öncelikli değer % 76,9) | +0,31 | +3,66 | +1,95 | — | — |
+| son tarih 3 g (sonra 0) (öncelikli değer % 70,5) | +2,12 | +10,96 | +8,58 | +10,96 | +10,36 |
+| son tarih 14 g (sonra 0) (öncelikli değer % 81,5) | +0,01 | +0,00 | −1,90 | +0,00 | +0,00 |
+| son tarih 30 g (sonra 0) (öncelikli değer % 81,5) | +0,01 | +0,00 | −1,11 | +0,00 | +0,00 |
+| son tarih 14 g (sonra yarı değer) (öncelikli değer % 81,5) | +0,01 | +0,00 | −1,23 | +0,00 | +0,00 |
+| üstel 14 g, taban %30 (eskiyince de değerli) (öncelikli değer % 78,3) | +0,22 | +2,56 | +1,19 | — | — |
+| üstel 14 g, taban %60 (öncelikli değer % 79,7) | +0,13 | +1,46 | +0,44 | — | — |
+| doğrusal, 30 günde 0 (öncelikli değer % 78,2) | +0,25 | +2,68 | +0,83 | — | — |
+| üstel 14 g + telemetri son tarih 1 g (öncelikli değer % 76,9) | +0,31 | +3,66 | +1,95 | — | — |
+| üstel 14 g + telemetri son tarih 3 g (öncelikli değer % 76,9) | +0,31 | +3,66 | +1,95 | — | — |
+
+Atılan %: A 0,0; son tarih 3 g: C 22,6 / D 8,5; son tarih 14 g: C 2,2 / D 0,0; son tarih 30 g: C 0,0 / D 0,0. Teslim farkı (puan, öncelikliye göre): A +0,0, B −0,8, C(3 g) +0,0, C(14 g) +0,0, C(30 g) +0,0.
+
+**Mars 2028 kavuşum penceresi, 1 istasyon — öncelikli: düşen+hatta / toplam / teslim [üretilmeyen] = 47,1 / 47,1 / 41,1 [0,0]**
+
+| gerçek değer modeli | kısma | A: hepsi (üstel 14 g varsayar) | B: yalnız en yeni önce | C: son tarihe uyan kural | D: yalnız son tarihte atma |
+| üstel, yarı ömür 14 g (kontrol: Aşama 9-10) (öncelikli değer % 50,7) | +1,09 | +7,68 | +7,18 | — | — |
+| son tarih 3 g (sonra 0) (öncelikli değer % 43,3) | −0,00 | +15,29 | +14,58 | +15,65 | +14,12 |
+| son tarih 14 g (sonra 0) (öncelikli değer % 54,7) | +2,04 | +4,27 | +3,79 | +4,27 | +4,31 |
+| son tarih 30 g (sonra 0) (öncelikli değer % 55,4) | +1,50 | +3,59 | +3,43 | +3,59 | +3,48 |
+| son tarih 14 g (sonra yarı değer) (öncelikli değer % 56,9) | +1,02 | +2,12 | +1,82 | +2,12 | +2,16 |
+| üstel 14 g, taban %30 (eskiyince de değerli) (öncelikli değer % 53,2) | +0,76 | +5,37 | +4,98 | — | — |
+| üstel 14 g, taban %60 (öncelikli değer % 55,7) | +0,44 | +3,05 | +2,79 | — | — |
+| doğrusal, 30 günde 0 (öncelikli değer % 50,8) | +1,54 | +7,83 | +7,34 | — | — |
+| üstel 14 g + telemetri son tarih 1 g (öncelikli değer % 28,8) | +1,09 | +7,68 | +7,18 | — | — |
+| üstel 14 g + telemetri son tarih 3 g (öncelikli değer % 30,5) | +1,09 | +7,68 | +7,18 | — | — |
+
+Atılan %: A 4,4; son tarih 3 g: C 56,8 / D 54,3; son tarih 14 g: C 20,4 / D 14,3; son tarih 30 g: C 3,0 / D 3,5. Teslim farkı (puan, öncelikliye göre): A −0,0, B −0,2, C(3 g) −0,0, C(14 g) −0,0, C(30 g) −0,0.
+
+**Mars 2028 kavuşum penceresi, 3 istasyon — öncelikli: düşen+hatta / toplam / teslim [üretilmeyen] = 32,2 / 32,2 / 67,6 [0,0]**
+
+| gerçek değer modeli | kısma | A: hepsi (üstel 14 g varsayar) | B: yalnız en yeni önce | C: son tarihe uyan kural | D: yalnız son tarihte atma |
+| üstel, yarı ömür 14 g (kontrol: Aşama 9-10) (öncelikli değer % 73,5) | +0,65 | +0,88 | +0,51 | — | — |
+| son tarih 3 g (sonra 0) (öncelikli değer % 69,9) | +0,92 | +2,53 | +2,40 | +2,97 | +4,35 |
+| son tarih 14 g (sonra 0) (öncelikli değer % 73,9) | +1,15 | +1,62 | +0,00 | +1,62 | +2,62 |
+| son tarih 30 g (sonra 0) (öncelikli değer % 77,6) | −0,72 | −2,11 | −2,17 | −1,61 | +0,00 |
+| son tarih 14 g (sonra yarı değer) (öncelikli değer % 75,8) | +0,21 | −0,24 | +0,00 | −0,24 | +0,77 |
+| üstel 14 g, taban %30 (eskiyince de değerli) (öncelikli değer % 74,7) | +0,24 | −0,02 | +0,36 | — | — |
+| üstel 14 g, taban %60 (öncelikli değer % 76,0) | −0,17 | −0,91 | +0,20 | — | — |
+| doğrusal, 30 günde 0 (öncelikli değer % 73,3) | +1,15 | +1,40 | +0,36 | — | — |
+| üstel 14 g + telemetri son tarih 1 g (öncelikli değer % 54,3) | +0,65 | +0,88 | +0,51 | — | — |
+| üstel 14 g + telemetri son tarih 3 g (öncelikli değer % 55,8) | +0,65 | +0,88 | +0,51 | — | — |
+Atılan %: A 3,0; son tarih 3 g: C 38,8 / D 36,7; son tarih 14 g: C 8,6 / D 10,1; son tarih 30 g: C 2,3 / D 0,0. Teslim farkı (puan, öncelikliye göre): A −3,1, B +0,0, C(3 g) −6,9, C(14 g) −3,1, C(30 g) −2,3.
+
+
+
+**Okuma (bu üç senaryoda; her biri tek tarih aralığı):**
+- **Kural kazancı model biçimine bağlıdır; işareti de değişebilir.** Mars 1 istasyonda (kapasite kısıtlı) A kuralı **tüm** modellerde kazandırır (+2,12 … +15,29); kısa son tarihte (3 g) en çok (+15,29), uzun son tarihte ve "eskiyince de değerli" modellerde daha az. Mars 3 istasyonda kazanç küçülür ve **bazı modellerde negatif olur**: son tarih 30 g (A −2,11), tabanlı üstel %60 (A −0,91), son tarih 14 g + yarı değer (A −0,24). Nedeni (ölçüldü): A, paketlerin ≈ %3'ünü atar (teslim −3,1 puan), eski veri hâlâ değerliyken bu değeri kaybettirir.
+- **Ay 1 istasyon:** 14 g ve daha uzun son tarihlerde A **etki yok** (+0,00); B (yalnız en yeni önce) **zarar verir** (−1,11 … −1,90): eski veri zaten süresi içinde ulaşıyor, en yeni önce sırası onu son tarihi aşırtır. Kısa son tarihte (3 g) A +10,96. Ay 2+ istasyonda kayıp ≈ 0 olduğundan kural yine etkisizdir (Aşama 10 ile aynı; yeniden ölçülmedi).
+- **Son tarihe uyan kural (C) ek kazanç sağlamaz:** C ≈ A (Mars 1 ist.: +4,27 / +4,27, +3,59 / +3,59; 3 g: +15,65 / +15,29), yani kuralı gerçek son tarihe uydurmak en çok ≈ +0,5 puan getirdi. Mars 3 ist. uzun son tarihte C de negatif (−1,61).
+- **D (yalnız son tarihte atma) hiçbir basamak modelinde negatif değil** (Mars 3 ist.: +4,35, +2,62, +0,00, +0,77) ve Mars 1 ist.'de A'ya yakın (+14,12, +4,31, +3,48, +2,16): kazancın büyük kısmı, hiçbir değeri kalmamış veriye hattı harcamamaktan geliyor; sıralama kuralları (en yeni önce, en eskiyi at) uzun son tarihte zarar riski taşıyor. Bu, D'nin Ay/Mars'ın tüm senaryolarında en güvenli seçenek olduğu **anlamına gelmez** (3 senaryo, 1 tarih aralığı); yalnızca bu ölçümde.
+- **Telemetri son tarihi (1 g, 3 g): etki yok.** Kazançlar üstel 14 g satırıyla aynı: kısma ve kural telemetriyi (zaten en yüksek öncelikli, kısılmaz) değiştirmediği için; yalnızca öncelikli değer %'si düşer (Mars 1 ist.: 50,7 → 28,8 / 30,5), çünkü telemetri kavuşum kapalılığında gecikir ve bu iki politikada da aynıdır.
+- **Kısma (Aşama 9 uyarlamalı ufuk)** küçük kalır ve işareti değişir (Mars 3 ist.: −0,72 … +1,15); üretilmeyen veri değer ölçütünde zaten 0 sayılır.
+- **Eski verinin akıbeti:** atılan paket ölçütte 0 değer alır (teslim edilmedi); tabloların altındaki "Atılan %" satırı bunu gösterir. Yarı değerli son tarih ve taban modelleri, geç teslimin kısmen değerli olduğu durumu temsil eder; bu modellerde atmanın bedeli görülür (yukarıdaki negatif hücreler).
+
+**Testler** (`npm test`; hepsi **sentetik**: uydurma tek uydulu topoloji, doygun periyodik hat, testte yazılı; `src/network/stage11-deger.test.ts` + `compute.test.ts`): eğri değerleri (üstel yarı ömürde 0,5, basamak sınırında 1/after, taban sonsuzda `floor`, doğrusal sıfırda 0); `valueModels` yok ya da boşken sonuç aynı, modeller yalnızca `decayMb`'yi uzatır (çizelge sonucu aynı); üstel model = aynı yarı ömürlü `valueHalfLivesSec` girdisi, son tarih/taban/doğrusal uç durumları beklenen değeri verir; `top` eğrisi telemetriyi azaltır, `topDecays` kapalıyken ölçüt Aşama 9–10 ile aynı; `expireAfterSec` yokken atma yok, `expireBelow` ile eşdeğer yaşta aynı sonuç, telemetri atılmaz, kısa son tarih daha çok atar; **korunum denklemleri** (üretilen = teslim + düşen + hatta kayıp + atılan + kalan; talep = üretilen + üretilmeyen) yeni yollarda (kayıpsız/ARQ × üç kural kombinasyonu × `valueAware`/`valueAdaptive`); **Worker işleyicisi** doğrudan çağrıyla birebir aynı sonuç ve metrikleri verir.
+
+**Doğrulama:** `asama7/8/9/10-sonuclar.ts` ve `asama11-sonuclar.ts duzeltme` çıktıları değişiklikten önce ve sonra **bayt bayt aynı** (asama7/8: süre notları hariç; referanslar önce kaydedildi). `npm test`: **209 test** (önce 200; yeni 9); `npm run build` geçti. Gerçek veriyle Chromium'da (vite preview) (m6) akışı çalışır, konsol hatası yok, 600 px'te yatay taşma yok; ekran görüntüleri gerçek verilidir: `docs/asama11-deger-modeli-genis.png`, `docs/asama11-deger-modeli-dar.png`.
+
+**Sınırlar (bilinmeyenler):**
+- Alternatif modeller (son tarihler, taban, doğrusal, telemetri son tarihi) uydurmadır; gerçek bir görevin bilimsel değerinin zamanla nasıl azaldığını bilmiyorum. Tek bilim sınıfı vardır; sınıfa göre farklı eğriler (birden çok bilim sınıfı) denenmedi.
+- Kural parametreleri (eşik 0,25, `scanSec`) bu madde için ayarlanmadı; "hepsi açık" kural, son tarihe uyan kural ve yalnız atma dışındaki kombinasyonlar (ör. son tarih + en yeni önce sırası ayrı ayrı) taranmadı. 3 senaryo, tek tarih aralığı; genelleme (Aşama 9'daki gibi birçok Ay tarihi / tüm Mars pencereleri) yapılmadı.
+- Kuralın kendisi hâlâ üstel varsayar (A) ya da son tarihi bilir (C, D); kuralın gerçek modeli **öğrenmesi** (gözlemden) denenmedi.
+- Değer ölçütü teslim yaşını kullanır; paketlerin üretildikten sonra beklediği süre kuyruktakiyle ayrıştırılmadı.
+
 ## Veri kaynağı ve kararlar
 
 - **Kaynak:** NASA/JPL Horizons API (`ssd.jpl.nasa.gov/api/horizons.api`), anahtar gerektirmez. Güneş merkezli, ekliptik düzlemde konum ve hız vektörleri (gezegenler 2 günde bir, Ay Dünya merkezli günde bir).
@@ -1238,6 +1319,8 @@ docs/        gerçek veriyle alınmış ekran görüntüleri
 32. **Performans:** Aşama 10 çizelgeleyici sekmesi akışı `main`'e göre ≈ %7 daha yavaş ölçülmüştü; Aşama 11'de nedeni (Worker'daki simülasyon çekirdeği) bulundu ve kısmen giderildi, kalan ≈ %4–5 açıklanamadı (bölüm "Aşama 11").
 33. **Takvim düzeltmesi hata ailesini bilir:** düzeltici, sabit kenar kayması + sabit ötelemeyi varsayar; ölçümdeki hata da bu ailedendir (sonuçlar iyimser olabilir). Gerçek takvim belirsizlikleri (bakım, değişken kayma) farklı davranabilir.
 34. **Silinen pencereler düzeltilemez** (kenar −240 dk, Mars −120 dk'da en kısa pencereler): eşlenecek tahmin kenarı olmadığından düzeltme öğrenilmez ya da eksik kalır; geri çekilme hâlâ gereklidir. Düzeltme parametreleri (7 g, 3 eşleşme, 6 sa) uydurmadır, ayarlanmadı.
+35. **Alternatif değer modelleri uydurmadır** (son tarihler, taban, doğrusal, telemetri son tarihi): gerçek değerin zamanla azalması bilinmiyor; kural kazancının işareti modele bağlı olduğundan Aşama 10'un olumlu sonucu bu varsayıma bağlıdır.
+36. **Kuyruk kuralı güvenliği:** uzun son tarih ya da eskiyince değerli veride "en yeni önce" / "en eskiyi at" değer kaybettirebilir (Mars 3 ist.); "yalnız son tarihte atma" bu ölçümde negatif çıkmadı ama 3 senaryo ve tek tarih aralığıdır.
 
 ## Kullanılan dış kaynaklar
 
@@ -1250,7 +1333,7 @@ docs/        gerçek veriyle alınmış ekran görüntüleri
 
 Aşama 11 adayları (değerler **varsayımsal** kalır; sonuçlar gerçek bir görev sonucu değildir):
 - **Takvim hatasını gözlemden düzeltmek:** **Aşama 11'de yapıldı** (bölüm "Aşama 11 (devam)"): kenar kayması ve öteleme düzeltilir (Mars kenar −120 dk'da kısmen; −240 dk'da etki yok). Kalan: **ortalama kayıp sapması** ve kavuşum takvimi hataları, zamanla değişen/pencereye göre farklı hatalar, parametre ayarı.
-- **Değer modelini sorgulamak:** kuyruk kuralının kazancı "üstel azalan, yeni veri değerli" varsayımına bağlı; başka modeller (basamak azalma, gecikmeye duyarlı sınıflar, bazı verinin eskiyince bile değerli kalması) ve eski verinin akıbetinin değer ölçütüne yansıtılması.
+- **Değer modelini sorgulamak:** **Aşama 11'de (devam 2) yapıldı**: kuralın kazancı model biçimine bağlı, bazı modellerde negatif (Mars 3 ist.); yalnız son tarihte atma en güvenli göründü (3 senaryo). Kalan: birden çok bilim sınıfı, kuralın modeli gözlemden öğrenmesi, geniş genelleme, kural parametre ayarı.
 - **Kapasiteyi artıran ilkeler:** toplam kayıp tüm çabalara rağmen hat/tampon kapasitesine bağlı kalıyor (kısma, kuyruk kuralı, telemetri, yönlendirme toplam kaybı artırmıyor ya da azaltmıyor); ikinci uydu ve istasyon sayısı kontrolleri kaldıraç. Kapasiteyi pahalılaştıran seçimlerin (ör. iki uydu + uydular arası bağlantı) maliyet-fayda analizi.
 - **Daha gerçekçi yörünge ve güç:** üçüncü cisim etkili Ay yörüngeleri (NRHO/ELFO), Mars eksen yönünün doğrulanması ve yarıgölge, güneş paneli yönelimi ve bataryanın ısıl/yaşlanma modeli; güç modelinde yük paylaşımı (hat yerine veri biriktirme).
 - **Çizelgeleyici sekmesi hızı:** Aşama 10'daki ≈ %7'lik süre artışının nedenini bulmak (V8 profili, Worker modül maliyeti), Aşama 10 politikaları açıkken grafik çizimini daha küçük görevlere bölmek.
