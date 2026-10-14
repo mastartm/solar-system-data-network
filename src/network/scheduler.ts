@@ -718,7 +718,6 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
    * surfaceClosure: havuz iki aşamalı izlenir (araç tamponu a → uydu payı r → Dünya); a yalnızca yüzey hattı açıkken r'ye akar. Sınır yine toplam (a + r) üzerindedir.
    */
   const projectThrottle = (ai: number, i: number, T: number, margin: number, minFactor: number, assetShare: number): number => {
-    if (sepAsset[ai] && routes[ai].length > 1) return projectSeparate(ai, i, T, margin, minFactor, assetShare);
     const a = topo.assets[ai];
     const rts = routes[ai];
     const fr = rts.map((ri) => (routeTotal[ri] > 0 ? assetRate[ai].total / routeTotal[ri] : 0));
@@ -801,6 +800,10 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     for (let it = 0; it < 10; it++) { const mid = (lo + hi) / 2; if (peak(mid) <= limit) lo = mid; else hi = mid; }
     return lo;
   };
+
+  /** Çok rotalı araçta (separateRelays) ayrı tamponlu projeksiyon, aksi halde Aşama 7-9 havuz projeksiyonu. */
+  const projectFor = (ai: number, i: number, T: number, margin: number, minFactor: number, assetShare: number): number =>
+    sepAsset[ai] && routes[ai].length > 1 ? projectSeparate(ai, i, T, margin, minFactor, assetShare) : projectThrottle(ai, i, T, margin, minFactor, assetShare);
 
   const gen = new Array(nC).fill(0), genMb = new Array(nC).fill(0);
   const drop = new Array(nC).fill(0), dropMb = new Array(nC).fill(0);
@@ -886,21 +889,17 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   };
 
   /** Aşama 10 (en yeni önce): bilim sınıflarında sıradaki paket kuyruğun SONUNDAKİdir; diğer her durumda başı (Aşama 3-9). */
-  // Kural kapalıyken (Aşama 3-9) doğrudan eski çağrılar: sıcak döngüde ek maliyet yok.
-  const headOf: (b: Buffer, k: number) => Pkt | undefined = newest
-    ? (b, k) => (rank[k] !== topRank ? b.q[k].peekBack() : b.q[k].peek())
-    : (b, k) => b.q[k].peek();
-  const popHead: (b: Buffer, k: number) => Pkt | undefined = newest
-    ? (b, k) => (rank[k] !== topRank ? b.q[k].pop() : b.q[k].shift())
-    : (b, k) => b.q[k].shift();
+  // Tek işlev (tek tanım: V8 satır içine alabilir); kural kapalıyken (newest = false) davranış Aşama 3-9 ile aynıdır.
+  const headOf = (b: Buffer, k: number): Pkt | undefined => (newest && rank[k] !== topRank ? b.q[k].peekBack() : b.q[k].peek());
+  const popHead = (b: Buffer, k: number): Pkt | undefined => (newest && rank[k] !== topRank ? b.q[k].pop() : b.q[k].shift());
   /** Sıradaki paketin sınıfı: FIFO'da en eski, öncelikliyse en önemli sınıfın başı. */
   const pick = (b: Buffer): number => {
     let best = -1;
     for (let k = 0; k < nC; k++) {
-      const h = headOf(b, k);
+      const h = (newest ? headOf(b, k) : b.q[k].peek());
       if (!h) continue;
       if (best < 0) { best = k; continue; }
-      const bh = headOf(b, best)!;
+      const bh = (newest ? headOf(b, best) : b.q[best].peek())!;
       const better = policy !== 'fifo'
         ? rank[k] < rank[best] || (rank[k] === rank[best] && h.seq < bh.seq)
         : h.seq < bh.seq;
@@ -913,16 +912,57 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     let best = -1;
     for (let k = 0; k < nC; k++) {
       if (rank[k] !== topRank) continue;
-      const h = headOf(b, k);
-      if (h && (best < 0 || h.seq < headOf(b, best)!.seq)) best = k;
+      const h = (newest ? headOf(b, k) : b.q[k].peek());
+      if (h && (best < 0 || h.seq < (newest ? headOf(b, best) : b.q[best].peek())!.seq)) best = k;
     }
     return best;
   };
   const take = (b: Buffer, k: number): Pkt => {
-    const p = popHead(b, k)!;
+    const p = (newest ? popHead(b, k) : b.q[k].shift())!;
     b.usedMb -= p.sizeMb; b.usedByClass[k] -= p.sizeMb;
     if (b.usedMb < 1e-9) b.usedMb = 0;
     return p;
+  };
+
+  /** Aşama 10: değeri eşiğin altına inmiş bilim paketlerini tamponda atar (tarama aralığı scanSec; gönderimdeki ya da ARQ'da tutulan kopyalar kuyrukta değildir). */
+  const expireStep = (i: number, now: number) => {
+    if (expireAgeSec < Infinity && i % scanSteps === 0) {
+      for (const b of [...assetBuf, ...relayBuf]) {
+        for (let k = 0; k < nC; k++) {
+          if (rank[k] === topRank) continue;
+          const gone = b.q[k].removeIf((p) => now - p.createdSec > expireAgeSec);
+          for (const p of gone) { b.usedMb -= p.sizeMb; b.usedByClass[k] -= p.sizeMb; expd[k]++; expdMb[k] += p.sizeMb; }
+          if (gone.length && b.usedMb < 1e-9) b.usedMb = 0;
+        }
+      }
+    }
+  };
+
+  /** Aşama 10: Dünya hattı kapalı uydudaki veri, hattı açık eşe aktarılır (paketin tamamı; kesirli aktarma ilerlemesi sonraki hatta devredilmez). */
+  const islStep = (s: LinkSample) => {
+    {
+      (topo.isl ?? []).forEach(([x, y], pi) => {
+        if (!s.islUp?.[pi]) return;
+        for (const [from, to] of [[x, y], [y, x]] as [number, number][]) {
+          const key = pi * 2 + (from === x ? 0 : 1);
+          if (s.earthUp[from] || !s.earthUp[to]) { islCredit[key] = 0; continue; }
+          const src = relayBuf[from], dst = relayBuf[to];
+          islCredit[key] = Math.min(islCredit[key] + (islKbps / 1000) * dt, 2 * maxPacketMb);
+          for (;;) {
+            const k = pick(src);
+            if (k < 0) { islCredit[key] = 0; break; }
+            const p = (newest ? headOf(src, k) : src.q[k].peek())!;
+            const need = p.sizeMb - p.sentMb;
+            if (islCredit[key] < need - 1e-12 || !canAccept(dst, p)) break;
+            islCredit[key] -= need;
+            take(src, k);
+            p.sentMb = 0; p.attempts = 0;
+            p.propSec += s.islDelaySec?.[pi] ?? 0;
+            put(dst, p);
+          }
+        }
+      });
+    }
   };
 
   for (let i = 0; i < samples.length; i++) {
@@ -962,17 +1002,8 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
       });
     }
 
-    // 0c) Aşama 10: değere duyarlı kuyruk kuralı: değeri eşiğin altına inmiş bilim paketleri tamponda atılır (taranma aralığı scanSec; gönderimdeki ya da ARQ'da tutulan kopyalar kuyrukta değildir)
-    if (va && expireAgeSec < Infinity && i % scanSteps === 0) {
-      for (const b of [...assetBuf, ...relayBuf]) {
-        for (let k = 0; k < nC; k++) {
-          if (rank[k] === topRank) continue;
-          const gone = b.q[k].removeIf((p) => now - p.createdSec > expireAgeSec);
-          for (const p of gone) { b.usedMb -= p.sizeMb; b.usedByClass[k] -= p.sizeMb; expd[k]++; expdMb[k] += p.sizeMb; }
-          if (gone.length && b.usedMb < 1e-9) b.usedMb = 0;
-        }
-      }
-    }
+    // 0c) Aşama 10: değere duyarlı kuyruk kuralı (ayrı işlev: sıcak döngü küçük kalsın)
+    if (va) expireStep(i, now);
 
     // 1) Üretim (deterministik birikim). Strateji: en önemli sınıf dışındakiler kısılır; kısılan hiç üretilmez.
     topo.assets.forEach((a, ai) => {
@@ -983,20 +1014,20 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
         const ri = relayIndex.get(a.relay)!;
         const T = horizon[ri][i];
         if (T >= 0 && assetRate[ai].rest > 0 && (i % refreshSteps === 0 || !(i - 1 >= 0 && horizon[ri][i - 1] >= 0))) {
-          throttle = covThrottle[ai] = projectThrottle(ai, i, T, cv.margin, cv.minFactor, cv.assetBufferShare ?? 0);
+          throttle = covThrottle[ai] = projectFor(ai, i, T, cv.margin, cv.minFactor, cv.assetBufferShare ?? 0);
         } else if (T < 0) { throttle = 1; covThrottle[ai] = 1; }
       }
       if (rl) {
         throttle = covThrottle[ai];
         if (assetRate[ai].rest > 0 && i % rlRefresh === 0) {
-          throttle = covThrottle[ai] = projectThrottle(ai, i, Math.min(samples.length, i + rlSteps), rl.margin, rl.minFactor, rl.assetBufferShare ?? 0);
+          throttle = covThrottle[ai] = projectFor(ai, i, Math.min(samples.length, i + rlSteps), rl.margin, rl.minFactor, rl.assetBufferShare ?? 0);
         }
       }
       if (ad) {
         throttle = covThrottle[ai];
         if (assetRate[ai].rest > 0 && i % adRefresh === 0) {
           const hs = horizonSteps(ai, i);
-          throttle = covThrottle[ai] = hs < 0 ? 1 : projectThrottle(ai, i, Math.min(samples.length, i + hs), ad.margin, ad.minFactor, ad.assetBufferShare ?? 0);
+          throttle = covThrottle[ai] = hs < 0 ? 1 : projectFor(ai, i, Math.min(samples.length, i + hs), ad.margin, ad.minFactor, ad.assetBufferShare ?? 0);
         }
       }
       if (st) {
@@ -1054,7 +1085,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
       while (budget > 1e-12) {
         const k = pick(src);
         if (k < 0) break;
-        const p = headOf(src, k)!;
+        const p = (newest ? headOf(src, k) : src.q[k].peek())!;
         const need = p.sizeMb - p.sentMb;
         if (budget < need) { p.sentMb += budget; break; }
         if (!canAccept(dst, p)) break; // uydu tamponu dolu: araç gönderemez, kendi tamponunda tutar
@@ -1066,7 +1097,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
           if (p.attempts >= arq.maxAttempts) { take(src, k); aband[k]++; abandMb[k] += p.sizeMb; abandSurface++; }
           else {
             retx[k]++;
-            if (surfRetry > 0) { popHead(src, k); src.held[k] += p.sizeMb; surfPend[ai].push({ p, k, at: now + surfRetry, ok: false }); }
+            if (surfRetry > 0) { (newest ? popHead(src, k) : src.q[k].shift()); src.held[k] += p.sizeMb; surfPend[ai].push({ p, k, at: now + surfRetry, ok: false }); }
           }
           continue;
         }
@@ -1077,30 +1108,8 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
       }
     });
 
-    // 2b) Aşama 10: uydular arası bağlantı: Dünya hattı kapalı uydudaki veri, hattı açık eşine aktarılır (paketin tamamı; kesirli aktarma ilerlemesi sonraki hatta devredilmez)
-    if (islKbps > 0 && topo.isl) {
-      topo.isl.forEach(([x, y], pi) => {
-        if (!s.islUp?.[pi]) return;
-        for (const [from, to] of [[x, y], [y, x]] as [number, number][]) {
-          const key = pi * 2 + (from === x ? 0 : 1);
-          if (s.earthUp[from] || !s.earthUp[to]) { islCredit[key] = 0; continue; }
-          const src = relayBuf[from], dst = relayBuf[to];
-          islCredit[key] = Math.min(islCredit[key] + (islKbps / 1000) * dt, 2 * maxPacketMb);
-          for (;;) {
-            const k = pick(src);
-            if (k < 0) { islCredit[key] = 0; break; }
-            const p = headOf(src, k)!;
-            const need = p.sizeMb - p.sentMb;
-            if (islCredit[key] < need - 1e-12 || !canAccept(dst, p)) break;
-            islCredit[key] -= need;
-            take(src, k);
-            p.sentMb = 0; p.attempts = 0;
-            p.propSec += s.islDelaySec?.[pi] ?? 0;
-            put(dst, p);
-          }
-        }
-      });
-    }
+    // 2b) Aşama 10: uydular arası bağlantı (ayrı işlev)
+    if (islKbps > 0 && topo.isl) islStep(s);
 
     // 3) Uydu → Dünya
     topo.relays.forEach((r, ri) => {
@@ -1113,7 +1122,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
         const k = reserve > 1e-12 ? pickTop(buf) : pick(buf);
         if (reserve > 1e-12 && k < 0) { reserve = 0; continue; }
         if (k < 0) break;
-        const p = headOf(buf, k)!;
+        const p = (newest ? headOf(buf, k) : buf.q[k].peek())!;
         const need = p.sizeMb - p.sentMb;
         if (reserve > 1e-12) {
           if (reserve < need) { const part = Math.min(reserve, budget); p.sentMb += part; budget -= part; reserve = 0; continue; }
@@ -1122,7 +1131,7 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
         budget -= need;
         if (arq) {
           // gönderici kopyayı RTT boyunca tamponunda tutar: kuyruktan çıkar ama yer tutmaya devam eder
-          popHead(buf, k); p.sentMb = 0; p.attempts++; buf.held[k] += p.sizeMb;
+          (newest ? popHead(buf, k) : buf.q[k].shift()); p.sentMb = 0; p.attempts++; buf.held[k] += p.sizeMb;
           const rtt = 2 * s.earthDelaySec[ri];
           att[k]++;
           if (attemptLost(true, ri, i)) { txLost[k]++; inflight[ri].push({ p, k, at: end + rtt, ok: false }); continue; }

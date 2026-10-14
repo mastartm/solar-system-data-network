@@ -1119,6 +1119,18 @@ Aşama 10 politikaları açık ve çok seçenekli akışlarda **tek tek ≥ 50 m
 - Sayfa başlatmada Worker'a ayrıştırma taşınmadı (ölçüm gerekçesi bölüm 6); küre kartı dokusu satır parçalarıyla üretilir.
 
 
+## Aşama 11 (başladı): çizelgeleyici hız kaybı
+
+> Kapsam: yalnızca README "Sonraki aşamalar"daki **ilk madde** (Aşama 10'da ölçülen ≈ %7'lik çizelgeleyici sekmesi yavaşlamasının nedeni). Diğer Aşama 11 adayları **yapılmadı**. Sayılar gerçek Horizons verisiyle, Chromium'da, `main` (722aee1, Aşama 9) ile dönüşümlü ölçüldü; hesaplar varsayımsaldır.
+
+**Bulgu 1 — ana iş parçacığı değil, Worker:** CPU profilinde ana iş parçacığı işi iki sürümde aynıydı (inclusive süreler ±%3); fark yalnızca boşta bekleme süresindeydi. İş sayısı da aynı (133 Worker işi, aynı türde). Worker'larda toplam meşgul süre ölçülünce (her işin süresi `performance.now()` ile toplandı) fark orada çıktı.
+
+**Bulgu 2 — neden:** Aşama 10 kodu, varsayılan (kapalı) yolda da `simulate`'in sıcak döngüsünü büyütüyordu (kuyruk kuralı, uydular arası bağlantı, ayrı tamponlu projeksiyon). Düğüm bazında ayıklama (Chromium'da 60 tekrarlı `simulate` ölçümü; Node'da fark görünmüyordu, V8 sürümü farkı): ISL ve atma bloklarını döngüden çıkarınca `priority` farkı kayboldu. Yapılan: (1) atma taraması ve uydular arası aktarım `expireStep` / `islStep` işlevlerine alındı; (2) ayrı tamponlu projeksiyonun seçimi `projectThrottle` içinden çağıran yere (`projectFor`) taşındı, `projectThrottle` Aşama 9 biçimine döndü; (3) kuyruk kuralı kapalıyken sıra seçimi doğrudan eski çağrılarla (`peek`/`shift`); (4) `computeNetwork` varsayılanda her çağrıda boş dizi ayırmıyor.
+
+**Sonuç (sayfa içi, Mars açılış, 10 dönüşümlü deneme × 2 tur; Worker'ların toplam meşgul süresi / duvar süresi):** düzeltmeden önce dal `main`'e göre **+%5…+%14 / +%3…+%6**, sonra **+%4…+%7 / +%3…+%6**; yani hız kaybı **tamamen giderilmedi**, kalan ≈ %4–5 (Chromium'da `simulate` mikro ölçümü `priority` için eşit, `rolling` ≈ +%5, `adaptive` ≈ +%4; ölçüm gürültüsü bu düzeyde). Kalan farkın kaynağı **bilinmiyor** (olası: `simulate` kapanışının büyümesi, `projectThrottle` içindeki telemetri çarpanı dalı). Ek olarak ≥ 50 ms görevler (Aşama 10 politikaları açıkken grafik yeniden çizimi) **bölünmedi**.
+
+**Doğrulama:** `npm test` 192 test geçti; `asama7/8/9` çıktıları ve `asama10-sonuclar.ts` çıktıları (deger, golge, telemetri, yonlendirme) değişiklikten sonra önceki çıktılarla **bayt bayt aynı** (asama7/8: süre notları hariç).
+
 ## Veri kaynağı ve kararlar
 
 - **Kaynak:** NASA/JPL Horizons API (`ssd.jpl.nasa.gov/api/horizons.api`), anahtar gerektirmez. Güneş merkezli, ekliptik düzlemde konum ve hız vektörleri (gezegenler 2 günde bir, Ay Dünya merkezli günde bir).
@@ -1180,7 +1192,7 @@ docs/        gerçek veriyle alınmış ekran görüntüleri
 29. **Güç modeli** (batarya 700 Wh, güneş 700 W, taban yük 300 W, hat yükü 350 W, eşikler %20/%50) uydurmadır ve gerçek bir uydunun güç bütçesini temsil etmez; çizelge başında batarya dolu varsayılır; adım örneklemesi (300–1800 sn) gölge süresine kıyasla kabadır; güneş paneli yönelimi, bataryanın yaşlanması ve ısı yok.
 30. **Presesyon** yalnızca düğümü (RAAN) sabit hızla kaydırır; periapsis argümanı ve eğim sabit; hızlar uydurmadır. Üçüncü cisim etkisiyle gerçekçi bir yörünge yayılımı denenmedi.
 31. **Telemetri denemesi:** paket boyutu, ayrılmış pay ve kısma değerleri uydurmadır; telemetri en önemli sınıf olduğundan etkisiz çıktı. Telemetrinin kendi hat/öncelik yapısı (ör. ayrı düşük hızlı bir telemetri hattı, ARQ'suz telemetri) denenmedi.
-32. **Performans:** Aşama 10 çizelgeleyici sekmesi akışı `main`'e göre ≈ %7 daha yavaş ölçüldü (bölüm "Hesap süresi"); nedenini kanıtlayamadım.
+32. **Performans:** Aşama 10 çizelgeleyici sekmesi akışı `main`'e göre ≈ %7 daha yavaş ölçülmüştü; Aşama 11'de nedeni (Worker'daki simülasyon çekirdeği) bulundu ve kısmen giderildi, kalan ≈ %4–5 açıklanamadı (bölüm "Aşama 11").
 
 ## Kullanılan dış kaynaklar
 
