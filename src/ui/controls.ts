@@ -19,8 +19,9 @@ export interface ControlOptions {
   onView: (mode: ViewMode) => void;
 }
 
-const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
+// Tek biçimleyici: her çağrıda yeni Intl.DateTimeFormat kurmak 91 tutulma × 2 çağrıda ≈ 25 ms tutuyordu (sayfa başlatma); çıktı toLocaleString ile aynıdır.
+const dateFmt = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+const fmtDate = (iso: string) => dateFmt.format(new Date(iso)) + ' UTC';
 
 export function createControls(root: HTMLElement, o: ControlOptions): Controls {
   const { minJD, maxJD } = o;

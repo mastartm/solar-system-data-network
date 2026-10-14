@@ -172,11 +172,13 @@ const sun: Painter = (x, y, z) => {
 
 const PAINTERS: Record<BodyId, Painter> = { earth, mars, moon, mercury, venus, jupiter, saturn, uranus, neptune, sun };
 
-/** Cisim dokusu: TEX_W×TEX_H, RGB (3 bayt/piksel), eşdikdörtgen (boylam soldan sağa, enlem yukarıdan aşağıya). Belirleyici. */
-export function generateTexture(id: BodyId, w = TEX_W, h = TEX_H): Uint8ClampedArray {
+/**
+ * Dokunun [j0, j1) satırlarını `out`a yazar (her piksel yalnızca kendi konumundan hesaplanır, satırlar bağımsızdır). Sayfa başlatırken dokuyu parçalara bölüp ana iş parçacığını
+ * 50 ms'den uzun tutmamak için kullanılır; tüm satırlar birlikte generateTexture ile bayt bayt aynı sonucu verir.
+ */
+export function generateTextureRows(id: BodyId, w: number, h: number, j0: number, j1: number, out: Uint8ClampedArray): void {
   const paint = PAINTERS[id];
-  const out = new Uint8ClampedArray(w * h * 3);
-  for (let j = 0; j < h; j++) {
+  for (let j = j0; j < j1; j++) {
     const lat = Math.PI / 2 - ((j + 0.5) / h) * Math.PI;
     const cl = Math.cos(lat), sl = Math.sin(lat);
     for (let i = 0; i < w; i++) {
@@ -186,5 +188,11 @@ export function generateTexture(id: BodyId, w = TEX_W, h = TEX_H): Uint8ClampedA
       out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2];
     }
   }
+}
+
+/** Cisim dokusu: TEX_W×TEX_H, RGB (3 bayt/piksel), eşdikdörtgen (boylam soldan sağa, enlem yukarıdan aşağıya). Belirleyici. */
+export function generateTexture(id: BodyId, w = TEX_W, h = TEX_H): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(w * h * 3);
+  generateTextureRows(id, w, h, 0, h, out);
   return out;
 }

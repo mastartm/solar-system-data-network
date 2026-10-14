@@ -868,9 +868,13 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
   };
 
   /** Aşama 10 (en yeni önce): bilim sınıflarında sıradaki paket kuyruğun SONUNDAKİdir; diğer her durumda başı (Aşama 3-9). */
-  const isNewest = (k: number) => newest && rank[k] !== topRank;
-  const headOf = (b: Buffer, k: number): Pkt | undefined => (isNewest(k) ? b.q[k].peekBack() : b.q[k].peek());
-  const popHead = (b: Buffer, k: number): Pkt | undefined => (isNewest(k) ? b.q[k].pop() : b.q[k].shift());
+  // Kural kapalıyken (Aşama 3-9) doğrudan eski çağrılar: sıcak döngüde ek maliyet yok.
+  const headOf: (b: Buffer, k: number) => Pkt | undefined = newest
+    ? (b, k) => (rank[k] !== topRank ? b.q[k].peekBack() : b.q[k].peek())
+    : (b, k) => b.q[k].peek();
+  const popHead: (b: Buffer, k: number) => Pkt | undefined = newest
+    ? (b, k) => (rank[k] !== topRank ? b.q[k].pop() : b.q[k].shift())
+    : (b, k) => b.q[k].shift();
   /** Sıradaki paketin sınıfı: FIFO'da en eski, öncelikliyse en önemli sınıfın başı. */
   const pick = (b: Buffer): number => {
     let best = -1;
