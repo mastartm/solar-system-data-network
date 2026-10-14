@@ -12,28 +12,32 @@ import { renderNetwork } from './ui/networkPanel';
 import type { SchedulerPanel } from './ui/schedulerPanel';
 import { NetworkLayer } from './map/networkLayer';
 import { computeNetwork, findBlackoutWindows } from './network/network';
+import { t } from './i18n';
+import { applyStaticText, mountLangSwitch } from './ui/langSwitch';
 
 /** Sayfa başlatma birkaç görevde yapılır (her aşama arasında tarayıcıya nefes aldırılır): tek bir ≈ 120–175 ms'lik uzun görev yerine birkaç kısa görev. */
 const yieldTask = () => new Promise<void>((r) => setTimeout(r, 0));
 
 async function start() {
+  applyStaticText();
+  mountLangSwitch(document.querySelector('header')!);
   const info = document.getElementById('info')!;
   let tracks;
   try {
     tracks = await loadTracks();
   } catch (e) {
-    info.innerHTML = `<h2>Veri yüklenemedi</h2>
+    info.innerHTML = `<h2>${t('Veri yüklenemedi')}</h2>
       <p>${(e as Error).message}</p>
-      <p><code>npm run fetch-data</code> komutunu çalıştırıp sayfayı yenileyin.</p>`;
+      <p>${t('<code>npm run fetch-data</code> komutunu çalıştırıp sayfayı yenileyin.')}</p>`;
     return;
   }
 
   const problems = validateTracks(tracks);
   if (problems.length) {
-    info.innerHTML = `<h2>Veri bozuk ya da eksik</h2>
-      <p>Horizons verisi beklenen biçimde değil; harita ve çizelgeleyici başlatılmadı:</p>
+    info.innerHTML = `<h2>${t('Veri bozuk ya da eksik')}</h2>
+      <p>${t('Horizons verisi beklenen biçimde değil; harita ve çizelgeleyici başlatılmadı:')}</p>
       <ul>${problems.map((p) => `<li>${p}</li>`).join('')}</ul>
-      <p><code>npm run fetch-data -- --force</code> ile veriyi yeniden çekin.</p>`;
+      <p>${t('<code>npm run fetch-data -- --force</code> ile veriyi yeniden çekin.')}</p>`;
     return;
   }
 
@@ -91,7 +95,7 @@ async function start() {
   map.overlay = (ctx, screen, radii, zoom, labels) => { if (map.layers.network) layer.draw(ctx, screen, radii, zoom, net, labels, map.layers); };
   const jumpRow = document.createElement('div');
   jumpRow.className = 'row more-row';
-  jumpRow.innerHTML = '<button id="cprev" type="button">◀ Önceki Mars kavuşumu</button><button id="cnext" type="button">Sonraki Mars kavuşumu ▶</button><span class="legend">Kesinti penceresinin başına gider (Güneş–Mars açısı eşiğin altında).</span>';
+  jumpRow.innerHTML = `<button id="cprev" type="button">${t('◀ Önceki Mars kavuşumu')}</button><button id="cnext" type="button">${t('Sonraki Mars kavuşumu ▶')}</button><span class="legend">${t('Kesinti penceresinin başına gider (Güneş–Mars açısı eşiğin altında).')}</span>`;
   document.getElementById('controls')!.appendChild(jumpRow);
   jumpRow.querySelector('#cprev')!.addEventListener('click', () => {
     const w = [...windows].reverse().find((x) => x.startJD - 3 < jd - 0.5); // atlanan hedef (başlangıç − 3 gün) bugünden geride olmalı
@@ -111,7 +115,7 @@ async function start() {
     side.classList.toggle('side-open', open);
     document.querySelector('main')!.classList.toggle('side-open', open); // dar ekranda açık panel tarih etiketini örter: CSS gizler (tarih altta kutuda da var)
     sideToggle.setAttribute('aria-expanded', String(open));
-    sideToggle.textContent = `Bilgi ve ağ durumu ${open ? '▾' : '▸'}`;
+    sideToggle.textContent = `${t('Bilgi ve ağ durumu')} ${open ? '▾' : '▸'}`;
     map.dirty = true;
   };
   sideToggle.addEventListener('click', () => setSideOpen(!side.classList.contains('side-open')));
@@ -170,7 +174,7 @@ async function start() {
       if (near && Math.abs(near.days) < 0.75) {
         const badge = document.createElement('div');
         badge.className = 'eclipse-badge';
-        badge.textContent = `${eclipseLabel(near.eclipse)} (en yüksek an civarı)`;
+        badge.textContent = t('{etiket} (en yüksek an civarı)', { etiket: eclipseLabel(near.eclipse) });
         dateLabel.appendChild(badge);
       }
     }

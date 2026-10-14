@@ -9,15 +9,15 @@
   <body>
     <div id="app">
       <header>
-        <h1>Güneş Sistemi Veri Ağı</h1>
-        <span class="note">Konumlar: NASA/JPL Horizons · Ölçek karekökle sıkıştırılmıştır</span>
-        <span class="badge-hyp">Varsayımsal değerler: araçlar, uydular, veri hızları</span>
-        <nav id="tabs" role="tablist"><button id="tab-map" type="button" role="tab" aria-selected="true" class="on">Harita</button><button id="tab-sched" type="button" role="tab" aria-selected="false">Çizelgeleyici</button></nav>
+        <h1 data-i18n>Güneş Sistemi Veri Ağı</h1>
+        <span class="note" data-i18n>Konumlar: NASA/JPL Horizons · Ölçek karekökle sıkıştırılmıştır</span>
+        <span class="badge-hyp" data-i18n>Varsayımsal değerler: araçlar, uydular, veri hızları</span>
+        <nav id="tabs" role="tablist"><button id="tab-map" type="button" role="tab" aria-selected="true" class="on" data-i18n>Harita</button><button id="tab-sched" type="button" role="tab" aria-selected="false" data-i18n>Çizelgeleyici</button></nav>
       </header>
       <main>
-        <aside id="left" aria-label="Cisimler ve katmanlar"></aside>
-        <canvas id="map" aria-label="Güneş sistemi haritası"></canvas>
-        <div id="side"><button id="side-toggle" class="side-toggle" type="button" aria-expanded="false" aria-controls="side-body">Bilgi ve ağ durumu ▸</button><div id="side-body"><aside id="info"></aside><aside id="net"></aside></div></div>
+        <aside id="left" aria-label="Cisimler ve katmanlar" data-i18n-aria></aside>
+        <canvas id="map" aria-label="Güneş sistemi haritası" data-i18n-aria></canvas>
+        <div id="side"><button id="side-toggle" class="side-toggle" type="button" aria-expanded="false" aria-controls="side-body" data-i18n>Bilgi ve ağ durumu ▸</button><div id="side-body"><aside id="info"></aside><aside id="net"></aside></div></div>
       </main>
       <section id="sched" hidden></section>
       <footer id="controls"></footer>

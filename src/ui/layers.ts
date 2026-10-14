@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 // Harita katmanlarının aç/kapa durumu; tercihler localStorage'da saklanır (yoksa ya da hata verirse varsayılanla çalışır).
 
 export interface LayerState {
@@ -17,11 +18,11 @@ export const LAYER_KEY = 'ssdn.layers.v1';
 export const DEFAULT_LAYERS: LayerState = { network: true, flow: true, names: true, netLabels: true, orbits: true };
 
 export const LAYER_META: { key: keyof LayerState; label: string; needsNetwork?: boolean }[] = [
-  { key: 'network', label: 'Ağ katmanı (uydular, araçlar, bağlantılar)' },
-  { key: 'flow', label: 'Veri akışı (paketler)', needsNetwork: true },
-  { key: 'names', label: 'Gezegen adları (Güneş ve Ay dahil)' },
-  { key: 'netLabels', label: 'Ağ etiketleri (ad, gecikme)', needsNetwork: true },
-  { key: 'orbits', label: 'Yörünge çizgileri' },
+  { key: 'network', label: t('Ağ katmanı (uydular, araçlar, bağlantılar)') },
+  { key: 'flow', label: t('Veri akışı (paketler)'), needsNetwork: true },
+  { key: 'names', label: t('Gezegen adları (Güneş ve Ay dahil)') },
+  { key: 'netLabels', label: t('Ağ etiketleri (ad, gecikme)'), needsNetwork: true },
+  { key: 'orbits', label: t('Yörünge çizgileri') },
 ];
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;

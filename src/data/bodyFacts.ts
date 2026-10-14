@@ -1,3 +1,4 @@
+import { nf, t } from '../i18n';
 import type { BodyId } from './types';
 
 /**
@@ -5,7 +6,7 @@ import type { BodyId } from './types';
  * GERÇEK değerlere yakın GENEL BİLGİDİR; NASA/JPL Horizons verisi DEĞİLDİR ve kaynağı bu projede DOĞRULANMAMIŞTIR
  * (hafızadan yazıldı). Varsayımsal ağ değerleri değildir; onlar src/config/hypothetical.ts içindedir.
  */
-export const FACTS_DISCLAIMER = 'Genel bilgidir; Horizons verisi değildir, kaynağı doğrulanmamıştır.';
+export const FACTS_DISCLAIMER = t('Genel bilgidir; Horizons verisi değildir, kaynağı doğrulanmamıştır.');
 
 export interface BodyFacts {
   /** Ortalama yarıçap (km). */
@@ -36,23 +37,21 @@ export const FACTS: Record<BodyId, BodyFacts> = {
   neptune: { radiusKm: 24622, orbitalPeriodDays: 60182, sunDistanceMKm: 4495, rotationDays: 0.671, moons: 16, moonsLowerBound: true, axialTiltDeg: 28.32 },
 };
 
-const nf = (n: number, d = 0) => n.toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
-
 /** Gün sayısını okunur metne çevirir (gün / yıl; saat dönme periyodunda 1 günden kısaysa). */
 export function formatDays(days: number): string {
   const a = Math.abs(days);
-  if (a >= 700) return `${nf(a / 365.256, 1)} yıl`;
-  if (a < 2) return `${nf(a * 24, 1)} saat`;
-  return `${nf(a, a < 100 ? 1 : 0)} gün`;
+  if (a >= 700) return t('{n} yıl', { n: nf(a / 365.256, 1) });
+  if (a < 2) return t('{n} saat', { n: nf(a * 24, 1) });
+  return t('{n} gün', { n: nf(a, a < 100 ? 1 : 0) });
 }
 
 /** Kartın yanında gösterilen satırlar: [etiket, değer]. */
 export function factRows(id: BodyId): [string, string][] {
   const f = FACTS[id];
-  const rows: [string, string][] = [['Yarıçap', `${nf(f.radiusKm, f.radiusKm < 10000 ? 1 : 0)} km`]];
-  rows.push([id === 'moon' ? 'Yörünge dönemi (Dünya çevresi)' : 'Yörünge dönemi', f.orbitalPeriodDays ? formatDays(f.orbitalPeriodDays) : '—']);
-  rows.push([id === 'moon' ? 'Güneş\'e ort. uzaklık (Dünya ile aynı)' : 'Güneş\'e ort. uzaklık', f.sunDistanceMKm ? `${nf(f.sunDistanceMKm, f.sunDistanceMKm < 1000 ? 1 : 0)} milyon km` : '—']);
-  rows.push(['Dönme periyodu', `${formatDays(f.rotationDays)}${f.rotationDays < 0 ? ' (ters yön)' : ''}`]);
-  rows.push(['Bilinen uydu', id === 'sun' ? '—' : `${f.moonsLowerBound ? '≥ ' : ''}${nf(f.moons)}`]);
+  const rows: [string, string][] = [[t('Yarıçap'), `${nf(f.radiusKm, f.radiusKm < 10000 ? 1 : 0)} km`]];
+  rows.push([id === 'moon' ? t('Yörünge dönemi (Dünya çevresi)') : t('Yörünge dönemi'), f.orbitalPeriodDays ? formatDays(f.orbitalPeriodDays) : '—']);
+  rows.push([id === 'moon' ? t('Güneş\'e ort. uzaklık (Dünya ile aynı)') : t('Güneş\'e ort. uzaklık'), f.sunDistanceMKm ? t('{n} milyon km', { n: nf(f.sunDistanceMKm, f.sunDistanceMKm < 1000 ? 1 : 0) }) : '—']);
+  rows.push([t('Dönme periyodu'), `${formatDays(f.rotationDays)}${f.rotationDays < 0 ? ` ${t('(ters yön)')}` : ''}`]);
+  rows.push([t('Bilinen uydu'), id === 'sun' ? '—' : `${f.moonsLowerBound ? '≥ ' : ''}${nf(f.moons)}`]);
   return rows;
 }

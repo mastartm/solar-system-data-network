@@ -1,3 +1,5 @@
+import { t } from '../i18n';
+
 export interface Eclipse {
   type: 'solar' | 'lunar';
   kind: string; // total | annular | partial | penumbral
@@ -5,12 +7,13 @@ export interface Eclipse {
   time: string; // ISO, UTC
 }
 
-const KIND_TR: Record<string, string> = {
-  total: 'Tam', annular: 'Halkalı', partial: 'Kısmi', penumbral: 'Yarıgölge',
-};
+// Etiketler tam ifade olarak çevrilir (dil bilgisi iki dilde farklıdır); bilinmeyen tür ham hâliyle gösterilir.
+const labels = (): Record<'solar' | 'lunar', Record<string, string>> => ({
+  solar: { total: t('Tam güneş tutulması'), annular: t('Halkalı güneş tutulması'), partial: t('Kısmi güneş tutulması'), penumbral: t('Yarıgölge güneş tutulması') },
+  lunar: { total: t('Tam Ay tutulması'), annular: t('Halkalı Ay tutulması'), partial: t('Kısmi Ay tutulması'), penumbral: t('Yarıgölge Ay tutulması') },
+});
 
-export const eclipseLabel = (e: Eclipse): string =>
-  `${KIND_TR[e.kind] ?? e.kind} ${e.type === 'solar' ? 'güneş' : 'Ay'} tutulması`;
+export const eclipseLabel = (e: Eclipse): string => labels()[e.type][e.kind] ?? (e.type === 'solar' ? t('{tür} güneş tutulması', { tür: e.kind }) : t('{tür} Ay tutulması', { tür: e.kind }));
 
 /** Merkezi (tam/halkalı) tutulmalar dolu, diğerleri boş işaretle gösterilir. */
 export const isCentral = (e: Eclipse): boolean => e.kind === 'total' || e.kind === 'annular';

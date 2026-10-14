@@ -3,7 +3,9 @@
 // sonuçlar gerçek bir görev sonucu sayılmamalıdır. Gerçek olan tek şey Horizons konumlarıdır.
 // (Cisim yarıçapı ve dönme dönemi gibi fiziksel sabitler src/network/network.ts içinde, gerçek değerlerle.)
 
-export const HYPOTHETICAL_LABEL = 'Varsayımsal değerler';
+import { t } from '../i18n';
+
+export const HYPOTHETICAL_LABEL = t('Varsayımsal değerler');
 
 /** Aşama 11: alternatif değer modeli tanımı (gün cinsinden; timeline.ts `valueModelsConfig` saniyeye çevirir). */
 export type ValueCurveSpec =
@@ -78,15 +80,15 @@ type BodyKey = 'moon' | 'mars';
 
 export const HYPOTHETICAL = {
   assets: [
-    { id: 'ay-1', name: 'Ay Aracı A', body: 'moon', latDeg: -40, lonDeg: 20, relay: 'ay-aktarma', dataRateKbps: 256, color: '#7ee0a8' },
-    { id: 'ay-2', name: 'Ay İniş Aracı B', body: 'moon', latDeg: 10, lonDeg: -60, relay: 'ay-aktarma', dataRateKbps: 128, color: '#a8d8ff' },
-    { id: 'mars-1', name: 'Mars Aracı A', body: 'mars', latDeg: 18, lonDeg: 77, relay: 'mars-aktarma', dataRateKbps: 2000, color: '#ffb36b' },
-    { id: 'mars-2', name: 'Mars Aracı B', body: 'mars', latDeg: -4, lonDeg: 137, relay: 'mars-aktarma', dataRateKbps: 500, color: '#ff8fa3' },
+    { id: 'ay-1', name: t('Ay Aracı A'), body: 'moon', latDeg: -40, lonDeg: 20, relay: 'ay-aktarma', dataRateKbps: 256, color: '#7ee0a8' },
+    { id: 'ay-2', name: t('Ay İniş Aracı B'), body: 'moon', latDeg: 10, lonDeg: -60, relay: 'ay-aktarma', dataRateKbps: 128, color: '#a8d8ff' },
+    { id: 'mars-1', name: t('Mars Aracı A'), body: 'mars', latDeg: 18, lonDeg: 77, relay: 'mars-aktarma', dataRateKbps: 2000, color: '#ffb36b' },
+    { id: 'mars-2', name: t('Mars Aracı B'), body: 'mars', latDeg: -4, lonDeg: 137, relay: 'mars-aktarma', dataRateKbps: 500, color: '#ff8fa3' },
   ] as AssetConfig[],
 
   relays: [
-    { id: 'ay-aktarma', name: 'Ay Aktarma Uydusu', body: 'moon', altitudeKm: 3000 },
-    { id: 'mars-aktarma', name: 'Mars Aktarma Uydusu', body: 'mars', altitudeKm: 4500 },
+    { id: 'ay-aktarma', name: t('Ay Aktarma Uydusu'), body: 'moon', altitudeKm: 3000 },
+    { id: 'mars-aktarma', name: t('Mars Aktarma Uydusu'), body: 'mars', altitudeKm: 4500 },
   ] as RelayConfig[],
 
   /** Mars kavuşumunda iletişim kesintisi: Dünya'dan bakınca Güneş–Mars açısı bu eşiğin altına inerse bağlantı kesilir. */
@@ -102,8 +104,8 @@ export const HYPOTHETICAL = {
   /** Aşama 3: çizelgeleyici. Birimler: megabit (Mb), kbit/sn. Hepsi uydurmadır. */
   scheduler: {
     classes: [
-      { id: 'telemetri', name: 'Telemetri', priority: 0, share: 0.15, packetMb: 0.8, color: '#e6ebf5', valuePerMb: 4 },
-      { id: 'bilim', name: 'Bilim verisi', priority: 1, share: 0.85, packetMb: 24, color: '#8a96b2', valuePerMb: 1 },
+      { id: 'telemetri', name: t('Telemetri'), priority: 0, share: 0.15, packetMb: 0.8, color: '#e6ebf5', valuePerMb: 4 },
+      { id: 'bilim', name: t('Bilim verisi'), priority: 1, share: 0.85, packetMb: 24, color: '#8a96b2', valuePerMb: 1 },
     ] as TrafficClass[],
     /** Araçların ürettiği veri, "veri hızı" alanının bu kadarıdır (ortalama görev döngüsü). */
     dutyCycle: 0.05,
@@ -160,9 +162,9 @@ export const HYPOTHETICAL = {
   groundStations: {
     minElevationDeg: 10,
     stations: [
-      { id: 'yi-a', name: 'Yer İstasyonu A (Kaliforniya benzeri)', latDeg: 35.4, lonDeg: -116.9 },
-      { id: 'yi-b', name: 'Yer İstasyonu B (İspanya benzeri)', latDeg: 40.4, lonDeg: -4.2 },
-      { id: 'yi-c', name: 'Yer İstasyonu C (Avustralya benzeri)', latDeg: -35.4, lonDeg: 149.0 },
+      { id: 'yi-a', name: t('Yer İstasyonu A (Kaliforniya benzeri)'), latDeg: 35.4, lonDeg: -116.9 },
+      { id: 'yi-b', name: t('Yer İstasyonu B (İspanya benzeri)'), latDeg: 40.4, lonDeg: -4.2 },
+      { id: 'yi-c', name: t('Yer İstasyonu C (Avustralya benzeri)'), latDeg: -35.4, lonDeg: 149.0 },
     ] as GroundStationConfig[],
   },
 
@@ -341,7 +343,7 @@ export const HYPOTHETICAL = {
    */
   moonRelay2: {
     id: 'ay-aktarma-2',
-    name: 'Ay Aktarma Uydusu 2',
+    name: t('Ay Aktarma Uydusu 2'),
     orbit: { semiMajorKm: 6500, ecc: 0.6, incDeg: 90, raanDeg: 0, argPeriDeg: 270, meanAnomalyDeg: 180 } as OrbitElements,
   },
 
@@ -349,7 +351,7 @@ export const HYPOTHETICAL = {
    * Aşama 9, madde 3: isteğe bağlı Ay kutup aracı (güney kutbuna yakın). Varsayılan KAPALI (topolojiye yalnızca seçilince eklenir; eski sayılar değişmez).
    * Ekvatoral dairesel yörünge bu aracı hiç göremez (Aşama 4 bulgusu); eliptik/kutupsal yörünge görür.
    */
-  moonPolarAsset: { id: 'ay-3', name: 'Ay Kutup Aracı C', body: 'moon', latDeg: -85, lonDeg: 30, relay: 'ay-aktarma', dataRateKbps: 128, color: '#e8a8ff' } as AssetConfig,
+  moonPolarAsset: { id: 'ay-3', name: t('Ay Kutup Aracı C'), body: 'moon', latDeg: -85, lonDeg: 30, relay: 'ay-aktarma', dataRateKbps: 128, color: '#e8a8ff' } as AssetConfig,
 
   /**
    * Aşama 9, madde 3: Mars aktarma uydusu gölgesi (tutulma). Silindirik gölge (Güneş yönü Mars'ın Güneş'e göre konumundan; Mars ekseni ekliptiğe paralel varsayıldığı için

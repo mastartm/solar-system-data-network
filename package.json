@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "build-eclipses": "node scripts/build-eclipses.mjs",
-    "check-readme": "node scripts/check-readme.mjs"
+    "check-readme": "node scripts/check-readme.mjs",
+    "check-i18n": "node scripts/check-i18n.mjs"
   },
   "devDependencies": {
     "astronomy-engine": "^2.1.19",

@@ -1,4 +1,5 @@
 import { HYPOTHETICAL } from '../config/hypothetical';
+import { t } from '../i18n';
 import type { BodyId } from '../data/types';
 import type { LayerState } from '../ui/layers';
 import { detailOf } from './MapView';
@@ -162,7 +163,7 @@ export class NetworkLayer {
           done.add(s.relay.id);
           const sec = s.earthKm / 299792.458;
           labels.label({
-            id: `delay:${s.relay.id}`, text: `${sec < 120 ? sec.toFixed(2) + ' sn' : (sec / 60).toFixed(1) + ' dk'}`,
+            id: `delay:${s.relay.id}`, text: sec < 120 ? t('{n} sn', { n: sec.toFixed(2) }) : t('{n} dk', { n: (sec / 60).toFixed(1) }),
             ax: (r.x + e.x) / 2, ay: (r.y + e.y) / 2, radius: 1, priority: LabelPriority.delay, cx: e.x, cy: e.y, color: 'rgba(160,230,255,0.9)',
           });
         }
@@ -172,7 +173,7 @@ export class NetworkLayer {
     // kavuşum uyarısı
     if (net.marsBlackout) {
       const m = scr.get('mars');
-      if (m) labels.label({ id: 'alert:mars-blackout', text: 'Mars kavuşumu: iletişim kesintisi', ax: m[0], ay: m[1], radius: (radii.get('mars') ?? 4) + 2, priority: LabelPriority.planet, cx: scr.get('sun')?.[0], cy: scr.get('sun')?.[1], color: 'rgba(255,90,90,0.95)', font: '12px system-ui, sans-serif' });
+      if (m) labels.label({ id: 'alert:mars-blackout', text: t('Mars kavuşumu: iletişim kesintisi'), ax: m[0], ay: m[1], radius: (radii.get('mars') ?? 4) + 2, priority: LabelPriority.planet, cx: scr.get('sun')?.[0], cy: scr.get('sun')?.[1], color: 'rgba(255,90,90,0.95)', font: '12px system-ui, sans-serif' });
     }
   }
 }

@@ -31,6 +31,10 @@ Diğer komutlar: `npm run build` (yayın derlemesi), `npm test` (birim testler),
 
 ## Nasıl kullanılır
 
+- **Dil (Türkçe / İngilizce):** üstteki **TR / EN** düğmesi arayüz dilini değiştirir (sayfa yeniden yüklenir; tercih tarayıcıda hatırlanır). İlk açılışta tarayıcı dili kullanılır, `?lang=tr` / `?lang=en` ile zorlanabilir. **Harita arayüzü** iki dilli; **Çizelgeleyici sekmesi henüz yalnız Türkçedir** (çevirilmemiş metinler Türkçe görünür). Sayılar ve tarihler seçili dile göre biçimlenir.
+
+![Arayüz, İngilizce (harita sekmesi, gerçek veri)](docs/arayuz-en-harita.png)
+
 - **Oynat/Durdur** ve **hız** seçimi: zamanı ilerletir.
 - **Kaydırıcı / tarih kutusu / Bugün**: 2020–2040 arasında tarih seçin.
 - **Gezegene (veya Güneş/Ay'a) tıklayın**: Dünya'ya uzaklığı (km) ve ışık gecikmesi (dakika) sağ panelde görünür.
@@ -1282,8 +1286,9 @@ src/data/    veri okuma, tipler, genel fiziksel bilgiler (bodyFacts)
 src/map/     interpolasyon (ephemeris), Canvas çizimi, etiket yerleştirici (labels), gezegen dokuları ve küre kartı hesabı
 src/ui/      kontroller, bilgi paneli + küre kartı, sol panel (Cisimler, katmanlar), ağ paneli; Çizelgeleyici sekmesi: schedulerPanel.ts (ana panel), schedulerExtras.ts (Aşama 9 bölümleri: değer, etki, yörünge/gölge, genelleme), schedShared.ts (ortak yardımcılar, değer modeli seçimi), stage10Panel.ts (Aşama 10 deneyleri m1–m5)
 src/network/ ağ modeli (gecikme, bağlantı durumu, kavuşum; Aşama 9: Kepler yörüngesi, ikinci Ay uydusu, Mars gölgesi; Aşama 10: presesyon, Mars ekseni eğikliği, güç modeli `MarsPower`, uydular arası bağlantı), çizelgeleyici + stratejiler (Aşama 9: uyarlamalı ufuk, projeksiyon seçenekleri, değer ölçütü; Aşama 10: değere duyarlı kuyruk, dayanıklı ufuk, yönlendirme, ayrı tamponlu projeksiyon, telemetri seçenekleri) + hata modeli, tarama, zaman çizelgesi, kapsama özeti (coverage.ts); compute.ts / compute.worker.ts / computeClient.ts (uzun hesabı Web Worker havuzunda çalıştıran işleyici ve istemci)
+src/i18n/    arayüz dili: t() işlevi, dil çözümü, en.json (Türkçe metin → İngilizce karşılık)
 src/config/  varsayımsal değerler (tek dosya)
-scripts/     Horizons veri çekme betiği; asama7-sonuclar.ts, asama8-sonuclar.ts, asama9-sonuclar.ts (+ asama9-lib.ts ortak yardımcılar), asama10-sonuclar.ts, asama11-sonuclar.ts (README sayılarını gerçek veriyle üreten betikler, Horizons'a erişmez); check-readme.mjs (README.md ve README.en.md eşgüdüm denetimi, `npm run check-readme`)
+scripts/     Horizons veri çekme betiği; asama7-sonuclar.ts, asama8-sonuclar.ts, asama9-sonuclar.ts (+ asama9-lib.ts ortak yardımcılar), asama10-sonuclar.ts, asama11-sonuclar.ts (README sayılarını gerçek veriyle üreten betikler, Horizons'a erişmez); check-readme.mjs (README.md ve README.en.md eşgüdüm denetimi, `npm run check-readme`), check-i18n.mjs (arayüz çevirisi denetimi, `npm run check-i18n`)
 public/data/ Horizons JSON dosyaları (gerçek veri, depoda)
 docs/        gerçek veriyle alınmış ekran görüntüleri
 .github/workflows/  GitHub Pages yayını
@@ -1347,6 +1352,6 @@ Aşama 11 adayları (değerler **varsayımsal** kalır; sonuçlar gerçek bir g�
 - **Çizelgeleyici sekmesi hızı:** Aşama 10'daki ≈ %7'lik süre artışının nedenini bulmak (V8 profili, Worker modül maliyeti), Aşama 10 politikaları açıkken grafik çizimini daha küçük görevlere bölmek.
 
 Proje sahibiyle konuşulan, henüz yapılmamış işler (kod değil, planlama notu; sıra ve kapsam yapılırken netleştirilecek):
-- **Türkçe + İngilizce site:** küçük bir çeviri katmanı (yeni bağımlılık yok): `tr`/`en` sözlüğü, sayfada dil düğmesi, seçimin tarayıcıda hatırlanması, ilk açılışta tarayıcı diline göre varsayılan. Zorluk: arayüz metinlerinin çoğu (özellikle çizelgeleyici paneli) kod içinde gömülü Türkçe şablonlar; sözlüğe taşımak büyük ama mekanik. Kapsam kararı açık: yalnız site arayüzü mü, README de mi (`README.en.md`)? Betik çıktıları ve dahili yorumlar Türkçe kalabilir. "Varsayımsal değerler" ve gerçek/varsayım ayrımı iki dilde de korunmalı.
+- **Türkçe + İngilizce site (kısmen yapıldı):** harita arayüzü iki dilli, Çizelgeleyici sekmesi henüz Türkçe. Küçük bir çeviri katmanı (yeni bağımlılık yok): `tr`/`en` sözlüğü, sayfada dil düğmesi, seçimin tarayıcıda hatırlanması, ilk açılışta tarayıcı diline göre varsayılan. Zorluk: arayüz metinlerinin çoğu (özellikle çizelgeleyici paneli) kod içinde gömülü Türkçe şablonlar; sözlüğe taşımak büyük ama mekanik. Kapsam kararı açık: yalnız site arayüzü mü, README de mi (`README.en.md`)? Betik çıktıları ve dahili yorumlar Türkçe kalabilir. "Varsayımsal değerler" ve gerçek/varsayım ayrımı iki dilde de korunmalı.
 - **Canlı demo bağlantısı:** statik barındırma (ör. GitHub Pages); yeni GitHub Actions iş akışı gerektireceğinden **önce proje sahibine sorulacak**.
 - **Duyuru:** projeyi "gerçek Horizons verisiyle Güneş sistemi haritası + varsayımsal haberleşme simülasyonu" olarak, eğitim/portföy amaçlı sunmak (README başına ekran görüntüsü ve "varsayımsal" uyarısı; 30–60 sn ekran kaydı; "neyi simüle ettim, neyi uydurdum" blog yazısı; Show HN, r/space, r/dataisbeautiful, Türkçe topluluklar). NASA/SpaceX'e doğrudan gönderme **önerilmedi**: sonuçlar uydurma değerlere dayanır, gerçek bir görev bulgusu değildir; geri bildirim için gecikmeye dayanıklı ağ (DTN) açık kaynak topluluğu daha uygun.
