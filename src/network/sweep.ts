@@ -7,6 +7,8 @@ import { MARS_RELAY, withParams, type SweepParams } from './timeline';
 export const POLICIES: Policy[] = ['fifo', 'priority', 'strategy', 'coverage'];
 /** Aşama 8-9: dört eski politika + kayan ufuklu strateji + uyarlamalı ufuk. `POLICIES` (Aşama 7 tarama/kısayol) değişmedi; 'rolling' ve 'adaptive' ayrı istenir. */
 export const ALL_POLICIES: Policy[] = [...POLICIES, 'rolling', 'adaptive'];
+/** Aşama 10: yeni politikalar (ayrı istenir; `ALL_POLICIES` değişmedi). */
+export const STAGE10_POLICIES: Policy[] = ['valueAware', 'valueAdaptive', 'adaptiveRobust'];
 /** Kavuşum kesintisi (earthBlackout) yoksa 'strategy' ve 'coverage' kısma yapmaz: sonuç öncelikliyle birebir aynıdır (testle doğrulanır). 'rolling' ve 'adaptive' kesinti işaretine bağlı değildir, bu kısayol onlara uygulanmaz. */
 export const hasBlackout = (samples: LinkSample[]) => samples.some((s) => s.earthBlackout?.some(Boolean));
 export type SweepKey = keyof SweepParams;
@@ -31,6 +33,11 @@ export interface Metrics {
   deliveredMb: number;
   droppedMb: number;
   suppressedMb: number;
+  /** Aşama 10: değere duyarlı kuyruk kuralının attığı (değeri eşiğin altına inmiş) veri (Mb) ve talebe oranı (%). Diğer politikalarda 0. `lossPct`e dahildir. */
+  expiredMb: number;
+  expiredPct: number;
+  /** Aşama 10: en önemli sınıfın (telemetri) kısılan (üretilmeyen) payı / kendi talebi (%). Yalnızca telemetryMinFactor < 1 iken > 0. */
+  topSuppressedPct: number;
   /** Düşen / talep (%). Kısılan (üretilmeyen) veri BURADA kayıp sayılmaz. */
   dropPct: number;
   /** Hatta kayıp (maxAttempts denemede iletilemeyen) / talep (%). Tampon taşması (dropPct) ile karıştırılmaz. */
@@ -90,7 +97,8 @@ export function metricsOf(r: SimResult, cfg: SchedConfig): Metrics {
   const pct = (x: number) => (demandMb > 0 ? (100 * x) / demandMb : 0);
   return {
     demandMb, deliveredMb: t.deliveredMb, droppedMb: t.droppedMb, suppressedMb: t.suppressedMb,
-    dropPct: pct(t.droppedMb), abandonedPct: pct(t.abandonedMb), txLost: t.txLost, retransmissions: t.retransmissions, attempts: t.attempts, txLostPct: t.attempts > 0 ? (100 * t.txLost) / t.attempts : 0, abandoned: t.abandoned, abandonedSurface: r.abandonedSurface, maxLossRun: r.maxLossRun, lossPct: pct(t.droppedMb + t.abandonedMb + t.suppressedMb), deliveredPct: pct(t.deliveredMb), topDropPct: topDemand > 0 ? (100 * (top.droppedMb + top.abandonedMb)) / topDemand : 0,
+    expiredMb: t.expiredMb, expiredPct: pct(t.expiredMb), topSuppressedPct: topDemand > 0 ? (100 * top.suppressedMb) / topDemand : 0,
+    dropPct: pct(t.droppedMb), abandonedPct: pct(t.abandonedMb), txLost: t.txLost, retransmissions: t.retransmissions, attempts: t.attempts, txLostPct: t.attempts > 0 ? (100 * t.txLost) / t.attempts : 0, abandoned: t.abandoned, abandonedSurface: r.abandonedSurface, maxLossRun: r.maxLossRun, lossPct: pct(t.droppedMb + t.abandonedMb + t.suppressedMb + t.expiredMb), deliveredPct: pct(t.deliveredMb), topDropPct: topDemand > 0 ? (100 * (top.droppedMb + top.abandonedMb)) / topDemand : 0,
     topP95Sec: top.latencyP95Sec, topMeanSec: top.latencyMeanSec, lowP95Sec: low.latencyP95Sec, lowMeanSec: low.latencyMeanSec,
     valueParts: cfg.classes.map((c) => {
       const s = r.perClass[c.id];
