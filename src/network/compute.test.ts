@@ -5,7 +5,8 @@ import { createHandler, relayIdsOf, type SimOut, type TlInfo } from './compute';
 import { ComputePool, inlineTransport } from './computeClient';
 import { simulate } from './scheduler';
 import { hasBlackout, metricsOf, runPolicy } from './sweep';
-import { buildLinkTimeline, defaultParams, MARS_RELAY, MOON_RELAY, restrictToRelay, restrictToRelays, schedConfig, schedTopology, withParams } from './timeline';
+import { HYPOTHETICAL } from '../config/hypothetical';
+import { buildLinkTimeline, defaultParams, MARS_RELAY, MOON_RELAY, restrictToRelay, restrictToRelays, routingConfig, schedConfig, schedTopology, valueAwareConfig, withParams } from './timeline';
 
 // BU TESTLER SENTETİKTİR: uydurma dairesel yörüngeli konum izleri (gerçek Horizons verisi değil). Hesap işleyicisinin doğrudan çağrıyla aynı
 // sonucu verdiğini, havuzun işleri sıralayıp dağıttığını ve iptal belirtecinin bekleyen işleri hiç başlatmadığını doğrular.
@@ -134,5 +135,56 @@ describe('hesap havuzu (satır içi aktarım, sentetik)', () => {
     const pool = mkPool(2);
     await expect(pool.call({ op: 'tlInfo', tl: { ...tl, startJD: 2460012, endJD: 2460010 } })).rejects.toThrow(/boş|veri dışında|NaN|sayısal/i);
     expect((await pool.call<TlInfo>({ op: 'tlInfo', tl })).n).toBeGreaterThan(0);
+  });
+});
+
+describe('Aşama 10: yeni politikalar ve ağ seçenekleri Worker işleyicisinde (sentetik izler)', () => {
+  const tlMoon = { startJD: 2460010, endJD: 2460014, stepSec: 1800, stations: 1, relayId: MOON_RELAY };
+  const net = { moonOrbit: 'elliptical' as const, moonSecond: 'best' as const, moonIsl: true, moonPolarAsset: true, moonPrecession: { raanRateDegPerDay: -2 } };
+
+  it("işleyici: 'valueAware', 'valueAdaptive', 'adaptiveRobust' ve yönlendirme/ISL seçenekleri doğrudan çağrıyla birebir aynı sonucu verir", () => {
+    const h = createHandler();
+    h({ op: 'init', tracks });
+    const base = withParams(schedConfig('arq'), defaultParams(MOON_RELAY), MOON_RELAY, [HYPOTHETICAL.moonRelay2.id]);
+    const cfg = { ...base, stepSec: 1800, valueAware: valueAwareConfig(7 * 86400), routing: routingConfig('leastFilled', true), projection: { separateRelays: true }, telemetryMinFactor: 0.5 };
+    const topo0 = schedTopology(net);
+    const full = buildLinkTimeline(tracks, tlMoon.startJD, tlMoon.endJD, tlMoon.stepSec, topo0, tlMoon.stations, net);
+    const { topo, samples } = restrictToRelays(topo0, full, relayIdsOf(MOON_RELAY, net));
+    for (const policy of ['valueAware', 'valueAdaptive', 'adaptiveRobust'] as const) {
+      const out = h({ op: 'sim', tl: { ...tlMoon, net }, policy, cfg, full: true }) as SimOut;
+      const direct = simulate(topo, samples, policy, cfg);
+      expect(out.result).toEqual(direct);
+      expect(out.metrics).toEqual(metricsOf(direct, cfg));
+      const t = direct.total;
+      expect(t.generated).toBe(t.delivered + t.dropped + t.abandoned + t.expired + t.remaining);
+    }
+  });
+
+  it("işleyici: Mars güç modeli ve eksen eğikliği zaman çizelgesine ve kapsama özetine yansır; seçeneksiz sonuç değişmez", () => {
+    const h = createHandler();
+    h({ op: 'init', tracks });
+    const plain = h({ op: 'coverage', startJD: 2460010, endJD: 2460030, n: 1 }) as CoverageRow;
+    const same = h({ op: 'coverage', startJD: 2460010, endJD: 2460030, n: 1, net: { marsAxis: 'parallel' } }) as CoverageRow;
+    expect(same).toEqual(plain);
+    const pw = h({ op: 'coverage', startJD: 2460010, endJD: 2460030, n: 1, net: { marsEclipse: 'power', marsPowerBatteryWh: 40 } }) as CoverageRow;
+    const sh = h({ op: 'coverage', startJD: 2460010, endJD: 2460030, n: 1, net: { marsEclipse: 'earth' } }) as CoverageRow;
+    expect(pw.up[MARS_RELAY]).toBeLessThanOrEqual(plain.up[MARS_RELAY]);
+    expect(sh.up[MARS_RELAY]).toBeLessThanOrEqual(plain.up[MARS_RELAY]);
+    const tilted = h({ op: 'coverage', startJD: 2460010, endJD: 2460030, n: 1, net: { marsAxis: 'tilted' } }) as CoverageRow;
+    expect(tilted.steps).toBe(plain.steps);
+  });
+
+  it('havuz: Aşama 10 işleri iptal edilince hiç başlamaz (söz sonuçlanmaz), sonraki iş çalışır', async () => {
+    const pool = new ComputePool(inlineTransport, 1);
+    await pool.init(tracks);
+    const cfg = { ...withParams(schedConfig('arq'), defaultParams(), MARS_RELAY), valueAware: valueAwareConfig(14 * 86400) };
+    let settled = false;
+    void pool.call<SimOut>({ op: 'sim', tl, policy: 'valueAware', cfg }).then(() => { settled = true; }, () => { settled = true; });
+    pool.cancel();
+    const ok = await pool.call<SimOut>({ op: 'sim', tl, policy: 'valueAware', cfg });
+    expect(ok.metrics.demandMb).toBeGreaterThan(0);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(settled).toBe(false);
+    pool.dispose();
   });
 });
