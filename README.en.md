@@ -2,7 +2,7 @@
 
 **English** | [Türkçe](README.md)
 
-> This is the English version of [README.md](README.md) (Turkish, the primary file). Both files are kept in sync: every change to one is made to the other. Note: the site's user interface is currently in Turkish only; on-screen labels quoted here (buttons, panel names) are translated into English for readability. Command-line arguments, file names, identifiers and URL fragments (e.g. `#cizelgeleyici`, `?sentetik=1`) are kept literally.
+> This is the English version of [README.md](README.md) (Turkish, the primary file). Both files are kept in sync: every change to one is made to the other. Note: the site's user interface is bilingual (Turkish/English) except the Scheduler tab, which is still Turkish only; on-screen labels quoted here (buttons, panel names) are translated into English for readability. Command-line arguments, file names, identifiers and URL fragments (e.g. `#cizelgeleyici`, `?sentetik=1`) are kept literally.
 
 An interactive solar-system map showing real planet positions. In later stages it adds a simulation of a communication network in which vehicles on the surface of the Moon and Mars send data to Earth through relay satellites.
 
@@ -30,6 +30,10 @@ npm run dev      # on the first run it fetches the data from Horizons (internet 
 Other commands: `npm run build` (release build), `npm test` (unit tests), `npm run fetch-data -- --force` (re-fetch the data).
 
 ## How to use
+
+- **Language (Turkish / English):** the **TR / EN** button at the top switches the interface language (the page reloads; the choice is remembered in the browser). On first open the browser language is used, and `?lang=tr` / `?lang=en` forces it. The **map interface** is bilingual; the **Scheduler tab is still Turkish only** (untranslated texts show in Turkish). Numbers and dates are formatted for the selected language.
+
+![Interface in English (map tab, real data)](docs/arayuz-en-harita.png)
 
 - **Play/Pause** and **speed** selection: advance time.
 - **Slider / date box / Today**: pick a date between 2020 and 2040.
@@ -1278,8 +1282,9 @@ src/data/    data reading, types, general physical information (bodyFacts)
 src/map/     interpolation (ephemeris), Canvas drawing, label placer (labels), planet textures and the globe card computation
 src/ui/      controls, info panel + globe card, left panel (Bodies, layers), network panel; Scheduler tab: schedulerPanel.ts (main panel), schedulerExtras.ts (Stage 9 sections: value, effect, orbit/shadow, generalization), schedShared.ts (shared helpers, value model selection), stage10Panel.ts (Stage 10 experiments m1–m5)
 src/network/ network model (delay, link state, conjunction; Stage 9: Kepler orbit, second Moon satellite, Mars shadow; Stage 10: precession, Mars axial tilt, power model `MarsPower`, inter-satellite link), scheduler + strategies (Stage 9: adaptive horizon, projection options, value metric; Stage 10: value-aware queue, robust horizon, routing, projection with separate buffers, telemetry options) + error model, scan, timeline, coverage summary (coverage.ts); compute.ts / compute.worker.ts / computeClient.ts (the handler and client that run the long computation in a Web Worker pool)
+src/i18n/    interface language: the t() function, language resolution, en.json (Turkish text → English equivalent)
 src/config/  hypothetical values (single file)
-scripts/     the Horizons data-fetching script; asama7-sonuclar.ts, asama8-sonuclar.ts, asama9-sonuclar.ts (+ asama9-lib.ts shared helpers), asama10-sonuclar.ts, asama11-sonuclar.ts (scripts that produce the README numbers with real data, do not access Horizons); check-readme.mjs (consistency check between README.md and README.en.md, `npm run check-readme`)
+scripts/     the Horizons data-fetching script; asama7-sonuclar.ts, asama8-sonuclar.ts, asama9-sonuclar.ts (+ asama9-lib.ts shared helpers), asama10-sonuclar.ts, asama11-sonuclar.ts (scripts that produce the README numbers with real data, do not access Horizons); check-readme.mjs (consistency check between README.md and README.en.md, `npm run check-readme`), check-i18n.mjs (interface translation check, `npm run check-i18n`)
 public/data/ Horizons JSON files (real data, in the repository)
 docs/        screenshots taken with real data
 .github/workflows/  GitHub Pages deployment
@@ -1343,6 +1348,6 @@ Stage 11 candidates (the values stay **hypothetical**; the results are not the r
 - **Scheduler-tab speed:** finding the cause of the ≈ 7% time increase in Stage 10 (V8 profile, Worker module cost), splitting the chart drawing into smaller tasks when the Stage 10 policies are on.
 
 Work discussed with the project owner, not yet done (not code, a planning note; the order and scope will be clarified when doing it):
-- **Turkish + English site:** a small translation layer (no new dependency): a `tr`/`en` dictionary, a language button on the page, remembering the choice in the browser, defaulting by browser language on first open. Difficulty: most UI texts (especially the Scheduler panel) are Turkish templates embedded in code; moving them into a dictionary is large but mechanical. The scope decision is open: only the site UI, or the README too (`README.en.md`)? Script outputs and internal comments can stay Turkish. The "Hypothetical values" and the real/assumption distinction must be preserved in both languages.
+- **Turkish + English site (partly done):** the map interface is bilingual, the Scheduler tab is still Turkish. A small translation layer (no new dependency): a `tr`/`en` dictionary, a language button on the page, remembering the choice in the browser, defaulting by browser language on first open. Difficulty: most UI texts (especially the Scheduler panel) are Turkish templates embedded in code; moving them into a dictionary is large but mechanical. The scope decision is open: only the site UI, or the README too (`README.en.md`)? Script outputs and internal comments can stay Turkish. The "Hypothetical values" and the real/assumption distinction must be preserved in both languages.
 - **Live demo link:** static hosting (e.g. GitHub Pages); because it would require a new GitHub Actions workflow it **will be asked of the project owner first**.
 - **Announcement:** presenting the project as "a solar-system map with real Horizons data + a hypothetical communication simulation", for educational/portfolio purposes (a screenshot and a "hypothetical" warning at the top of the README; a 30–60 s screen recording; a "what I simulated, what I invented" blog post; Show HN, r/space, r/dataisbeautiful, Turkish communities). Sending it directly to NASA/SpaceX was **not recommended**: the results rest on invented values and are not a finding about a real mission; the delay-tolerant networking (DTN) open-source community is more suitable for feedback.

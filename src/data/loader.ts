@@ -1,4 +1,5 @@
 import { syntheticTracks } from './synthetic';
+import { t } from '../i18n';
 import type { Track } from './types';
 
 /** Gerçek veri yerine sentetik yörüngeler (yalnızca ?sentetik=1). */
@@ -14,7 +15,7 @@ interface RawBody {
 
 async function loadFile(name: string): Promise<Record<string, Track>> {
   const res = await fetch(`${import.meta.env.BASE_URL}data/${name}`);
-  if (!res.ok) throw new Error(`${name} okunamadı (HTTP ${res.status})`);
+  if (!res.ok) throw new Error(t('{ad} okunamadı (HTTP {kod})', { ad: name, kod: res.status }));
   const json = (await res.json()) as { bodies: Record<string, RawBody> };
   const out: Record<string, Track> = {};
   for (const [id, b] of Object.entries(json.bodies)) {
@@ -42,12 +43,12 @@ export async function loadTracks(): Promise<Record<string, Track>> {
 export function validateTracks(tracks: Record<string, Track>): string[] {
   const problems: string[] = [];
   for (const id of ['earth', 'mars', 'moon', 'mercury', 'venus', 'jupiter', 'saturn', 'uranus', 'neptune']) {
-    const t = tracks[id];
-    if (!t) { problems.push(`${id}: veri yok`); continue; }
-    if (!(t.count >= 2) || !(t.stepDays > 0) || !Number.isFinite(t.startJD)) { problems.push(`${id}: başlık alanları geçersiz`); continue; }
-    if (t.pos.length !== t.count * 3 || t.vel.length !== t.count * 3) { problems.push(`${id}: uzunluk uyuşmuyor (pos ${t.pos.length}, vel ${t.vel.length}, beklenen ${t.count * 3})`); continue; }
-    for (let i = 0; i < t.pos.length; i++) {
-      if (!Number.isFinite(t.pos[i]) || !Number.isFinite(t.vel[i])) { problems.push(`${id}: sayısal olmayan değer (indeks ${Math.floor(i / 3)})`); break; }
+    const tk = tracks[id];
+    if (!tk) { problems.push(t('{id}: veri yok', { id })); continue; }
+    if (!(tk.count >= 2) || !(tk.stepDays > 0) || !Number.isFinite(tk.startJD)) { problems.push(t('{id}: başlık alanları geçersiz', { id })); continue; }
+    if (tk.pos.length !== tk.count * 3 || tk.vel.length !== tk.count * 3) { problems.push(t('{id}: uzunluk uyuşmuyor (pos {pos}, vel {vel}, beklenen {beklenen})', { id, pos: tk.pos.length, vel: tk.vel.length, beklenen: tk.count * 3 })); continue; }
+    for (let i = 0; i < tk.pos.length; i++) {
+      if (!Number.isFinite(tk.pos[i]) || !Number.isFinite(tk.vel[i])) { problems.push(t('{id}: sayısal olmayan değer (indeks {indeks})', { id, indeks: Math.floor(i / 3) })); break; }
     }
   }
   return problems;

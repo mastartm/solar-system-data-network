@@ -2,8 +2,7 @@ import { factRows, FACTS_DISCLAIMER } from '../data/bodyFacts';
 import { BODIES, type BodyId, type Track } from '../data/types';
 import { dist, lightMinutes, sample } from '../map/ephemeris';
 import { PlanetCard } from './planetCard';
-
-const fmt = (n: number, d = 0) => n.toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
+import { nf as fmt, t } from '../i18n';
 const CARD_PX = 124;
 
 export interface InfoPanel {
@@ -27,10 +26,10 @@ export function createInfoPanel(el: HTMLElement, tracks: Record<string, Track>):
   // Kart canvas'ı panel boyunca tek örnek; seçimde yalnızca iskeletin geri kalanı yeniden kurulur ve canvas yeniden eklenir.
   const canvas = document.createElement('canvas');
   canvas.className = 'pcard-canvas';
-  canvas.setAttribute('aria-label', 'Seçili cismin şematik küre görünümü');
+  canvas.setAttribute('aria-label', t('Seçili cismin şematik küre görünümü'));
   card = new PlanetCard(canvas, CARD_PX);
 
-  const setText = (e: HTMLElement | null, t: string) => { if (e && e.textContent !== t) e.textContent = t; };
+  const setText = (e: HTMLElement | null, txt: string) => { if (e && e.textContent !== txt) e.textContent = txt; };
 
   return {
     card,
@@ -41,15 +40,15 @@ export function createInfoPanel(el: HTMLElement, tracks: Record<string, Track>):
       const body = BODIES.find((b) => b.id === next)!;
       const rows = factRows(next).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
       const live = next === 'earth'
-        ? '<p>Dünya, ölçümlerin referans noktasıdır.</p>'
-        : `<dl class="live"><dt>Dünya'ya uzaklık <span class="tag-real">Horizons</span></dt><dd data-k="km"></dd>
-           <dt>Işık gecikmesi <span class="tag-real">Horizons</span></dt><dd data-k="min"></dd></dl>`;
+        ? `<p>${t('Dünya, ölçümlerin referans noktasıdır.')}</p>`
+        : `<dl class="live"><dt>${t('Dünya\'ya uzaklık')} <span class="tag-real">Horizons</span></dt><dd data-k="km"></dd>
+           <dt>${t('Işık gecikmesi')} <span class="tag-real">Horizons</span></dt><dd data-k="min"></dd></dl>`;
       el.innerHTML = `<h2><span class="dot" style="background:${body.color}"></span>${body.name}</h2>
-        <div class="pcard"><figure class="pcard-vis"><div class="pcard-slot"></div><figcaption>Şematik görünüm; gerçek yüzey dokusu değildir</figcaption></figure>
+        <div class="pcard"><figure class="pcard-vis"><div class="pcard-slot"></div><figcaption>${t('Şematik görünüm; gerçek yüzey dokusu değildir')}</figcaption></figure>
         <dl class="pfacts">${rows}</dl></div>
-        <p class="hint facts-note">Yarıçap, dönem, uzaklık, dönme ve uydu sayısı: ${FACTS_DISCLAIMER}</p>
+        <p class="hint facts-note">${t('Yarıçap, dönem, uzaklık, dönme ve uydu sayısı:')} ${FACTS_DISCLAIMER}</p>
         ${live}
-        <p class="hint">Tarih kaydırıcısıyla değerlerin zamanla nasıl değiştiğini izleyin.</p>`;
+        <p class="hint">${t('Tarih kaydırıcısıyla değerlerin zamanla nasıl değiştiğini izleyin.')}</p>`;
       el.querySelector('.pcard-slot')!.appendChild(canvas);
       kmEl = el.querySelector('[data-k="km"]');
       minEl = el.querySelector('[data-k="min"]');
@@ -64,7 +63,7 @@ export function createInfoPanel(el: HTMLElement, tracks: Record<string, Track>):
       else km = dist(sample(tracks[id], jd), earth);
       const min = lightMinutes(km);
       setText(kmEl, `${fmt(km)} km`);
-      setText(minEl, `${fmt(min, 2)} dakika (${fmt(min * 60, min < 1 ? 2 : 0)} sn)`);
+      setText(minEl, t('{dk} dakika ({sn} sn)', { dk: fmt(min, 2), sn: fmt(min * 60, min < 1 ? 2 : 0) }));
     },
   };
 }

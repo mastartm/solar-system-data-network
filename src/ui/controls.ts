@@ -2,6 +2,7 @@ import type { Eclipse } from '../data/eclipses';
 import { eclipseLabel, isCentral } from '../data/eclipses';
 import { dateToJd, jdToDate } from '../map/ephemeris';
 import type { ViewMode } from '../map/MapView';
+import { dateLocale, t } from '../i18n';
 
 export interface Controls {
   setJD(jd: number): void;
@@ -20,7 +21,7 @@ export interface ControlOptions {
 }
 
 // Tek biçimleyici: her çağrıda yeni Intl.DateTimeFormat kurmak 91 tutulma × 2 çağrıda ≈ 25 ms tutuyordu (sayfa başlatma); çıktı toLocaleString ile aynıdır.
-const dateFmt = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+const dateFmt = new Intl.DateTimeFormat(dateLocale, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
 const fmtDate = (iso: string) => dateFmt.format(new Date(iso)) + ' UTC';
 
 export function createControls(root: HTMLElement, o: ControlOptions): Controls {
@@ -38,38 +39,38 @@ export function createControls(root: HTMLElement, o: ControlOptions): Controls {
 
   root.innerHTML = `
     <div class="row">
-      <button id="play" type="button">▶ Oynat</button>
-      <label class="hide-narrow">Hız
+      <button id="play" type="button">${t('▶ Oynat')}</button>
+      <label class="hide-narrow">${t('Hız')}
         <select id="speed">
-          <option value="1">1 gün/sn</option>
-          <option value="10" selected>10 gün/sn</option>
-          <option value="30">30 gün/sn</option>
-          <option value="100">100 gün/sn</option>
+          <option value="1">${t('{n} gün/sn', { n: 1 })}</option>
+          <option value="10" selected>${t('{n} gün/sn', { n: 10 })}</option>
+          <option value="30">${t('{n} gün/sn', { n: 30 })}</option>
+          <option value="100">${t('{n} gün/sn', { n: 100 })}</option>
         </select>
       </label>
       <div class="timeline">
         <div class="ticks">${ticks}</div>
-        <input id="slider" type="range" min="0" max="${Math.floor(span * 10)}" step="1" value="0" aria-label="Tarih" />
+        <input id="slider" type="range" min="0" max="${Math.floor(span * 10)}" step="1" value="0" aria-label="${t('Tarih')}" />
       </div>
-      <input id="date" type="date" aria-label="Tarih seç" />
-      <button id="today" type="button" class="hide-narrow">Bugün</button>
-      <button id="more" type="button" class="more-btn" aria-expanded="false" aria-controls="controls" title="Diğer kontroller">⋯</button>
+      <input id="date" type="date" aria-label="${t('Tarih seç')}" />
+      <button id="today" type="button" class="hide-narrow">${t('Bugün')}</button>
+      <button id="more" type="button" class="more-btn" aria-expanded="false" aria-controls="controls" title="${t('Diğer kontroller')}">⋯</button>
     </div>
     <div class="row more-row">
-      <span class="seg" role="group" aria-label="Görünüm">
+      <span class="seg" role="group" aria-label="${t('Görünüm')}">
         <button id="v2" type="button" class="on">2B</button>
         <button id="v3" type="button">3B</button>
       </span>
       <span class="zoom">
-        <button id="zin" type="button" aria-label="Yakınlaştır">+</button>
-        <button id="zout" type="button" aria-label="Uzaklaştır">−</button>
-        <button id="zreset" type="button">Sıfırla</button>
+        <button id="zin" type="button" aria-label="${t('Yakınlaştır')}">+</button>
+        <button id="zout" type="button" aria-label="${t('Uzaklaştır')}">−</button>
+        <button id="zreset" type="button">${t('Sıfırla')}</button>
       </span>
       <span class="grow"></span>
-      <span class="legend"><i class="tick solar central"></i> Güneş tutulması <i class="tick lunar central"></i> Ay tutulması <small>(dolu: tam/halkalı, boş: kısmi)</small></span>
-      <button id="eprev" type="button">◀ Önceki tutulma</button>
-      <button id="enext" type="button">Sonraki tutulma ▶</button>
-      <button id="elist" type="button">Tutulmalar (${list.length})</button>
+      <span class="legend"><i class="tick solar central"></i> ${t('Güneş tutulması')} <i class="tick lunar central"></i> ${t('Ay tutulması')} <small>${t('(dolu: tam/halkalı, boş: kısmi)')}</small></span>
+      <button id="eprev" type="button">${t('◀ Önceki tutulma')}</button>
+      <button id="enext" type="button">${t('Sonraki tutulma ▶')}</button>
+      <button id="elist" type="button">${t('Tutulmalar ({n})', { n: list.length })}</button>
     </div>
     <div id="elist-panel" hidden>
       ${list
@@ -109,7 +110,7 @@ export function createControls(root: HTMLElement, o: ControlOptions): Controls {
   };
   const jumpTo = (jd: number) => {
     playing = false;
-    play.textContent = '▶ Oynat';
+    play.textContent = t('▶ Oynat');
     setJD(jd);
   };
 
@@ -120,7 +121,7 @@ export function createControls(root: HTMLElement, o: ControlOptions): Controls {
   $('today').addEventListener('click', () => setJD(dateToJd(new Date())));
   play.addEventListener('click', () => {
     playing = !playing;
-    play.textContent = playing ? '❚❚ Durdur' : '▶ Oynat';
+    play.textContent = playing ? t('❚❚ Durdur') : t('▶ Oynat');
   });
   $('zin').addEventListener('click', () => o.onZoom(1.4));
   $('zout').addEventListener('click', () => o.onZoom(1 / 1.4));
