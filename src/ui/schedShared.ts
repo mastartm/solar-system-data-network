@@ -4,15 +4,16 @@ import { jdToDate } from '../map/ephemeris';
 import type { BlackoutWindow, NetOptions } from '../network/network';
 import type { Policy } from '../network/scheduler';
 import type { ValueOpts } from '../network/sweep';
+import { nf, t } from '../i18n';
 
-export const fmt = (n: number, d = 0) => n.toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
+export const fmt = nf;
 export const day = (jd: number) => jdToDate(jd).toISOString().slice(0, 10);
 export const year = (jd: number) => 1970 + (jd - 2440587.5) / 365.2425;
 export const signed = (n: number, d = 1) => { const r = Math.round(Math.abs(n) * 10 ** d) / 10 ** d; return r === 0 ? fmt(0, d) : `${n > 0 ? '+' : '−'}${fmt(r, d)}`; };
 
 // Seriler: FIFO = mavi, öncelikli = turuncu, strateji = yeşil, kapsama bilen strateji = mor, kayan ufuklu = sarı, uyarlamalı = camgöbeği (koyu yüzeyde ayırt edilen kategorik renkler). Metin rengi seri rengi değildir.
 export const C = { fifo: '#3987e5', prio: '#d95926', strat: '#3fb68b', stratLoss: '#9be3c6', cov: '#b88cf2', covLoss: '#dcc5fa', roll: '#e8c13d', rollLoss: '#f5e2a0', adapt: '#2fd4e0', adaptLoss: '#a8eef2', valAware: '#ef6fb0', valAdapt: '#f7b3d6', robust: '#b5e04a', moon: '#cfcfcf', mars: '#d9593a', text: '#8a96b2', grid: '#1e2740', ink: '#e6ebf5' };
-export const NAME: Record<Policy, string> = { fifo: 'FIFO', priority: 'Öncelikli', strategy: 'Strateji', coverage: 'Kapsama bilen strateji', rolling: 'Kayan ufuklu strateji', adaptive: 'Uyarlamalı ufuk', valueAware: 'Değere duyarlı kuyruk', valueAdaptive: 'Değere duyarlı kuyruk + uyarlamalı ufuk', adaptiveRobust: 'Dayanıklı uyarlamalı ufuk' };
+export const NAME: Record<Policy, string> = { fifo: 'FIFO', priority: t('Öncelikli'), strategy: t('Strateji'), coverage: t('Kapsama bilen strateji'), rolling: t('Kayan ufuklu strateji'), adaptive: t('Uyarlamalı ufuk'), valueAware: t('Değere duyarlı kuyruk'), valueAdaptive: t('Değere duyarlı kuyruk + uyarlamalı ufuk'), adaptiveRobust: t('Dayanıklı uyarlamalı ufuk') };
 export const COLOR: Record<Policy, string> = { fifo: C.fifo, priority: C.prio, strategy: C.strat, coverage: C.cov, rolling: C.roll, adaptive: C.adapt, valueAware: C.valAware, valueAdaptive: C.valAdapt, adaptiveRobust: C.robust };
 export const DASH: Record<Policy, number[] | undefined> = { fifo: undefined, priority: [6, 3], strategy: [2, 2], coverage: [10, 3, 2, 3], rolling: [2, 4], adaptive: [8, 3, 1, 3], valueAware: [12, 3], valueAdaptive: [12, 3, 2, 3], adaptiveRobust: [4, 2, 1, 2] };
 /** Kavuşum kesintisi olmayan hatlarda (Ay, kavuşumsuz Mars aralığı) Aşama 4/7 stratejileri kısma yapmaz (öncelikliyle aynı) ve gösterilmez. */
@@ -40,4 +41,4 @@ export interface Scen { kind: ScenKind; key: string; relayId: string; relayName:
 export const valueModel: { telemetryWeight: number; halfLifeIdx: number | undefined } = { telemetryWeight: HYPOTHETICAL.scheduler.classes[0].valuePerMb, halfLifeIdx: undefined };
 export const valueOpts = (): ValueOpts => ({ weightOf: (p) => (p.decays ? p.weight : valueModel.telemetryWeight), halfLifeIdx: valueModel.halfLifeIdx });
 export const valueModelLabel = () =>
-  `telemetri ${fmt(valueModel.telemetryWeight)} · bilim verisi ${fmt(HYPOTHETICAL.scheduler.classes[1].valuePerMb)} birim/Mb${valueModel.halfLifeIdx === undefined ? ', sabit değer' : `, bilim verisi değeri zamanla azalır (yarı ömür ${fmt(HYPOTHETICAL.value.decayOptionsDays[valueModel.halfLifeIdx])} gün)`}`;
+  `${t('telemetri {tel} · bilim verisi {bilim} birim/Mb', { tel: fmt(valueModel.telemetryWeight), bilim: fmt(HYPOTHETICAL.scheduler.classes[1].valuePerMb) })}${valueModel.halfLifeIdx === undefined ? `, ${t('sabit değer')}` : `, ${t('bilim verisi değeri zamanla azalır (yarı ömür {g} gün)', { g: fmt(HYPOTHETICAL.value.decayOptionsDays[valueModel.halfLifeIdx]) })}`}`;
