@@ -31,9 +31,12 @@ export interface NetOptions {
   moonSecond?: 'none' | 'best' | 'order';
   marsEclipse?: 'none' | 'earth' | 'both' | 'power';
   moonPolarAsset?: boolean;
-  moonPrecession?: boolean;
+  /** true: HYPOTHETICAL.moonPrecession hızları; nesne: hızları geçersiz kılar (derece/gün; tarama için). */
+  moonPrecession?: boolean | { raanRateDegPerDay?: number; argPeriRateDegPerDay?: number };
   marsAxis?: 'parallel' | 'tilted';
   moonIsl?: boolean;
+  /** Aşama 10: güç modelinde batarya kapasitesi (Wh) geçersiz kılma (tarama için); yoksa HYPOTHETICAL.marsPower.batteryWh. */
+  marsPowerBatteryWh?: number;
 }
 
 /** Seçeneklere göre aktarma uyduları: varsayılan HYPOTHETICAL.relays; eliptik seçilirse Ay uydusunun yörüngesi değişir; ikinci uydu sona eklenir. */
@@ -177,8 +180,8 @@ export function relayPosition(r: RelayConfig, jd: number, o: NetOptions = {}): {
   if (r.orbit) {
     let orbit = r.orbit;
     if (o.moonPrecession && r.body === 'moon') {
-      const pr = HYPOTHETICAL.moonPrecession, dd = jd - pr.epochJD;
-      orbit = { ...orbit, raanDeg: orbit.raanDeg + pr.raanRateDegPerDay * dd, argPeriDeg: orbit.argPeriDeg + pr.argPeriRateDegPerDay * dd };
+      const pr = HYPOTHETICAL.moonPrecession, dd = jd - pr.epochJD, ov = typeof o.moonPrecession === 'object' ? o.moonPrecession : {};
+      orbit = { ...orbit, raanDeg: orbit.raanDeg + (ov.raanRateDegPerDay ?? pr.raanRateDegPerDay) * dd, argPeriDeg: orbit.argPeriDeg + (ov.argPeriRateDegPerDay ?? pr.argPeriRateDegPerDay) * dd };
     }
     return keplerPosition(orbit, b.mu, jd);
   }

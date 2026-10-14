@@ -50,7 +50,7 @@ export const valueAwareConfig = (halfLifeSec: number, over: Partial<ValueAwareCo
 /** Aşama 10: takvim hatasına dayanıklı uyarlamalı ufuk (HYPOTHETICAL.adaptiveStrategy + HYPOTHETICAL.adaptiveRobust). over: korumaları geçersiz kılar (undefined = kapalı). */
 export const adaptiveRobustConfig = (over: Partial<AdaptiveRobustConfig> = {}): AdaptiveRobustConfig => {
   const r = HYPOTHETICAL.adaptiveRobust;
-  return { ...adaptiveConfig(), capSec: r.capDays * 86400, histFactor: r.histFactor, histSec: r.histDays * 86400, trustMin: r.trustMin, checkSec: r.checkDays * 86400, fallbackSec: r.fallbackDays * 86400, ...over };
+  return { ...adaptiveConfig(), ...(r.capDays > 0 ? { capSec: r.capDays * 86400 } : {}), histFactor: r.histFactor, histSec: r.histDays * 86400, trustMin: r.trustMin, checkSec: r.checkDays * 86400, fallbackSec: r.fallbackDays * 86400, ...over };
 };
 
 /** Aşama 10: çok uydulu yönlendirme (HYPOTHETICAL.routing). isl: uydular arası bağlantı kullanılsın mı. */
@@ -119,7 +119,7 @@ export function buildLinkTimeline(tracks: Record<string, Track>, startJD: number
   const n = Math.max(0, Math.floor(((endJD - startJD) * 86400) / stepSec));
   const out: LinkSample[] = [];
   const multi = topo.assets.some((a) => a.alt?.length);
-  const pw = netOpts.marsEclipse === 'power' ? new MarsPower() : null; // Aşama 10: durumlu güç modeli (çizelge başında batarya dolu)
+  const pw = netOpts.marsEclipse === 'power' ? new MarsPower(netOpts.marsPowerBatteryWh !== undefined ? { ...HYPOTHETICAL.marsPower, batteryWh: netOpts.marsPowerBatteryWh } : undefined) : null; // Aşama 10: durumlu güç modeli (çizelge başında batarya dolu)
   for (let i = 0; i < n; i++) {
     const net = computeNetwork(tracks, startJD + (i * stepSec) / 86400, stationCount, netOpts);
     if (pw) applyPower(net, pw, stepSec);

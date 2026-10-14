@@ -181,8 +181,8 @@ export interface ValueAwareConfig {
  * - capSec: ufuk bu süreyi aşamaz (ufku kırpma).
  * - histFactor: güven aralığı. Tahmin edilen kapalı dönem uzunluğu, stratejinin GERÇEKTE gözlediği (geçmiş, hata yok) histSec içindeki en uzun kapalı dönemin histFactor katını aşamaz.
  *   Geçmişte kapalı dönem hiç gözlenmediyse (başlangıç) takvimin kapalı dönem uzunluğuna güvenilmez (geri çekilme, aşağıya bakın).
- * - trustMin: geri çekilme. Son checkSec'te takvim, gerçekte açık olan adımların trustMin oranından azını açık gösteriyorsa (pesimist ya da silinmiş takvim: "hiç açık değil" görünen takvim)
- *   takvime güvenilmez. Güvenilmeyen takvimde: fallbackSec > 0 ise ufuk sabit fallbackSec olur (yine aynı takvimle projeksiyon); fallbackSec yok ya da 0 ise KISMA YAPILMAZ (öncelikli kuralına geri çekilme).
+ * - trustMin: geri çekilme (kavuşum içeren dönemler dahil). Son checkSec'te takvim, gerçekte açık olan adımların trustMin oranından azını açık gösteriyorsa (pesimist ya da silinmiş takvim:
+ *   "hiç açık değil" görünen takvim) takvime güvenilmez; son checkSec'te hiç açık adım gözlenmediyse (kavuşum sırası) son hüküm korunur. Güvenilmeyen takvimde: fallbackSec > 0 ise ufuk sabit fallbackSec olur (yine aynı takvimle projeksiyon); fallbackSec yok ya da 0 ise KISMA YAPILMAZ (öncelikli kuralına geri çekilme).
  * Kavuşum kesintisi içeren kapalı dönemlerde (astronomik, öngörülebilir) 'adaptive' kuralı aynen uygulanır.
  */
 export interface AdaptiveRobustConfig extends AdaptiveConfig {
@@ -625,11 +625,13 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     for (let t = Math.max(0, i - robHist); t < i; t++) { if (truthUp(ai, t)) run = 0; else if (++run > best) best = run; }
     return best;
   };
-  /** Takvim güvenilir mi: son checkSec'te gerçekte açık olan adımların en az trustMin oranını açık gösteriyor mu. */
+  /** Takvim güvenilir mi: son checkSec'te gerçekte açık olan adımların en az trustMin oranını açık gösteriyor mu. Son checkSec'te hiç açık adım gözlenmediyse (ör. kavuşum) son hüküm korunur. */
+  const trustMem = topo.assets.map(() => true);
   const calendarTrusted = (ai: number, i: number): boolean => {
     let ut = 0, uf = 0;
     for (let t = Math.max(0, i - robCheck); t < i; t++) { if (truthUp(ai, t)) ut++; if (spellUp[ai][t]) uf++; }
-    return ut === 0 || uf >= rob!.trustMin! * ut;
+    if (ut > 0) trustMem[ai] = uf >= rob!.trustMin! * ut;
+    return trustMem[ai];
   };
   const clampH = (h: number) => Math.min(adMax, Math.max(adMin, h));
   const retreat = () => (robFb > 0 ? clampH(robFb) : -1);
@@ -637,7 +639,8 @@ export function simulate(topo: SchedTopology, samples: LinkSample[], policy: Pol
     const r = rob!;
     const sp = closedSpell(ai, i);
     const black = !!sp && spellHasBlackout(ai, sp[0], sp[1]);
-    if (!black && r.trustMin !== undefined && !calendarTrusted(ai, i)) return retreat();
+    if (r.trustMin !== undefined && !calendarTrusted(ai, i)) return retreat(); // güvenilmeyen takvim: kavuşum içeren dönemlerde de
+
     if (!sp) return adMin;
     let [a, b] = sp;
     if (!black && r.histFactor !== undefined) {

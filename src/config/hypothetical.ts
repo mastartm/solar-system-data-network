@@ -368,10 +368,11 @@ export const HYPOTHETICAL = {
    * Değerler UYDURMADIR (ayarlama: README bölüm 2).
    */
   adaptiveRobust: {
-    capDays: 6,
+    /** Ufuk üst sınırı (gün; kavuşum içermeyen kapalı dönemler için); 0 = kapalı. Tek başına çöküşü gidermedi (README bölüm 2), bu yüzden varsayılan kapalı. */
+    capDays: 0,
     histFactor: 2,
     histDays: 7,
-    trustMin: 0.5,
+    trustMin: 0.3,
     checkDays: 2,
     /** Geri çekilme ufku (gün); 0 = güvenilmeyen takvimde kısma yok (öncelikli kuralı). */
     fallbackDays: 0,

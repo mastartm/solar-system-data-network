@@ -1,5 +1,6 @@
 // Kapsama özeti (saf fonksiyon, DOM yok): bir tarih aralığında 30 dk adımla uyduyu gören yer istasyonu, Dünya hattı açıklığı ve yüzey görüşü.
 // Tüm sayılar VARSAYIMSAL ağa aittir (src/config/hypothetical.ts); konumlar çağıranın verdiği (Horizons) izlerdendir.
+import { HYPOTHETICAL } from '../config/hypothetical';
 import type { Track } from '../data/types';
 import { MarsPower, applyPower, computeNetwork, type NetOptions } from './network';
 
@@ -22,7 +23,7 @@ export interface CoverageRow {
 export function coverageRow(tracks: Record<string, Track>, startJD: number, endJD: number, n: number, net: NetOptions = {}): CoverageRow {
   const see: Record<string, number> = {}, up: Record<string, number> = {}, surf: Record<string, number> = {}, pathUp: Record<string, number> = {}, surfAny: Record<string, number> = {};
   let steps = 0, anyUp = 0;
-  const pw = net.marsEclipse === 'power' ? new MarsPower() : null; // Aşama 10: durumlu güç modeli (30 dk adım)
+  const pw = net.marsEclipse === 'power' ? new MarsPower(net.marsPowerBatteryWh !== undefined ? { ...HYPOTHETICAL.marsPower, batteryWh: net.marsPowerBatteryWh } : undefined) : null; // Aşama 10: durumlu güç modeli (30 dk adım)
   for (let jd = startJD; jd < endJD; jd += 1 / 48) {
     steps++;
     const state = computeNetwork(tracks, jd, n, net);

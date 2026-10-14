@@ -384,3 +384,21 @@ describe('Ay presesyonu, Mars eksen eğikliği, güç modeli, uydular arası ba�
     expect(s[0].cand![0].length).toBe(2);
   });
 });
+
+describe('adaptiveRobust: kavuşum içeren dönemlerde güvenilmeyen takvim ve hüküm belleği (sentetik)', () => {
+  it('kavuşum kesintisi + pencereleri silen pesimist takvim: geri çekilme (son hüküm kesinti sırasında korunur) öncelikliye döner; uyarlamalı çöker', () => {
+    // 100 adımda 40 açık; 2000–3200. adımlarda kavuşum (hat kapalı, işaret açık). Hata −250 sn (25 adım): pencereler silinir.
+    const s = mk(5000, (i) => !(i >= 2000 && i < 3200) && i % 100 < 40, (i) => i >= 2000 && i < 3200);
+    const c = cfg({ forecast: { edgeShiftSec: -250 } });
+    const p = metricsOf(simulate(topo, s, 'priority', c), c);
+    const a = metricsOf(simulate(topo, s, 'adaptive', c), c);
+    const r = simulate(topo, s, 'adaptiveRobust', { ...c, adaptiveRobust: rb({ trustMin: 0.3, checkSec: 2000 }) });
+    const m = metricsOf(r, c);
+    expect(a.suppressedMb).toBeGreaterThan(0.3 * a.demandMb);
+    // başlangıçta (ilk pencere veri kenarında olduğu için kaydırılmaz; ilk ~12 pencere gözlenene dek güven eşiği aşılmaz) küçük bir kısma olabilir; sonrasında ve kesinti sırasında geri çekilme sürer
+    expect(m.suppressedMb).toBeLessThan(0.05 * a.suppressedMb);
+    expect(m.lossPct).toBeLessThan(p.lossPct + 3);
+    expect(a.lossPct).toBeGreaterThan(p.lossPct + 20);
+    conserved(r);
+  });
+});
