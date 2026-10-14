@@ -31,7 +31,7 @@ Diğer komutlar: `npm run build` (yayın derlemesi), `npm test` (birim testler),
 
 ## Nasıl kullanılır
 
-- **Dil (Türkçe / İngilizce):** üstteki **TR / EN** düğmesi arayüz dilini değiştirir (sayfa yeniden yüklenir; tercih tarayıcıda hatırlanır). İlk açılışta tarayıcı dili kullanılır, `?lang=tr` / `?lang=en` ile zorlanabilir. **Harita arayüzü** iki dilli; **Çizelgeleyici sekmesi henüz yalnız Türkçedir** (çevirilmemiş metinler Türkçe görünür). Sayılar ve tarihler seçili dile göre biçimlenir.
+- **Dil (Türkçe / İngilizce):** üstteki **TR / EN** düğmesi arayüz dilini değiştirir (sayfa yeniden yüklenir; tercih tarayıcıda hatırlanır). İlk açılışta tarayıcı dili kullanılır, `?lang=tr` / `?lang=en` ile zorlanabilir. **Harita arayüzü ve Çizelgeleyici sekmesi** (tablolar, grafik başlıkları, durum yazıları, varsayım listesi dahil) iki dillidir; çevirisi olmayan bir metin Türkçe görünür (güvenli düşüş). Sayılar ve tarihler seçili dile göre biçimlenir.
 
 ![Arayüz, İngilizce (harita sekmesi, gerçek veri)](docs/arayuz-en-harita.png)
 
@@ -1352,6 +1352,6 @@ Aşama 11 adayları (değerler **varsayımsal** kalır; sonuçlar gerçek bir g�
 - **Çizelgeleyici sekmesi hızı:** Aşama 10'daki ≈ %7'lik süre artışının nedenini bulmak (V8 profili, Worker modül maliyeti), Aşama 10 politikaları açıkken grafik çizimini daha küçük görevlere bölmek.
 
 Proje sahibiyle konuşulan, henüz yapılmamış işler (kod değil, planlama notu; sıra ve kapsam yapılırken netleştirilecek):
-- **Türkçe + İngilizce site (kısmen yapıldı):** harita arayüzü iki dilli, Çizelgeleyici sekmesi henüz Türkçe. Küçük bir çeviri katmanı (yeni bağımlılık yok): `tr`/`en` sözlüğü, sayfada dil düğmesi, seçimin tarayıcıda hatırlanması, ilk açılışta tarayıcı diline göre varsayılan. Zorluk: arayüz metinlerinin çoğu (özellikle çizelgeleyici paneli) kod içinde gömülü Türkçe şablonlar; sözlüğe taşımak büyük ama mekanik. Kapsam kararı açık: yalnız site arayüzü mü, README de mi (`README.en.md`)? Betik çıktıları ve dahili yorumlar Türkçe kalabilir. "Varsayımsal değerler" ve gerçek/varsayım ayrımı iki dilde de korunmalı.
+- **Türkçe + İngilizce site (arayüz yapıldı):** harita arayüzü ve Çizelgeleyici sekmesi iki dilli. Küçük bir çeviri katmanı (yeni bağımlılık yok): `tr`/`en` sözlüğü, sayfada dil düğmesi, seçimin tarayıcıda hatırlanması, ilk açılışta tarayıcı diline göre varsayılan. Zorluk: arayüz metinlerinin çoğu (özellikle çizelgeleyici paneli) kod içinde gömülü Türkçe şablonlar; sözlüğe taşımak büyük ama mekanik. Kapsam kararı açık: yalnız site arayüzü mü, README de mi (`README.en.md`)? Betik çıktıları ve dahili yorumlar Türkçe kalabilir. "Varsayımsal değerler" ve gerçek/varsayım ayrımı iki dilde de korunmalı.
 - **Canlı demo bağlantısı:** statik barındırma (ör. GitHub Pages); yeni GitHub Actions iş akışı gerektireceğinden **önce proje sahibine sorulacak**.
 - **Duyuru:** projeyi "gerçek Horizons verisiyle Güneş sistemi haritası + varsayımsal haberleşme simülasyonu" olarak, eğitim/portföy amaçlı sunmak (README başına ekran görüntüsü ve "varsayımsal" uyarısı; 30–60 sn ekran kaydı; "neyi simüle ettim, neyi uydurdum" blog yazısı; Show HN, r/space, r/dataisbeautiful, Türkçe topluluklar). NASA/SpaceX'e doğrudan gönderme **önerilmedi**: sonuçlar uydurma değerlere dayanır, gerçek bir görev bulgusu değildir; geri bildirim için gecikmeye dayanıklı ağ (DTN) açık kaynak topluluğu daha uygun.

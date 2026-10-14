@@ -1,4 +1,5 @@
 import { HYPOTHETICAL, type ValueCurveSpec } from '../config/hypothetical';
+import { t } from '../i18n';
 import type { Track } from '../data/types';
 import { C_KM_S, dist, sample, trackEndJD } from '../map/ephemeris';
 import { MarsPower, applyPower, computeNetwork, effectiveAssets, effectiveRelays, relayCandidates, type NetOptions } from './network';
@@ -82,7 +83,7 @@ export const valueHalfLivesSec = (): number[] => HYPOTHETICAL.value.decayOptions
  */
 export type LinkMode = 'ideal' | 'loss' | 'arq' | 'burst';
 export const LINK_MODE_LABEL: Record<LinkMode, string> = {
-  ideal: 'Kayıpsız hat', loss: 'Hatalı hat, yeniden iletimsiz', arq: 'Hatalı hat + yeniden iletim', burst: 'Kümelenmiş hata + yeniden iletim',
+  ideal: t('Kayıpsız hat'), loss: t('Hatalı hat, yeniden iletimsiz'), arq: t('Hatalı hat + yeniden iletim'), burst: t('Kümelenmiş hata + yeniden iletim'),
 };
 
 export const arqConfig = (mode: LinkMode, earthLossPct = HYPOTHETICAL.arq.earthLossPct, surfaceRetrySec = HYPOTHETICAL.arq.surfaceRetrySec): ArqConfig | undefined =>

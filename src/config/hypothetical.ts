@@ -296,16 +296,16 @@ export const HYPOTHETICAL = {
      * `top`: telemetri de azalır (yoksa sabit değer, Aşama 9-10). Çizelgeleme kararlarını etkilemez, yalnızca ölçüttür.
      */
     models: [
-      { id: 'exp14', label: 'üstel, yarı ömür 14 g (kontrol: Aşama 9-10)', decay: { kind: 'exp', halfLifeDays: 14 } },
-      { id: 'step3', label: 'son tarih 3 g (sonra 0)', decay: { kind: 'step', deadlineDays: 3, after: 0 } },
-      { id: 'step14', label: 'son tarih 14 g (sonra 0)', decay: { kind: 'step', deadlineDays: 14, after: 0 } },
-      { id: 'step30', label: 'son tarih 30 g (sonra 0)', decay: { kind: 'step', deadlineDays: 30, after: 0 } },
-      { id: 'step14half', label: 'son tarih 14 g (sonra yarı değer)', decay: { kind: 'step', deadlineDays: 14, after: 0.5 } },
-      { id: 'floor14-30', label: 'üstel 14 g, taban %30 (eskiyince de değerli)', decay: { kind: 'floor', halfLifeDays: 14, floor: 0.3 } },
-      { id: 'floor14-60', label: 'üstel 14 g, taban %60', decay: { kind: 'floor', halfLifeDays: 14, floor: 0.6 } },
-      { id: 'linear30', label: 'doğrusal, 30 günde 0', decay: { kind: 'linear', zeroAtDays: 30 } },
-      { id: 'tel1', label: 'üstel 14 g + telemetri son tarih 1 g', decay: { kind: 'exp', halfLifeDays: 14 }, top: { kind: 'step', deadlineDays: 1, after: 0 } },
-      { id: 'tel3', label: 'üstel 14 g + telemetri son tarih 3 g', decay: { kind: 'exp', halfLifeDays: 14 }, top: { kind: 'step', deadlineDays: 3, after: 0 } },
+      { id: 'exp14', label: t('üstel, yarı ömür 14 g (kontrol: Aşama 9-10)'), decay: { kind: 'exp', halfLifeDays: 14 } },
+      { id: 'step3', label: t('son tarih 3 g (sonra 0)'), decay: { kind: 'step', deadlineDays: 3, after: 0 } },
+      { id: 'step14', label: t('son tarih 14 g (sonra 0)'), decay: { kind: 'step', deadlineDays: 14, after: 0 } },
+      { id: 'step30', label: t('son tarih 30 g (sonra 0)'), decay: { kind: 'step', deadlineDays: 30, after: 0 } },
+      { id: 'step14half', label: t('son tarih 14 g (sonra yarı değer)'), decay: { kind: 'step', deadlineDays: 14, after: 0.5 } },
+      { id: 'floor14-30', label: t('üstel 14 g, taban %30 (eskiyince de değerli)'), decay: { kind: 'floor', halfLifeDays: 14, floor: 0.3 } },
+      { id: 'floor14-60', label: t('üstel 14 g, taban %60'), decay: { kind: 'floor', halfLifeDays: 14, floor: 0.6 } },
+      { id: 'linear30', label: t('doğrusal, 30 günde 0'), decay: { kind: 'linear', zeroAtDays: 30 } },
+      { id: 'tel1', label: t('üstel 14 g + telemetri son tarih 1 g'), decay: { kind: 'exp', halfLifeDays: 14 }, top: { kind: 'step', deadlineDays: 1, after: 0 } },
+      { id: 'tel3', label: t('üstel 14 g + telemetri son tarih 3 g'), decay: { kind: 'exp', halfLifeDays: 14 }, top: { kind: 'step', deadlineDays: 3, after: 0 } },
     ] as ValueModelSpec[],
   },
 
